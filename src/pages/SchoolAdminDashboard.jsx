@@ -14,6 +14,7 @@ export default function SchoolAdminDashboard() {
   const [adminProfile, setAdminProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [users, setUsers] = useState([])
+  const [setupProgress, setSetupProgress] = useState(null)
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
@@ -71,7 +72,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: setupConfig, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('id, is_setup_complete')
+      .select('id, setup_step, is_setup_complete')
       .eq('school_id', profile.school_id)
       .maybeSingle()
 
@@ -84,9 +85,37 @@ export default function SchoolAdminDashboard() {
       return
     }
 
+    setSetupProgress(setupConfig)
     setAdminProfile(profile)
     await fetchSchoolData(profile.school_id)
     setLoading(false)
+  }
+
+  const nextSetupRoute = useMemo(() => {
+    if (!setupProgress) return '/school-setup'
+
+    const step = Number(setupProgress.setup_step || 0)
+
+    if (step <= 0) return '/school-setup'
+    if (step === 1) return '/school-setup/exams'
+    if (step === 2) return '/school-setup/grades'
+
+    return null
+  }, [setupProgress])
+
+  const setupStatusText = useMemo(() => {
+    if (!setupProgress) return 'Setup belum dimulakan'
+
+    if (setupProgress.is_setup_complete || Number(setupProgress.setup_step || 0) >= 3) {
+      return 'Setup sekolah lengkap'
+    }
+
+    return `Step semasa: ${Number(setupProgress.setup_step || 0)} daripada 3`
+  }, [setupProgress])
+
+  const handleContinueSetup = () => {
+    if (!nextSetupRoute) return
+    navigate(nextSetupRoute)
   }
 
   const fetchSchoolData = async (schoolId) => {
@@ -269,7 +298,19 @@ export default function SchoolAdminDashboard() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {nextSetupRoute ? (
+                <button
+                  onClick={handleContinueSetup}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Sambung Setup
+                </button>
+              ) : (
+                <span className="rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-700">
+                  Setup Complete
+                </span>
+              )}
               <button
                 onClick={refreshData}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
@@ -292,6 +333,27 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Approved" value={stats.approved} />
           <StatCard title="Rejected" value={stats.rejected} />
           <StatCard title="Admin Sekolah" value={stats.admins} />
+        </div>
+
+        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-700">Status School Setup</div>
+              <div className="mt-1 text-sm text-slate-600">{setupStatusText}</div>
+            </div>
+            {nextSetupRoute ? (
+              <button
+                onClick={handleContinueSetup}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              >
+                Sambung Setup
+              </button>
+            ) : (
+              <span className="rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-700">
+                Semua step telah lengkap
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">

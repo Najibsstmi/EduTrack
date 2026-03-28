@@ -42,6 +42,7 @@ export default function SchoolSetupExamsPage() {
     }
 
     setProfile(profileData)
+    console.log('STEP 2 PROFILE:', profileData)
 
     const { data: config, error: configError } = await supabase
       .from('school_setup_configs')
@@ -56,7 +57,7 @@ export default function SchoolSetupExamsPage() {
     }
 
     setSettings(config)
-    console.log('STEP 2 CONFIG LOADED:', config)
+    console.log('STEP 2 CONFIG:', config)
 
     // Jika exam_structure dah pernah disimpan, guna yang itu
     if (config.exam_structure && Object.keys(config.exam_structure).length > 0) {
@@ -72,9 +73,9 @@ export default function SchoolSetupExamsPage() {
   const generateStructure = (config) => {
     const result = {}
 
-    ;(config.active_grade_labels || []).forEach((label) => {
-      const arCount = Number(config.ar_count_by_grade?.[label] || 0)
-      const otrCount = Number(config.otr_count_by_grade?.[label] || 0)
+    config.active_grade_labels.forEach(label => {
+      const arCount = config.ar_count_by_grade[label] || 0
+      const otrCount = config.otr_count_by_grade[label] || 0
 
       const exams = []
 
@@ -93,6 +94,7 @@ export default function SchoolSetupExamsPage() {
       result[label] = exams
     })
 
+    console.log('GENERATED EXAM STRUCTURE:', result)
     setExamStructure(result)
     return result
   }
@@ -163,7 +165,7 @@ export default function SchoolSetupExamsPage() {
 
     alert('Step 2 berjaya disimpan.')
     setSaving(false)
-    navigate('/school-admin')
+    navigate('/school-setup/grades')
   }
 
   if (loading) {
