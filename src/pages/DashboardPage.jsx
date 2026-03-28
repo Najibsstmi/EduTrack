@@ -48,7 +48,7 @@ function DashboardPage() {
       if (profileData?.is_master_admin) {
         navigate('/master-admin')
         return
-      } else if ((profileData?.is_school_admin === true || profileData?.role === 'school_admin') && profileData?.approval_status === 'approved') {
+      } else if (profileData?.is_school_admin && profileData?.approval_status === 'approved') {
         navigate('/school-admin')
         return
       } else if (profileData?.approval_status === 'pending') {

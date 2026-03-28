@@ -60,12 +60,27 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    if ((profile.is_school_admin !== true && profile.role !== 'school_admin') || profile.approval_status !== 'approved') {
+    if (!profile.is_school_admin || profile.approval_status !== 'approved') {
       if (profile.approval_status === 'pending') {
         navigate('/pending', { replace: true })
       } else {
         navigate('/dashboard', { replace: true })
       }
+      return
+    }
+
+    const { data: setupConfig, error: setupError } = await supabase
+      .from('school_setup_configs')
+      .select('id, is_setup_complete')
+      .eq('school_id', profile.school_id)
+      .maybeSingle()
+
+    if (setupError) {
+      console.error(setupError)
+    }
+
+    if (!setupConfig) {
+      navigate('/school-setup', { replace: true })
       return
     }
 
