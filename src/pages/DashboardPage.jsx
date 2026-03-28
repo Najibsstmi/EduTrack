@@ -45,12 +45,15 @@ function DashboardPage() {
         return
       }
 
+      console.log('PROFILE DATA', profileData)
+
       if (profileData?.is_master_admin) {
         navigate('/master-admin')
         return
       }
 
-      if (profileData?.is_school_admin && profileData?.approval_status === 'approved') {
+      if (profileData?.is_school_admin === true && profileData?.approval_status === 'approved') {
+        console.log('REDIRECT TO SCHOOL ADMIN')
         navigate('/school-admin')
         return
       }
