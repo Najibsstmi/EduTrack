@@ -27,7 +27,7 @@ function DashboardPage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin')
         .eq('id', currentUser.id)
         .maybeSingle()
 
@@ -48,10 +48,19 @@ function DashboardPage() {
       if (profileData?.is_master_admin) {
         navigate('/master-admin')
         return
-      } else if (profileData?.approval_status === 'pending') {
+      }
+
+      if (profileData?.is_school_admin && profileData?.approval_status === 'approved') {
+        navigate('/school-admin')
+        return
+      }
+
+      if (profileData?.approval_status === 'pending') {
         navigate('/pending')
         return
-      } else if (profileData?.approval_status === 'approved') {
+      }
+
+      if (profileData?.approval_status === 'approved') {
         setProfile(profileData)
         setLoading(false)
         return

@@ -36,7 +36,7 @@ function LoginPage() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin')
       .eq('id', user.id)
       .maybeSingle()
 
