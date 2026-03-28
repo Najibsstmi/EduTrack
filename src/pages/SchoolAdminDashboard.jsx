@@ -29,7 +29,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, full_name, email, school_id, approval_status, is_school_admin, is_master_admin')
+      .select('id, full_name, email, role, school_id, approval_status, is_school_admin, is_master_admin')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -43,7 +43,7 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    if (!profile.is_school_admin || profile.approval_status !== 'approved') {
+    if ((profile.is_school_admin !== true && profile.role !== 'school_admin') || profile.approval_status !== 'approved') {
       if (profile.approval_status === 'pending') {
         navigate('/pending', { replace: true })
       } else {

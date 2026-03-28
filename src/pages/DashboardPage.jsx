@@ -45,25 +45,16 @@ function DashboardPage() {
         return
       }
 
-      console.log('PROFILE DATA', profileData)
-
       if (profileData?.is_master_admin) {
         navigate('/master-admin')
         return
-      }
-
-      if (profileData?.is_school_admin === true && profileData?.approval_status === 'approved') {
-        console.log('REDIRECT TO SCHOOL ADMIN')
+      } else if (profileData?.is_school_admin && profileData?.approval_status === 'approved') {
         navigate('/school-admin')
         return
-      }
-
-      if (profileData?.approval_status === 'pending') {
+      } else if (profileData?.approval_status === 'pending') {
         navigate('/pending')
         return
-      }
-
-      if (profileData?.approval_status === 'approved') {
+      } else if (profileData?.approval_status === 'approved') {
         setProfile(profileData)
         setLoading(false)
         return
