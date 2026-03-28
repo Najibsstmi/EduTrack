@@ -229,9 +229,7 @@ export default function SchoolSetupPage() {
 
     alert('Step 1 berjaya disimpan.')
     setSaving(false)
-
-    // Sementara ini boleh kekal di page ini, atau terus ke step seterusnya nanti
-    // navigate('/school-setup/exams')
+    navigate('/school-setup/exams')
   }
 
   if (loading) {
