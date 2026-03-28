@@ -288,7 +288,7 @@ export default function SchoolSetupGradesPage() {
 
     alert('Step 3 berjaya disimpan.')
     setSaving(false)
-    navigate('/school-admin')
+    navigate('/school-setup/subjects')
   }
 
   if (loading) {

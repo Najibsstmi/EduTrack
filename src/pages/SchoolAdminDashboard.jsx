@@ -14,7 +14,7 @@ export default function SchoolAdminDashboard() {
   const [adminProfile, setAdminProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [users, setUsers] = useState([])
-  const [setupProgress, setSetupProgress] = useState(null)
+  const [setupConfig, setSetupConfig] = useState(null)
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
@@ -85,38 +85,14 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    setSetupProgress(setupConfig)
+    setSetupConfig(setupConfig)
     setAdminProfile(profile)
     await fetchSchoolData(profile.school_id)
     setLoading(false)
   }
 
-  const nextSetupRoute = useMemo(() => {
-    if (!setupProgress) return '/school-setup'
-
-    const step = Number(setupProgress.setup_step || 0)
-
-    if (step <= 0) return '/school-setup'
-    if (step === 1) return '/school-setup/exams'
-    if (step === 2) return '/school-setup/grades'
-
-    return null
-  }, [setupProgress])
-
-  const setupStatusText = useMemo(() => {
-    if (!setupProgress) return 'Setup belum dimulakan'
-
-    if (setupProgress.is_setup_complete || Number(setupProgress.setup_step || 0) >= 3) {
-      return 'Setup sekolah lengkap'
-    }
-
-    return `Step semasa: ${Number(setupProgress.setup_step || 0)} daripada 3`
-  }, [setupProgress])
-
-  const handleContinueSetup = () => {
-    if (!nextSetupRoute) return
-    navigate(nextSetupRoute)
-  }
+  const setupStep = setupConfig?.setup_step || 0
+  const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
 
   const fetchSchoolData = async (schoolId) => {
     setRefreshing(true)
@@ -299,18 +275,6 @@ export default function SchoolAdminDashboard() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {nextSetupRoute ? (
-                <button
-                  onClick={handleContinueSetup}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                >
-                  Sambung Setup
-                </button>
-              ) : (
-                <span className="rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-700">
-                  Setup Complete
-                </span>
-              )}
               <button
                 onClick={refreshData}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
@@ -335,24 +299,58 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Admin Sekolah" value={stats.admins} />
         </div>
 
-        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-sm font-semibold text-slate-700">Status School Setup</div>
-              <div className="mt-1 text-sm text-slate-600">{setupStatusText}</div>
+        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-slate-900">
+            Status School Setup
+          </h2>
+
+          {setupComplete ? (
+            <div className="space-y-2 text-slate-700">
+              <p className="font-semibold text-green-700">Setup sekolah lengkap</p>
+              <p>✅ Setup struktur akademik</p>
+              <p>✅ Setup peperiksaan</p>
+              <p>✅ Setup grade</p>
+              <p>✅ Setup subjek</p>
+              <p className="pt-2 font-medium">Semua step telah lengkap.</p>
             </div>
-            {nextSetupRoute ? (
+          ) : (
+            <div className="space-y-2 text-slate-700">
+              <p className="font-semibold text-amber-700">Setup sekolah belum lengkap</p>
+              <p>{setupStep >= 1 ? '✅' : '❌'} Setup struktur akademik</p>
+              <p>{setupStep >= 2 ? '✅' : '❌'} Setup peperiksaan</p>
+              <p>{setupStep >= 3 ? '✅' : '❌'} Setup grade</p>
+              <p>{setupStep >= 4 ? '✅' : '❌'} Setup subjek</p>
+              <p className="pt-2 font-medium">Sila lengkapkan step yang belum selesai.</p>
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {!setupComplete && (
               <button
-                onClick={handleContinueSetup}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                onClick={() => {
+                  if (setupStep === 1) navigate('/school-setup/exams')
+                  else if (setupStep === 2) navigate('/school-setup/grades')
+                  else if (setupStep === 3) navigate('/school-setup/subjects')
+                }}
+                className="rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
               >
                 Sambung Setup
               </button>
-            ) : (
-              <span className="rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-700">
-                Semua step telah lengkap
-              </span>
             )}
+
+            <button
+              onClick={() => navigate('/school-setup/subjects')}
+              className="rounded-xl bg-green-600 px-5 py-3 font-medium text-white hover:bg-green-700"
+            >
+              Urus Subjek
+            </button>
+
+            <button
+              onClick={() => alert('Module murid akan datang')}
+              className="rounded-xl bg-purple-600 px-5 py-3 font-medium text-white hover:bg-purple-700"
+            >
+              Urus Murid
+            </button>
           </div>
         </div>
 
