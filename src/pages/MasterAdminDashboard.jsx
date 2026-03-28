@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 
 export default function MasterAdminDashboard() {
+  const navigate = useNavigate()
   const [pendingUsers, setPendingUsers] = useState([])
   const [schools, setSchools] = useState([])
   const [selectedSchools, setSelectedSchools] = useState({})
@@ -9,8 +11,33 @@ export default function MasterAdminDashboard() {
   const [savingId, setSavingId] = useState(null)
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    checkAccessAndFetch()
+  }, [navigate])
+
+  const checkAccessAndFetch = async () => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      navigate('/login')
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_master_admin')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError || !profile?.is_master_admin) {
+      navigate('/login')
+      return
+    }
+
+    await fetchData()
+  }
 
   const fetchData = async () => {
     setLoading(true)
