@@ -4,11 +4,21 @@ import { supabase } from '../lib/supabaseClient'
 
 export default function MasterAdminDashboard() {
   const navigate = useNavigate()
+
   const [pendingUsers, setPendingUsers] = useState([])
-  const [schools, setSchools] = useState([])
-  const [selectedSchools, setSelectedSchools] = useState({})
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
+
+  const [schoolTypes, setSchoolTypes] = useState([])
+
+  const [selectedType, setSelectedType] = useState({})
+  const [selectedState, setSelectedState] = useState({})
+  const [selectedDistrict, setSelectedDistrict] = useState({})
+  const [selectedSchool, setSelectedSchool] = useState({})
+
+  const [statesByUser, setStatesByUser] = useState({})
+  const [districtsByUser, setDistrictsByUser] = useState({})
+  const [schoolsByUser, setSchoolsByUser] = useState({})
 
   useEffect(() => {
     checkAccessAndFetch()
@@ -49,45 +59,155 @@ export default function MasterAdminDashboard() {
       return
     }
 
-    await fetchData()
+    await Promise.all([fetchPendingUsers(), fetchSchoolTypes()])
+    setLoading(false)
   }
 
-  const fetchData = async () => {
-    const { data: usersData, error: usersError } = await supabase
+  const uniqueSorted = (arr) =>
+    [...new Set((arr || []).map((v) => (typeof v === 'string' ? v.trim() : v)).filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b)))
+
+  const fetchPendingUsers = async () => {
+    const { data, error } = await supabase
       .from('profiles')
       .select('id, full_name, email, role, approval_status, created_at')
       .eq('approval_status', 'pending')
       .order('created_at', { ascending: false })
 
-    const { data: schoolsData, error: schoolsError } = await supabase
-      .from('schools')
-      .select('id, school_name, school_code')
-      .order('school_name', { ascending: true })
-
-    if (usersError) {
-      console.error(usersError)
+    if (error) {
+      console.error(error)
       alert('Gagal ambil senarai pending user')
+      return
     }
 
-    if (schoolsError) {
-      console.error(schoolsError)
-      alert('Gagal ambil senarai sekolah')
-    }
-
-    setPendingUsers(usersData || [])
-    setSchools(schoolsData || [])
-    setLoading(false)
+    setPendingUsers(data || [])
   }
 
-  const handleSchoolChange = (userId, schoolId) => {
-    setSelectedSchools((prev) => ({
+  const fetchSchoolTypes = async () => {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('school_type')
+      .eq('is_active', true)
+      .range(0, 20000)
+
+    if (error) {
+      console.error(error)
+      alert('Gagal ambil jenis sekolah')
+      return
+    }
+
+    setSchoolTypes(uniqueSorted(data.map((item) => item.school_type)))
+  }
+
+  const fetchStates = async (userId, schoolType) => {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('state')
+      .eq('is_active', true)
+      .eq('school_type', schoolType)
+      .range(0, 20000)
+
+    if (error) {
+      console.error(error)
+      alert('Gagal ambil negeri')
+      return
+    }
+
+    setStatesByUser((prev) => ({
       ...prev,
-      [userId]: schoolId,
+      [userId]: uniqueSorted(data.map((item) => item.state)),
     }))
   }
 
+  const fetchDistricts = async (userId, schoolType, state) => {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('district')
+      .eq('is_active', true)
+      .eq('school_type', schoolType)
+      .eq('state', state)
+      .range(0, 20000)
+
+    if (error) {
+      console.error(error)
+      alert('Gagal ambil PPD / daerah')
+      return
+    }
+
+    setDistrictsByUser((prev) => ({
+      ...prev,
+      [userId]: uniqueSorted(data.map((item) => item.district)),
+    }))
+  }
+
+  const fetchSchools = async (userId, schoolType, state, district) => {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('id, school_name, school_code')
+      .eq('is_active', true)
+      .eq('school_type', schoolType)
+      .eq('state', state)
+      .eq('district', district)
+      .order('school_name', { ascending: true })
+      .range(0, 5000)
+
+    if (error) {
+      console.error(error)
+      alert('Gagal ambil nama sekolah')
+      return
+    }
+
+    setSchoolsByUser((prev) => ({
+      ...prev,
+      [userId]: data || [],
+    }))
+  }
+
+  const handleTypeChange = async (userId, value) => {
+    setSelectedType((prev) => ({ ...prev, [userId]: value }))
+    setSelectedState((prev) => ({ ...prev, [userId]: '' }))
+    setSelectedDistrict((prev) => ({ ...prev, [userId]: '' }))
+    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
+
+    setStatesByUser((prev) => ({ ...prev, [userId]: [] }))
+    setDistrictsByUser((prev) => ({ ...prev, [userId]: [] }))
+    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
+
+    if (value) {
+      await fetchStates(userId, value)
+    }
+  }
+
+  const handleStateChange = async (userId, value) => {
+    setSelectedState((prev) => ({ ...prev, [userId]: value }))
+    setSelectedDistrict((prev) => ({ ...prev, [userId]: '' }))
+    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
+
+    setDistrictsByUser((prev) => ({ ...prev, [userId]: [] }))
+    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
+
+    if (value) {
+      await fetchDistricts(userId, selectedType[userId], value)
+    }
+  }
+
+  const handleDistrictChange = async (userId, value) => {
+    setSelectedDistrict((prev) => ({ ...prev, [userId]: value }))
+    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
+
+    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
+
+    if (value) {
+      await fetchSchools(userId, selectedType[userId], selectedState[userId], value)
+    }
+  }
+
+  const handleSchoolChange = (userId, value) => {
+    setSelectedSchool((prev) => ({ ...prev, [userId]: value }))
+  }
+
   const handleApprove = async (userId) => {
-    const schoolId = selectedSchools[userId]
+    const schoolId = selectedSchool[userId]
 
     if (!schoolId) {
       alert('Sila pilih sekolah dahulu')
@@ -156,30 +276,76 @@ export default function MasterAdminDashboard() {
                 <th className="py-3 px-2">Nama</th>
                 <th className="py-3 px-2">Email</th>
                 <th className="py-3 px-2">Role</th>
-                <th className="py-3 px-2">Sekolah</th>
+                <th className="py-3 px-2">Penetapan Sekolah</th>
                 <th className="py-3 px-2">Tindakan</th>
               </tr>
             </thead>
             <tbody>
               {pendingUsers.map((user) => (
-                <tr key={user.id} className="border-b">
+                <tr key={user.id} className="border-b align-top">
                   <td className="py-3 px-2">{user.full_name || '-'}</td>
                   <td className="py-3 px-2">{user.email}</td>
                   <td className="py-3 px-2">{user.role || '-'}</td>
-                  <td className="py-3 px-2">
-                    <select
-                      className="border rounded px-3 py-2"
-                      value={selectedSchools[user.id] || ''}
-                      onChange={(e) => handleSchoolChange(user.id, e.target.value)}
-                    >
-                      <option value="">Pilih sekolah</option>
-                      {schools.map((school) => (
-                        <option key={school.id} value={school.id}>
-                          {school.school_name}
-                        </option>
-                      ))}
-                    </select>
+
+                  <td className="py-3 px-2 min-w-[430px]">
+                    <div className="grid gap-2">
+                      <select
+                        className="border rounded px-3 py-2"
+                        value={selectedType[user.id] || ''}
+                        onChange={(e) => handleTypeChange(user.id, e.target.value)}
+                      >
+                        <option value="">Pilih jenis sekolah</option>
+                        {schoolTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="border rounded px-3 py-2"
+                        value={selectedState[user.id] || ''}
+                        onChange={(e) => handleStateChange(user.id, e.target.value)}
+                        disabled={!selectedType[user.id]}
+                      >
+                        <option value="">Pilih negeri</option>
+                        {(statesByUser[user.id] || []).map((state) => (
+                          <option key={state} value={state}>
+                            {state}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="border rounded px-3 py-2"
+                        value={selectedDistrict[user.id] || ''}
+                        onChange={(e) => handleDistrictChange(user.id, e.target.value)}
+                        disabled={!selectedState[user.id]}
+                      >
+                        <option value="">Pilih PPD / daerah</option>
+                        {(districtsByUser[user.id] || []).map((district) => (
+                          <option key={district} value={district}>
+                            {district}
+                          </option>
+                        ))}
+                      </select>
+
+                      <select
+                        className="border rounded px-3 py-2"
+                        value={selectedSchool[user.id] || ''}
+                        onChange={(e) => handleSchoolChange(user.id, e.target.value)}
+                        disabled={!selectedDistrict[user.id]}
+                      >
+                        <option value="">Pilih nama sekolah</option>
+                        {(schoolsByUser[user.id] || []).map((school) => (
+                          <option key={school.id} value={school.id}>
+                            {school.school_name} ({school.school_code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </td>
+
                   <td className="py-3 px-2">
                     <div className="flex gap-2">
                       <button
