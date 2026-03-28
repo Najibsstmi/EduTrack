@@ -60,7 +60,7 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    if (!profile.is_school_admin || profile.approval_status !== 'approved') {
+    if ((profile.is_school_admin !== true && profile.role !== 'school_admin') || profile.approval_status !== 'approved') {
       if (profile.approval_status === 'pending') {
         navigate('/pending', { replace: true })
       } else {
