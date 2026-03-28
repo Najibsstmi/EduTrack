@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import PendingApprovalPage from './pages/PendingApprovalPage.jsx'
 import MasterAdminDashboard from './pages/MasterAdminDashboard.jsx'
+import SchoolAdminDashboard from './pages/SchoolAdminDashboard.jsx'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/master-admin" element={<MasterAdminDashboard />} />
+      <Route path="/school-admin" element={<SchoolAdminDashboard />} />
       <Route path="/pending" element={<PendingApprovalPage />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
