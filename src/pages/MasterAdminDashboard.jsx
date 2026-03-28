@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 
 export default function MasterAdminDashboard() {
   const navigate = useNavigate()
@@ -12,27 +12,40 @@ export default function MasterAdminDashboard() {
 
   useEffect(() => {
     checkAccessAndFetch()
-  }, [navigate])
+  }, [])
 
   const checkAccessAndFetch = async () => {
+    setLoading(true)
+
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      navigate('/login')
+      navigate('/login', { replace: true })
       return
     }
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('is_master_admin')
+      .select('id, is_master_admin, approval_status')
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profileError || !profile?.is_master_admin) {
-      navigate('/login')
+    if (profileError || !profile) {
+      navigate('/login', { replace: true })
+      return
+    }
+
+    if (!profile.is_master_admin) {
+      if (profile.approval_status === 'pending') {
+        navigate('/pending', { replace: true })
+      } else if (profile.approval_status === 'approved') {
+        navigate('/dashboard', { replace: true })
+      } else {
+        navigate('/login', { replace: true })
+      }
       return
     }
 
@@ -40,8 +53,6 @@ export default function MasterAdminDashboard() {
   }
 
   const fetchData = async () => {
-    setLoading(true)
-
     const { data: usersData, error: usersError } = await supabase
       .from('profiles')
       .select('id, full_name, email, role, approval_status, created_at')
