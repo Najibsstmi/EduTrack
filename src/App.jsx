@@ -10,6 +10,7 @@ import SchoolSetupExamsPage from './pages/SchoolSetupExamsPage.jsx'
 import SchoolSetupGradesPage from './pages/SchoolSetupGradesPage.jsx'
 import SchoolSetupSubjectsPage from './pages/SchoolSetupSubjectsPage.jsx'
 import StudentsPage from './pages/StudentsPage'
+import ClassesPage from './pages/ClassesPage'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
       <Route path="/school-setup/grades" element={<SchoolSetupGradesPage />} />
       <Route path="/school-setup/subjects" element={<SchoolSetupSubjectsPage />} />
       <Route path="/students" element={<StudentsPage />} />
+      <Route path="/classes" element={<ClassesPage />} />
       <Route path="/pending" element={<PendingApprovalPage />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />

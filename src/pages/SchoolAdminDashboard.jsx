@@ -373,6 +373,13 @@ export default function SchoolAdminDashboard() {
             >
               Urus Murid
             </button>
+
+            <button
+              onClick={() => navigate('/classes')}
+              className="rounded-xl bg-cyan-600 px-5 py-3 font-medium text-white hover:bg-cyan-700"
+            >
+              Urus Kelas
+            </button>
           </div>
         </div>
 
