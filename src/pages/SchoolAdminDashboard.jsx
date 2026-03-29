@@ -328,7 +328,8 @@ export default function SchoolAdminDashboard() {
             {!setupComplete && (
               <button
                 onClick={() => {
-                  if (setupStep === 1) navigate('/school-setup/exams')
+                  if (setupStep === 0) navigate('/school-setup')
+                  else if (setupStep === 1) navigate('/school-setup/exams')
                   else if (setupStep === 2) navigate('/school-setup/grades')
                   else if (setupStep === 3) navigate('/school-setup/subjects')
                 }}
@@ -337,6 +338,27 @@ export default function SchoolAdminDashboard() {
                 Sambung Setup
               </button>
             )}
+
+            <button
+              onClick={() => navigate('/school-setup')}
+              className="rounded-xl bg-slate-700 px-5 py-3 font-medium text-white hover:bg-slate-800"
+            >
+              Urus Struktur Akademik
+            </button>
+
+            <button
+              onClick={() => navigate('/school-setup/exams')}
+              className="rounded-xl bg-indigo-600 px-5 py-3 font-medium text-white hover:bg-indigo-700"
+            >
+              Urus Peperiksaan
+            </button>
+
+            <button
+              onClick={() => navigate('/school-setup/grades')}
+              className="rounded-xl bg-amber-600 px-5 py-3 font-medium text-white hover:bg-amber-700"
+            >
+              Urus Grade
+            </button>
 
             <button
               onClick={() => navigate('/school-setup/subjects')}
