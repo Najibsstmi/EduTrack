@@ -15,6 +15,8 @@ export default function SchoolAdminDashboard() {
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [users, setUsers] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
+  const [classCount, setClassCount] = useState(0)
+  const [studentCount, setStudentCount] = useState(0)
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
@@ -86,6 +88,28 @@ export default function SchoolAdminDashboard() {
     }
 
     setSetupConfig(setupConfig)
+
+    const { count: classTotal, error: classCountError } = await supabase
+      .from('classes')
+      .select('*', { count: 'exact', head: true })
+      .eq('school_id', profile.school_id)
+
+    if (classCountError) {
+      console.error('Class count error:', classCountError)
+    }
+
+    const { count: studentTotal, error: studentCountError } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true })
+      .eq('school_id', profile.school_id)
+
+    if (studentCountError) {
+      console.error('Student count error:', studentCountError)
+    }
+
+    setClassCount(classTotal || 0)
+    setStudentCount(studentTotal || 0)
+
     setAdminProfile(profile)
     await fetchSchoolData(profile.school_id)
     setLoading(false)
@@ -93,6 +117,10 @@ export default function SchoolAdminDashboard() {
 
   const setupStep = setupConfig?.setup_step || 0
   const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
+
+  const classesComplete = classCount > 0
+  const studentsComplete = studentCount > 0
+  const academicDataComplete = classesComplete && studentsComplete
 
   const fetchSchoolData = async (schoolId) => {
     setRefreshing(true)
@@ -324,6 +352,31 @@ export default function SchoolAdminDashboard() {
             </div>
           )}
 
+        </div>
+
+        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-xl font-semibold text-slate-900">
+            Status Data Akademik
+          </h2>
+
+          {academicDataComplete ? (
+            <div className="space-y-2 text-slate-700">
+              <p className="font-semibold text-green-700">Data akademik asas telah lengkap</p>
+              <p>✅ Setup kelas</p>
+              <p>✅ Setup murid</p>
+              <p className="pt-2 font-medium">Sistem sedia untuk langkah seterusnya.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 text-slate-700">
+              <p className="font-semibold text-amber-700">Data akademik asas belum lengkap</p>
+              <p>{classesComplete ? '✅' : '❌'} Setup kelas</p>
+              <p>{studentsComplete ? '✅' : '❌'} Setup murid</p>
+              <p className="pt-2 font-medium">
+                Lengkapkan kelas dahulu, kemudian masukkan murid.
+              </p>
+            </div>
+          )}
+
           <div className="mt-6 flex flex-wrap gap-3">
             {!setupComplete && (
               <button
@@ -368,17 +421,17 @@ export default function SchoolAdminDashboard() {
             </button>
 
             <button
-              onClick={() => navigate('/students')}
-              className="rounded-xl bg-purple-600 px-5 py-3 font-medium text-white hover:bg-purple-700"
-            >
-              Urus Murid
-            </button>
-
-            <button
               onClick={() => navigate('/classes')}
               className="rounded-xl bg-cyan-600 px-5 py-3 font-medium text-white hover:bg-cyan-700"
             >
               Urus Kelas
+            </button>
+
+            <button
+              onClick={() => navigate('/students')}
+              className="rounded-xl bg-purple-600 px-5 py-3 font-medium text-white hover:bg-purple-700"
+            >
+              Urus Murid
             </button>
           </div>
         </div>
