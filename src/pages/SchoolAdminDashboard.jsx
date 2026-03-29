@@ -433,6 +433,13 @@ export default function SchoolAdminDashboard() {
             >
               Urus Murid
             </button>
+
+            <button
+              onClick={() => navigate('/students/import')}
+              className="rounded-xl bg-emerald-600 px-5 py-3 font-medium text-white hover:bg-emerald-700"
+            >
+              Import Murid CSV
+            </button>
           </div>
         </div>
 
