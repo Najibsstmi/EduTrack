@@ -368,7 +368,7 @@ export default function SchoolAdminDashboard() {
             </button>
 
             <button
-              onClick={() => alert('Module murid akan datang')}
+              onClick={() => navigate('/students')}
               className="rounded-xl bg-purple-600 px-5 py-3 font-medium text-white hover:bg-purple-700"
             >
               Urus Murid
