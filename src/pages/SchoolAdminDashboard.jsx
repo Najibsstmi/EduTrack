@@ -66,12 +66,18 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    if (!profile.is_school_admin || profile.approval_status !== 'approved') {
-      if (profile.approval_status === 'pending') {
-        navigate('/pending', { replace: true })
-      } else {
-        navigate('/dashboard', { replace: true })
-      }
+    if (profile.approval_status === 'pending') {
+      navigate('/pending', { replace: true })
+      return
+    }
+
+    if (profile.approval_status !== 'approved') {
+      navigate('/login', { replace: true })
+      return
+    }
+
+    if (!profile.is_school_admin) {
+      navigate('/scores', { replace: true })
       return
     }
 
@@ -274,7 +280,7 @@ export default function SchoolAdminDashboard() {
             )}
           </div>
 
-          <button style={styles.navButton} onClick={() => alert('Route Analisis belum disambungkan')}>
+          <button style={styles.navButton} onClick={() => navigate('/analysis')}>
             Analisis
           </button>
         </nav>
@@ -358,7 +364,7 @@ export default function SchoolAdminDashboard() {
             <button style={styles.quickButton} onClick={() => navigate('/school-setup/grades')}>Grade</button>
             <button style={styles.quickButton} onClick={() => navigate('/school-setup/subjects')}>Subjek</button>
             <button style={styles.quickButton} onClick={() => navigate('/classes')}>Kelas</button>
-            <button style={styles.quickButton} onClick={() => alert('Route Analisis belum disambungkan')}>Analisis</button>
+            <button style={styles.quickButton} onClick={() => navigate('/analysis')}>Analisis</button>
           </div>
         </section>
 

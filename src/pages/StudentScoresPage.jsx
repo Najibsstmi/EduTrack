@@ -2,6 +2,145 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+const REQUIRED_HEADERS = [
+  'nama_murid',
+  'no_ic',
+  'subjek',
+  'jenis_peperiksaan',
+  'markah',
+]
+
+const normalizeText = (value) =>
+  String(value || '').trim()
+
+const normalizeKey = (value) =>
+  String(value || '').trim().toLowerCase()
+
+const normalizeExamKey = (value) =>
+  String(value || '').trim().toUpperCase()
+
+const isAllowedExamKey = (value) => {
+  const key = normalizeExamKey(value)
+
+  if (key === 'TOV' || key === 'ETR') return true
+  if (/^AR\d+$/.test(key)) return true
+
+  return false
+}
+
+const parseCsvLine = (line) => {
+  const result = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    const next = line[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  result.push(current)
+  return result.map((item) => item.trim())
+}
+
+const parseCsvText = (text) => {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (!lines.length) {
+    return { headers: [], rows: [] }
+  }
+
+  const headers = parseCsvLine(lines[0]).map((h) => normalizeKey(h))
+
+  const rows = lines.slice(1).map((line, index) => {
+    const values = parseCsvLine(line)
+    const row = {}
+
+    headers.forEach((header, i) => {
+      row[header] = values[i] ?? ''
+    })
+
+    return {
+      __rowNumber: index + 2,
+      ...row,
+    }
+  })
+
+  return { headers, rows }
+}
+
+const validateCsvData = (headers, rows) => {
+  const errors = []
+
+  const missingHeaders = REQUIRED_HEADERS.filter(
+    (header) => !headers.includes(header)
+  )
+
+  if (missingHeaders.length > 0) {
+    errors.push(
+      `Header wajib tiada: ${missingHeaders.join(', ')}`
+    )
+  }
+
+  rows.forEach((row) => {
+    const nama = normalizeText(row.nama_murid)
+    const ic = normalizeText(row.no_ic)
+    const subjek = normalizeText(row.subjek)
+    const examKey = normalizeExamKey(row.jenis_peperiksaan)
+    const markahRaw = normalizeText(row.markah)
+
+    if (!nama) {
+      errors.push(`Baris ${row.__rowNumber}: nama_murid kosong`)
+    }
+
+    if (!ic) {
+      errors.push(`Baris ${row.__rowNumber}: no_ic kosong`)
+    }
+
+    if (!subjek) {
+      errors.push(`Baris ${row.__rowNumber}: subjek kosong`)
+    }
+
+    if (!examKey) {
+      errors.push(`Baris ${row.__rowNumber}: jenis_peperiksaan kosong`)
+    } else if (!isAllowedExamKey(examKey)) {
+      errors.push(
+        `Baris ${row.__rowNumber}: jenis_peperiksaan '${examKey}' tidak sah. Guna TOV, ETR, AR1, AR2, AR3 dan seterusnya.`
+      )
+    }
+
+    if (markahRaw === '') {
+      errors.push(`Baris ${row.__rowNumber}: markah kosong`)
+    } else {
+      const markah = Number(markahRaw)
+
+      if (Number.isNaN(markah)) {
+        errors.push(`Baris ${row.__rowNumber}: markah bukan nombor`)
+      } else if (markah < 0 || markah > 100) {
+        errors.push(`Baris ${row.__rowNumber}: markah mesti antara 0 hingga 100`)
+      }
+    }
+  })
+
+  return errors
+}
+
 export default function StudentScoresPage() {
   const navigate = useNavigate()
 
@@ -18,6 +157,10 @@ export default function StudentScoresPage() {
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
   const [saving, setSaving] = useState(false)
+
+  const [csvRows, setCsvRows] = useState([])
+  const [csvErrors, setCsvErrors] = useState([])
+  const [csvFileName, setCsvFileName] = useState('')
 
   useEffect(() => {
     init()
@@ -241,6 +384,44 @@ export default function StudentScoresPage() {
     }))
   }
 
+  const downloadTemplateCSV = () => {
+    const sample = [
+      'nama_murid,no_ic,subjek,jenis_peperiksaan,markah',
+      'ALI BIN ABU,090123101234,Sains,TOV,45',
+      'ALI BIN ABU,090123101234,Sains,ETR,70',
+      'ALI BIN ABU,090123101234,Sains,AR1,58',
+      'SITI AISYAH,100201101111,Bahasa Melayu,TOV,60',
+      'SITI AISYAH,100201101111,Bahasa Melayu,ETR,80',
+      'SITI AISYAH,100201101111,Bahasa Melayu,AR1,72',
+    ].join('\n')
+
+    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'template_import_markah_edutrack.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  }
+
+  const handleCsvUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setCsvFileName(file.name)
+
+    const text = await file.text()
+    const { headers, rows } = parseCsvText(text)
+    const errors = validateCsvData(headers, rows)
+
+    setCsvRows(rows)
+    setCsvErrors(errors)
+  }
+
   const handleSave = async () => {
     if (!profile?.school_id) return
 
@@ -284,7 +465,7 @@ export default function StudentScoresPage() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/school-admin')}
+              onClick={() => navigate('/dashboard')}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
               Kembali Dashboard
@@ -332,6 +513,127 @@ export default function StudentScoresPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">Import Markah CSV</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Gunakan key sistem untuk jenis peperiksaan: TOV, ETR, AR1, AR2, AR3 dan seterusnya.
+                OTR tidak perlu diisi kerana sistem akan jana automatik.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={downloadTemplateCSV}
+              className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Download Template CSV
+            </button>
+          </div>
+
+          <div className="mt-5">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Upload Fail CSV
+            </label>
+
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              className="block w-full rounded-xl border border-slate-300 px-3 py-2"
+            />
+
+            {csvFileName && (
+              <p className="mt-2 text-sm text-slate-500">
+                Fail dipilih: <strong>{csvFileName}</strong>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Jumlah Row CSV</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{csvRows.length}</div>
+            </div>
+
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Row Valid</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-600">
+                {csvErrors.length === 0 ? csvRows.length : 0}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Jumlah Error</div>
+              <div className="mt-1 text-2xl font-bold text-red-600">{csvErrors.length}</div>
+            </div>
+          </div>
+
+          {csvErrors.length > 0 && (
+            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4">
+              <h3 className="text-sm font-semibold text-red-700">Ralat CSV</h3>
+              <ul className="mt-2 list-disc pl-5 text-sm text-red-700 space-y-1">
+                {csvErrors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {csvRows.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-3 text-sm font-semibold text-slate-700">Preview CSV</h3>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Bil
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Nama Murid
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        No IC
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Subjek
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Jenis Peperiksaan
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Markah
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {csvRows.slice(0, 15).map((row, index) => (
+                      <tr key={index} className="border-b border-slate-100">
+                        <td className="px-4 py-3 text-sm">{index + 1}</td>
+                        <td className="px-4 py-3 text-sm">{row.nama_murid}</td>
+                        <td className="px-4 py-3 text-sm">{row.no_ic}</td>
+                        <td className="px-4 py-3 text-sm">{row.subjek}</td>
+                        <td className="px-4 py-3 text-sm">{row.jenis_peperiksaan}</td>
+                        <td className="px-4 py-3 text-sm">{row.markah}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {csvRows.length > 15 && (
+                <p className="mt-2 text-sm text-slate-500">
+                  Preview memaparkan 15 row pertama sahaja.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

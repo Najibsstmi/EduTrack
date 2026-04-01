@@ -299,7 +299,7 @@ export default function SchoolSetupPage() {
             <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
               <button
                 type="button"
-                onClick={() => navigate('/school-admin')}
+                onClick={() => navigate('/dashboard')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
                 Dashboard
@@ -473,7 +473,7 @@ export default function SchoolSetupPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/school-admin')}
+              onClick={() => navigate('/dashboard')}
               className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
             >
               Kembali

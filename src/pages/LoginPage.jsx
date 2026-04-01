@@ -51,11 +51,11 @@ function LoginPage() {
     if (profile?.is_master_admin) {
       navigate('/master-admin')
     } else if ((profile?.is_school_admin === true || profile?.role === 'school_admin') && profile?.approval_status === 'approved') {
-      navigate('/school-admin')
+      navigate('/dashboard')
     } else if (profile?.approval_status === 'pending') {
       navigate('/pending')
     } else if (profile?.approval_status === 'approved') {
-      navigate('/dashboard')
+      navigate('/scores')
     } else {
       navigate('/login')
     }

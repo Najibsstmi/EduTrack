@@ -104,7 +104,7 @@ export default function SchoolSetupGradesPage() {
 
     if (schoolError || !schoolData) {
       alert('Maklumat sekolah tidak ditemui.')
-      navigate('/school-admin', { replace: true })
+      navigate('/dashboard', { replace: true })
       return
     }
 
@@ -313,7 +313,7 @@ export default function SchoolSetupGradesPage() {
             <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
               <button
                 type="button"
-                onClick={() => navigate('/school-admin')}
+                onClick={() => navigate('/dashboard')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
                 Dashboard

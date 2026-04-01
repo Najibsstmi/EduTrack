@@ -115,7 +115,7 @@ export default function SchoolSetupSubjectsPage() {
 
     if (configError || !configData) {
       alert('School setup config tidak ditemui.')
-      navigate('/school-admin', { replace: true })
+      navigate('/dashboard', { replace: true })
       return
     }
 
@@ -284,7 +284,7 @@ export default function SchoolSetupSubjectsPage() {
     }
 
     setSaving(false)
-    navigate('/school-admin')
+    navigate('/dashboard')
   }
 
   const getGradeOrder = (gradeLabel) => {

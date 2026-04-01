@@ -168,7 +168,7 @@ export default function StudentImportPage() {
 
     if (schoolError || !schoolData) {
       alert('Maklumat sekolah tidak ditemui.')
-      navigate('/school-admin', { replace: true })
+      navigate('/dashboard', { replace: true })
       return
     }
 
@@ -182,7 +182,7 @@ export default function StudentImportPage() {
 
     if (configError || !configData) {
       alert('School setup config tidak ditemui.')
-      navigate('/school-admin', { replace: true })
+      navigate('/dashboard', { replace: true })
       return
     }
 
@@ -199,7 +199,7 @@ export default function StudentImportPage() {
 
     if (classError) {
       alert(`Gagal load kelas: ${classError.message}`)
-      navigate('/school-admin', { replace: true })
+      navigate('/dashboard', { replace: true })
       return
     }
 
@@ -554,7 +554,7 @@ export default function StudentImportPage() {
           <div className="mt-6 flex gap-3">
             <button
               type="button"
-              onClick={() => navigate('/school-admin')}
+              onClick={() => navigate('/dashboard')}
               className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
             >
               Kembali

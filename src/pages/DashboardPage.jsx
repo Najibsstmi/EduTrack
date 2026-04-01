@@ -280,7 +280,7 @@ function DashboardPage() {
               />
 
               <button
-                onClick={() => navigate('/school-admin')}
+                onClick={() => navigate('/dashboard')}
                 className="mb-4 w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-left hover:bg-green-100"
               >
                 <div className="font-semibold text-slate-900">Buka Modul Urus Pengguna</div>
@@ -303,7 +303,7 @@ function DashboardPage() {
           </button>
 
           <button
-            onClick={() => navigate('/school-admin')}
+            onClick={() => navigate('/dashboard')}
             className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
           >
             Buka Dashboard Admin
