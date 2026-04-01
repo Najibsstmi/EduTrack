@@ -74,7 +74,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: setupConfig, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('id, setup_step, is_setup_complete')
+      .select('id, setup_step, is_setup_complete, current_academic_year')
       .eq('school_id', profile.school_id)
       .maybeSingle()
 
@@ -98,10 +98,20 @@ export default function SchoolAdminDashboard() {
       console.error('Class count error:', classCountError)
     }
 
-    const { count: studentTotal, error: studentCountError } = await supabase
-      .from('students')
+    let studentCountQuery = supabase
+      .from('student_enrollments')
       .select('*', { count: 'exact', head: true })
       .eq('school_id', profile.school_id)
+      .eq('is_active', true)
+
+    if (setupConfig.current_academic_year) {
+      studentCountQuery = studentCountQuery.eq(
+        'academic_year',
+        setupConfig.current_academic_year
+      )
+    }
+
+    const { count: studentTotal, error: studentCountError } = await studentCountQuery
 
     if (studentCountError) {
       console.error('Student count error:', studentCountError)
@@ -391,6 +401,13 @@ export default function SchoolAdminDashboard() {
                 Sambung Setup
               </button>
             )}
+
+            <button
+              onClick={() => navigate('/scores')}
+              className="rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
+            >
+              Input Markah
+            </button>
 
             <button
               onClick={() => navigate('/school-setup')}

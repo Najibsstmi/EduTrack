@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 
 export default function SchoolSetupExamsPage() {
   const navigate = useNavigate()
@@ -9,14 +9,16 @@ export default function SchoolSetupExamsPage() {
   const [saving, setSaving] = useState(false)
 
   const [profile, setProfile] = useState(null)
-  const [settings, setSettings] = useState(null)
-  const [examStructure, setExamStructure] = useState({})
+  const [school, setSchool] = useState(null)
+  const [setupConfig, setSetupConfig] = useState(null)
+
+  const [gradeConfigs, setGradeConfigs] = useState({})
 
   useEffect(() => {
-    loadData()
+    initPage()
   }, [])
 
-  const loadData = async () => {
+  const initPage = async () => {
     setLoading(true)
 
     const {
@@ -31,215 +33,327 @@ export default function SchoolSetupExamsPage() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, school_id, is_master_admin, is_school_admin, approval_status')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError || !profileData) {
-      alert('Profil pengguna tidak ditemui.')
       navigate('/login', { replace: true })
       return
     }
 
+    if (
+      !profileData.is_master_admin &&
+      !(profileData.is_school_admin && profileData.approval_status === 'approved')
+    ) {
+      navigate('/dashboard', { replace: true })
+      return
+    }
+
     setProfile(profileData)
-    console.log('STEP 2 PROFILE:', profileData)
 
-    const { data: config, error: configError } = await supabase
+    const { data: schoolData } = await supabase
+      .from('schools')
+      .select('id, school_name, school_code, level, school_type, state, district')
+      .eq('id', profileData.school_id)
+      .maybeSingle()
+
+    setSchool(schoolData || null)
+
+    const { data: setupData, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('*')
+      .select(`
+        id,
+        school_id,
+        current_academic_year,
+        active_grade_labels,
+        ar_count_by_grade,
+        otr_count_by_grade,
+        setup_step
+      `)
       .eq('school_id', profileData.school_id)
-      .single()
+      .maybeSingle()
 
-    if (configError || !config) {
-      alert('Konfigurasi setup sekolah tidak ditemui.')
+    if (setupError || !setupData) {
+      alert('Step 1 belum lengkap. Sila lengkapkan Step 1 dahulu.')
       navigate('/school-setup', { replace: true })
       return
     }
 
-    setSettings(config)
-    console.log('STEP 2 CONFIG:', config)
+    setSetupConfig(setupData)
 
-    // Jika exam_structure dah pernah disimpan, guna yang itu
-    if (config.exam_structure && Object.keys(config.exam_structure).length > 0) {
-      setExamStructure(config.exam_structure)
-    } else {
-      const generated = generateStructure(config)
-      console.log('GENERATED EXAM STRUCTURE:', generated)
-    }
+    const { data: existingExamConfigs, error: examError } = await supabase
+      .from('exam_configs')
+      .select('id, grade_label, exam_key, exam_name, exam_order, level, academic_year')
+      .eq('school_id', profileData.school_id)
+      .eq('academic_year', setupData.current_academic_year)
+      .order('exam_order', { ascending: true })
 
-    setLoading(false)
-  }
-
-  const generateStructure = (config) => {
-    const result = {}
-
-    config.active_grade_labels.forEach(label => {
-      const arCount = config.ar_count_by_grade[label] || 0
-      const otrCount = config.otr_count_by_grade[label] || 0
-
-      const exams = []
-
-      exams.push({ key: 'TOV', name: 'TOV' })
-
-      for (let i = 1; i <= arCount; i++) {
-        exams.push({ key: `AR${i}`, name: `AR${i}` })
-      }
-
-      for (let i = 1; i <= otrCount; i++) {
-        exams.push({ key: `OTR${i}`, name: `OTR${i}` })
-      }
-
-      exams.push({ key: 'ETR', name: 'ETR' })
-
-      result[label] = exams
-    })
-
-    console.log('GENERATED EXAM STRUCTURE:', result)
-    setExamStructure(result)
-    return result
-  }
-
-  const handleChange = (label, index, value) => {
-    setExamStructure((prev) => {
-      const copy = structuredClone(prev)
-      copy[label][index].name = value
-      return copy
-    })
-  }
-
-  const validateStructure = () => {
-    const labels = Object.keys(examStructure)
-
-    if (labels.length === 0) {
-      alert('Tiada struktur peperiksaan untuk disimpan.')
-      return false
-    }
-
-    for (const label of labels) {
-      const exams = examStructure[label] || []
-
-      for (const exam of exams) {
-        if (!exam.name || !String(exam.name).trim()) {
-          alert(`Sila isi semua nama peperiksaan untuk ${label}.`)
-          return false
-        }
-      }
-    }
-
-    return true
-  }
-
-  const handleSave = async () => {
-    if (!profile?.school_id) {
-      alert('school_id tidak ditemui.')
+    if (examError) {
+      console.error(examError)
+      alert('Gagal membaca konfigurasi peperiksaan.')
+      setLoading(false)
       return
     }
 
+    const generated = generateDefaultConfigs(
+      schoolData?.level || 'Menengah',
+      setupData.active_grade_labels || [],
+      setupData.ar_count_by_grade || {},
+      setupData.otr_count_by_grade || {},
+      existingExamConfigs || [],
+      setupData.current_academic_year
+    )
+
+    setGradeConfigs(generated)
+    setLoading(false)
+  }
+
+  const generateDefaultConfigs = (
+    schoolLevel,
+    activeGradeLabels,
+    arCountByGrade,
+    otrCountByGrade,
+    existingConfigs,
+    academicYear
+  ) => {
+    const result = {}
+
+    for (const gradeLabel of activeGradeLabels) {
+      const arCount = Number(arCountByGrade?.[gradeLabel] || 0)
+      const otrCount = Number(otrCountByGrade?.[gradeLabel] || 0)
+
+      const defaultRows = []
+
+      defaultRows.push({
+        grade_label: gradeLabel,
+        exam_key: 'TOV',
+        exam_name: 'TOV',
+        exam_order: 1,
+        level: schoolLevel,
+        academic_year: academicYear,
+      })
+
+      for (let i = 1; i <= arCount; i++) {
+        let defaultName = `AR${i}`
+
+        if (schoolLevel?.toLowerCase() === 'menengah') {
+          if (gradeLabel === 'Tingkatan 5') {
+            defaultName = i === 1 ? 'PPT' : i === 2 ? 'PPC' : `AR${i}`
+          } else {
+            defaultName = i === 1 ? 'PPT' : i === 2 ? 'PAT' : `AR${i}`
+          }
+        }
+
+        defaultRows.push({
+          grade_label: gradeLabel,
+          exam_key: `AR${i}`,
+          exam_name: defaultName,
+          exam_order: defaultRows.length + 1,
+          level: schoolLevel,
+          academic_year: academicYear,
+        })
+      }
+
+      for (let i = 1; i <= otrCount; i++) {
+        defaultRows.push({
+          grade_label: gradeLabel,
+          exam_key: `OTR${i}`,
+          exam_name: `OTR${i}`,
+          exam_order: defaultRows.length + 1,
+          level: schoolLevel,
+          academic_year: academicYear,
+        })
+      }
+
+      defaultRows.push({
+        grade_label: gradeLabel,
+        exam_key: 'ETR',
+        exam_name: 'ETR',
+        exam_order: defaultRows.length + 1,
+        level: schoolLevel,
+        academic_year: academicYear,
+      })
+
+      const mergedRows = defaultRows.map((row) => {
+        const existing = existingConfigs.find(
+          (item) =>
+            item.grade_label === row.grade_label &&
+            item.exam_key === row.exam_key
+        )
+
+        return existing
+          ? {
+              ...row,
+              id: existing.id,
+              exam_name: existing.exam_name,
+              exam_order: existing.exam_order,
+            }
+          : row
+      })
+
+      result[gradeLabel] = mergedRows
+    }
+
+    return result
+  }
+
+  const gradeLabels = useMemo(() => {
+    return Object.keys(gradeConfigs)
+  }, [gradeConfigs])
+
+  const handleExamNameChange = (gradeLabel, examKey, value) => {
+    setGradeConfigs((prev) => ({
+      ...prev,
+      [gradeLabel]: prev[gradeLabel].map((row) =>
+        row.exam_key === examKey ? { ...row, exam_name: value } : row
+      ),
+    }))
+  }
+
+  const handleSave = async () => {
+    if (!profile?.school_id || !setupConfig) return
+
     setSaving(true)
 
-    const { data, error } = await supabase
+    const payload = []
+
+    for (const gradeLabel of Object.keys(gradeConfigs)) {
+      for (const row of gradeConfigs[gradeLabel]) {
+        payload.push({
+          school_id: profile.school_id,
+          academic_year: setupConfig.current_academic_year,
+          level: row.level,
+          grade_label: row.grade_label,
+          exam_key: row.exam_key,
+          exam_name: row.exam_name?.trim() || row.exam_key,
+          exam_order: row.exam_order,
+        })
+      }
+    }
+
+    const { error } = await supabase
+      .from('exam_configs')
+      .upsert(payload, {
+        onConflict: 'school_id,academic_year,level,grade_label,exam_key',
+      })
+
+    if (error) {
+      console.error(error)
+      alert(`Gagal simpan exam configs: ${error.message}`)
+      setSaving(false)
+      return
+    }
+
+    const { error: setupUpdateError } = await supabase
       .from('school_setup_configs')
       .update({
-        exam_structure: examStructure,
         setup_step: 2,
         updated_by: profile.id,
       })
       .eq('school_id', profile.school_id)
-      .select()
 
-    console.log('SAVE STEP 2 RESULT:', data, error)
-    console.log('EXAM STRUCTURE TO SAVE:', examStructure)
-    console.log('PROFILE SCHOOL ID:', profile.school_id)
-
-    if (error) {
-      alert(`Gagal simpan Step 2: ${error.message}`)
-      setSaving(false)
-      return
-    }
-
-    if (!data || data.length === 0) {
-      alert('Update tidak berlaku. Semak school_id atau page yang sedang digunakan.')
-      setSaving(false)
-      return
+    if (setupUpdateError) {
+      console.error(setupUpdateError)
     }
 
     alert('Step 2 berjaya disimpan.')
     setSaving(false)
-    navigate('/school-setup/grades')
+
+    // Step seterusnya nanti
+    // navigate('/school-setup/grade-scales')
   }
 
   if (loading) {
-    return <div className="p-6">Loading Exam Setup...</div>
+    return <div className="p-6">Loading Step 2...</div>
   }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
-            School Setup Wizard — Step 2
+            School Setup Wizard - Step 2
           </div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Struktur Peperiksaan
+            Struktur Peperiksaan & Sasaran
           </h1>
           <p className="mt-2 text-slate-600">
-            Sistem auto jana TOV, AR, OTR dan ETR berdasarkan Step 1.
-            Tukar nama paparan peperiksaan ikut sekolah anda.
+            Tetapkan nama paparan bagi TOV, AR, OTR, dan ETR untuk setiap tingkatan / tahun.
           </p>
+
+          <div className="mt-4 space-y-1 text-sm text-slate-600">
+            <div>
+              <span className="font-semibold text-slate-800">Sekolah:</span>{' '}
+              {school?.school_name || '-'}
+              {school?.school_code ? ` (${school.school_code})` : ''}
+            </div>
+            <div>
+              <span className="font-semibold text-slate-800">Tahun Semasa:</span>{' '}
+              {setupConfig?.current_academic_year || '-'}
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
-          {Object.keys(examStructure).length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-slate-500">
-              Tiada struktur peperiksaan dijana.
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Object.keys(examStructure).map((label) => (
-                <div key={label} className="rounded-2xl border border-slate-200 p-4">
-                  <h3 className="mb-4 text-lg font-semibold text-slate-900">
-                    {label}
-                  </h3>
+        <div className="space-y-4">
+          {gradeLabels.map((gradeLabel) => (
+            <div key={gradeLabel} className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-xl font-semibold text-slate-900">
+                {gradeLabel}
+              </h2>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {examStructure[label].map((exam, i) => (
-                      <div key={exam.key}>
-                        <label className="mb-2 block text-sm font-medium text-slate-700">
-                          {exam.key}
-                        </label>
-                        <input
-                          type="text"
-                          value={exam.name}
-                          onChange={(e) => handleChange(label, i, e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                          placeholder={`Contoh nama untuk ${exam.key}`}
-                        />
-                      </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left">
+                      <th className="px-3 py-3 font-semibold text-slate-700">Key Sistem</th>
+                      <th className="px-3 py-3 font-semibold text-slate-700">Nama Paparan</th>
+                      <th className="px-3 py-3 font-semibold text-slate-700">Susunan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gradeConfigs[gradeLabel].map((row) => (
+                      <tr key={`${gradeLabel}-${row.exam_key}`} className="border-b">
+                        <td className="px-3 py-3 font-medium text-slate-900">
+                          {row.exam_key}
+                        </td>
+                        <td className="px-3 py-3">
+                          <input
+                            type="text"
+                            value={row.exam_name || ''}
+                            onChange={(e) =>
+                              handleExamNameChange(gradeLabel, row.exam_key, e.target.value)
+                            }
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-slate-700">{row.exam_order}</td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          )}
+          ))}
+        </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-xl bg-green-600 px-5 py-3 font-medium text-white hover:bg-green-700 disabled:opacity-60"
-            >
-              {saving ? 'Menyimpan...' : 'Simpan Step 2'}
-            </button>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/school-setup')}
+            className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
+          >
+            Kembali Step 1
+          </button>
 
-            <button
-              type="button"
-              onClick={() => navigate('/school-setup')}
-              className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Kembali
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-xl bg-green-600 px-5 py-3 font-medium text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            {saving ? 'Menyimpan...' : 'Simpan Step 2'}
+          </button>
         </div>
       </div>
     </div>
