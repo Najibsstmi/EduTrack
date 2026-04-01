@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -10,7 +10,6 @@ export default function StudentScoresPage() {
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
-  const [exams, setExams] = useState([])
 
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
@@ -23,6 +22,89 @@ export default function StudentScoresPage() {
   useEffect(() => {
     init()
   }, [])
+
+  const getGradeLabelFromClassName = (className = '') => {
+    const text = className.toLowerCase()
+
+    if (text.includes('tingkatan 1')) return 'Tingkatan 1'
+    if (text.includes('tingkatan 2')) return 'Tingkatan 2'
+    if (text.includes('tingkatan 3')) return 'Tingkatan 3'
+    if (text.includes('tingkatan 4')) return 'Tingkatan 4'
+    if (text.includes('tingkatan 5')) return 'Tingkatan 5'
+
+    return ''
+  }
+
+  const selectedClassName = useMemo(() => {
+    const selectedClassData = classes.find((c) => c.id === selectedClass)
+    if (!selectedClassData) return ''
+    return `${selectedClassData.tingkatan || ''} ${selectedClassData.class_name || ''}`.trim()
+  }, [classes, selectedClass])
+
+  const selectedGradeLabel = useMemo(() => {
+    return getGradeLabelFromClassName(selectedClassName)
+  }, [selectedClassName])
+
+  const uniqueExamOptions = useMemo(() => {
+    const examsForSelectedGrade = setupConfig?.exam_structure?.[selectedGradeLabel] || []
+
+    return examsForSelectedGrade.filter(
+      (exam, index, arr) => index === arr.findIndex((item) => item.key === exam.key)
+    )
+  }, [setupConfig, selectedGradeLabel])
+
+  const sortedStudents = useMemo(() => {
+    const genderRank = (gender) => {
+      if (gender === 'LELAKI') return 1
+      if (gender === 'PEREMPUAN') return 2
+      return 3
+    }
+
+    return [...students].sort((a, b) => {
+      const genderA = (a.gender || '').toUpperCase()
+      const genderB = (b.gender || '').toUpperCase()
+
+      const genderCompare = genderRank(genderA) - genderRank(genderB)
+      if (genderCompare !== 0) return genderCompare
+
+      return (a.full_name || '').localeCompare(b.full_name || '', 'ms', {
+        sensitivity: 'base',
+      })
+    })
+  }, [students])
+
+  const uniqueSubjects = useMemo(() => {
+    const normalizedSelectedGrade = selectedGradeLabel.trim().toLowerCase()
+
+    const filteredSubjects = normalizedSelectedGrade
+      ? subjects.filter(
+          (subject) =>
+            (subject.tingkatan || '').trim().toLowerCase() === normalizedSelectedGrade
+        )
+      : subjects
+
+    return filteredSubjects.filter(
+      (subject, index, arr) =>
+        index ===
+        arr.findIndex(
+          (item) =>
+            (item.subject_name || '').trim().toLowerCase() ===
+            (subject.subject_name || '').trim().toLowerCase()
+        )
+    )
+  }, [subjects, selectedGradeLabel])
+
+  useEffect(() => {
+    if (!selectedSubject) return
+
+    const subjectStillValid = uniqueSubjects.some(
+      (subject) => String(subject.id) === String(selectedSubject)
+    )
+
+    if (!subjectStillValid) {
+      setSelectedSubject('')
+    }
+  }, [uniqueSubjects, selectedSubject])
 
   const init = async () => {
     const {
@@ -50,7 +132,7 @@ export default function StudentScoresPage() {
 
     const { data: setupData } = await supabase
       .from('school_setup_configs')
-      .select('current_academic_year')
+      .select('current_academic_year, exam_structure')
       .eq('school_id', profileData.school_id)
       .maybeSingle()
 
@@ -77,24 +159,11 @@ export default function StudentScoresPage() {
 
     const { data: subjectData } = await supabase
       .from('subjects')
-      .select('id, subject_name, subject_code')
+      .select('id, subject_name, subject_code, tingkatan')
       .eq('school_id', profileData.school_id)
       .order('subject_name', { ascending: true })
 
     setSubjects(subjectData || [])
-
-    let examQuery = supabase
-      .from('exam_configs')
-      .select('id, exam_key, exam_name, exam_order, grade_label, academic_year')
-      .eq('school_id', profileData.school_id)
-      .order('exam_order', { ascending: true })
-
-    if (setupData?.current_academic_year) {
-      examQuery = examQuery.eq('academic_year', setupData.current_academic_year)
-    }
-
-    const { data: examData } = await examQuery
-    setExams(examData || [])
   }
 
   const loadStudentsAndScores = async () => {
@@ -111,7 +180,8 @@ export default function StudentScoresPage() {
         student_profiles (
           id,
           full_name,
-          ic_number
+          ic_number,
+          gender
         )
       `)
       .eq('school_id', profile.school_id)
@@ -129,6 +199,7 @@ export default function StudentScoresPage() {
       student_id: row.student_profile_id,
       full_name: row.student_profiles?.full_name || '-',
       ic_number: row.student_profiles?.ic_number || '-',
+      gender: row.student_profiles?.gender || '',
     }))
 
     setStudents(studentRows)
@@ -241,8 +312,10 @@ export default function StudentScoresPage() {
               className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
             >
               <option value="">Pilih Subjek</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.subject_name}</option>
+              {uniqueSubjects.map((subject) => (
+                <option key={subject.id || subject.subject_name} value={subject.id}>
+                  {subject.subject_name}
+                </option>
               ))}
             </select>
 
@@ -252,9 +325,9 @@ export default function StudentScoresPage() {
               className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
             >
               <option value="">Pilih Peperiksaan</option>
-              {exams.map((e) => (
-                <option key={`${e.id}-${e.exam_key}`} value={e.exam_key}>
-                  {e.exam_name}
+              {uniqueExamOptions.map((exam) => (
+                <option key={exam.key} value={exam.key}>
+                  {exam.name}
                 </option>
               ))}
             </select>
@@ -271,6 +344,7 @@ export default function StudentScoresPage() {
             <table className="min-w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-slate-700">
+                  <th className="px-3 py-3 font-semibold">Bil</th>
                   <th className="px-3 py-3 font-semibold">Nama</th>
                   <th className="px-3 py-3 font-semibold">No IC</th>
                   <th className="px-3 py-3 font-semibold">Markah</th>
@@ -278,8 +352,9 @@ export default function StudentScoresPage() {
               </thead>
 
               <tbody>
-                {students.map((student) => (
+                {sortedStudents.map((student, index) => (
                   <tr key={student.student_id} className="border-b">
+                    <td className="px-3 py-3 text-slate-700">{index + 1}</td>
                     <td className="px-3 py-3 text-slate-900">{student.full_name}</td>
                     <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
 
