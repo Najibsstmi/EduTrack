@@ -3,156 +3,310 @@ import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
 function DashboardPage() {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
+  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState(null)
+
+  const [setupStatus, setSetupStatus] = useState({
+    exams: false,
+    grades: false,
+    subjects: false,
+    classes: false,
+    students: false,
+  })
+
+  const [userFilter, setUserFilter] = useState('pending')
+  const [searchTerm, setSearchTerm] = useState('')
+
   useEffect(() => {
-    const loadDashboard = async () => {
-      setLoading(true)
+    loadProfile()
+  }, [navigate])
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+  const loadProfile = async () => {
+    setLoading(true)
 
-      if (!session?.user) {
-        alert('Sila login dahulu')
-        navigate('/login')
-        return
-      }
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-      const currentUser = session.user
-      setUser(currentUser)
-
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin')
-        .eq('id', currentUser.id)
-        .maybeSingle()
-
-      if (profileError) {
-        console.error('Profile error:', profileError)
-        alert('Ralat semasa ambil profil')
-        navigate('/login')
-        return
-      }
-
-      if (!profileData) {
-        console.error('Tiada profile untuk user id:', currentUser.id)
-        alert('Profil tidak ditemui')
-        navigate('/login')
-        return
-      }
-
-      if (profileData?.is_master_admin) {
-        navigate('/master-admin')
-        return
-      } else if (profileData?.is_school_admin && profileData?.approval_status === 'approved') {
-        navigate('/school-admin')
-        return
-      } else if (profileData?.approval_status === 'pending') {
-        navigate('/pending')
-        return
-      } else if (profileData?.approval_status === 'approved') {
-        setProfile(profileData)
-        setLoading(false)
-        return
-      }
-
-      navigate('/login')
+    if (userError || !user) {
+      navigate('/login', { replace: true })
+      return
     }
 
-    loadDashboard()
-  }, [navigate])
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin, school_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (error || !data) {
+      alert('Profil pengguna tidak ditemui')
+      navigate('/login', { replace: true })
+      return
+    }
+
+    if (data.is_master_admin) {
+      navigate('/master-admin', { replace: true })
+      return
+    }
+
+    if (data.approval_status === 'pending') {
+      navigate('/pending', { replace: true })
+      return
+    }
+
+    setProfile(data)
+    await loadSetupStatus(data.school_id)
+    setLoading(false)
+  }
+
+  const loadSetupStatus = async (schoolId) => {
+    if (!schoolId) return
+
+    const [{ data: setupData }, { count: classTotal }, { count: studentTotal }] = await Promise.all([
+      supabase
+        .from('school_setup_configs')
+        .select('setup_step, is_setup_complete, current_academic_year')
+        .eq('school_id', schoolId)
+        .maybeSingle(),
+      supabase
+        .from('classes')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('is_active', true),
+      supabase
+        .from('student_enrollments')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('is_active', true),
+    ])
+
+    const setupStep = setupData?.setup_step || 0
+    const setupComplete = !!setupData?.is_setup_complete || setupStep >= 4
+
+    setSetupStatus({
+      exams: setupStep >= 2 || setupComplete,
+      grades: setupStep >= 3 || setupComplete,
+      subjects: setupStep >= 4 || setupComplete,
+      classes: (classTotal || 0) > 0,
+      students: (studentTotal || 0) > 0,
+    })
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    navigate('/login')
+    navigate('/login', { replace: true })
   }
 
   if (loading) {
-    return <div style={{ padding: '20px' }}>Loading dashboard...</div>
+    return <div className="p-6">Loading dashboard...</div>
   }
 
-  const isSchoolAdmin = profile?.is_school_admin
-  const isMasterAdmin = profile?.is_master_admin
+  const isSchoolAdmin = profile?.role === 'school_admin' || profile?.role === 'admin' || profile?.is_school_admin
+
+  const isAcademicSetupComplete =
+    setupStatus.exams &&
+    setupStatus.grades &&
+    setupStatus.subjects &&
+    setupStatus.classes &&
+    setupStatus.students
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard EduTrack</h1>
-          <div className="mt-3 space-y-1 text-sm text-slate-600">
-            <p><span className="font-semibold text-slate-800">Nama:</span> {profile?.full_name}</p>
-            <p><span className="font-semibold text-slate-800">Email:</span> {profile?.email}</p>
-            <p><span className="font-semibold text-slate-800">Role:</span> {profile?.role}</p>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Dashboard EduTrack</h1>
+          <p className="mt-2 text-slate-600">
+            Selamat datang, {profile?.full_name || profile?.email}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Role: {profile?.role || '-'}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Status Setup Sistem</h2>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="mb-2 font-semibold text-slate-800">Status Struktur Akademik</h3>
+              <div className="space-y-2 text-sm text-slate-700">
+                <div>{setupStatus.exams ? '✅' : '⬜'} Setup peperiksaan</div>
+                <div>{setupStatus.grades ? '✅' : '⬜'} Setup grade</div>
+                <div>{setupStatus.subjects ? '✅' : '⬜'} Setup subjek</div>
+              </div>
+
+              <p className="mt-3 text-sm text-slate-600">
+                {setupStatus.exams && setupStatus.grades && setupStatus.subjects
+                  ? 'Semua step telah lengkap.'
+                  : 'Masih ada step yang belum lengkap.'}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold text-slate-800">Status Data Akademik</h3>
+              <div className="space-y-2 text-sm text-slate-700">
+                <div>{setupStatus.classes ? '✅' : '⬜'} Setup kelas</div>
+                <div>{setupStatus.students ? '✅' : '⬜'} Setup murid</div>
+              </div>
+
+              <p className="mt-3 text-sm text-slate-600">
+                {setupStatus.classes && setupStatus.students
+                  ? 'Data akademik asas telah lengkap.'
+                  : 'Masih ada data asas yang perlu disiapkan.'}
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-3">
-          {/* Semua role yang approved boleh input markah */}
-          <button
-            onClick={() => navigate('/scores')}
-            className="flex items-center gap-3 rounded-xl bg-blue-600 px-5 py-4 text-left font-semibold text-white shadow-sm hover:bg-blue-700"
-          >
-            <span className="text-xl">📝</span>
-            <div>
-              <div>Input Markah</div>
-              <div className="text-xs font-normal opacity-80">Isi markah murid mengikut kelas & subjek</div>
-            </div>
-          </button>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">Input Data</h2>
 
-          {/* School Admin sahaja */}
-          {isSchoolAdmin && (
-            <>
+            <div className="space-y-3">
               <button
-                onClick={() => navigate('/school-setup')}
-                className="flex items-center gap-3 rounded-xl bg-slate-700 px-5 py-4 text-left font-semibold text-white shadow-sm hover:bg-slate-800"
+                onClick={() => navigate('/scores')}
+                disabled={!isAcademicSetupComplete}
+                className={`w-full rounded-xl border px-4 py-3 text-left ${
+                  isAcademicSetupComplete
+                    ? 'border-blue-200 bg-blue-50 hover:bg-blue-100'
+                    : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                }`}
               >
-                <span className="text-xl">⚙️</span>
-                <div>
-                  <div>School Setup</div>
-                  <div className="text-xs font-normal opacity-80">Tetapan sekolah, peperiksaan & subjek</div>
+                <div className="font-semibold text-slate-900">Input Markah</div>
+                <div className="text-sm text-slate-600">
+                  Masukkan markah peperiksaan murid
                 </div>
               </button>
+
+              <button
+                onClick={() => navigate('/students/import')}
+                className="w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
+              >
+                <div className="font-semibold text-slate-900">Import Murid CSV</div>
+                <div className="text-sm text-slate-600">
+                  Import senarai murid secara pukal
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm">
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">Setup Akademik</h2>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate('/school-setup')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Struktur Akademik</div>
+                <div className="text-sm text-slate-600">
+                  Tetapan asas tingkatan, peperiksaan dan aliran
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/school-setup/exams')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Peperiksaan</div>
+              </button>
+
+              <button
+                onClick={() => navigate('/school-setup/grades')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Grade</div>
+              </button>
+
+              <button
+                onClick={() => navigate('/school-setup/subjects')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Subjek</div>
+              </button>
+
+              <button
+                onClick={() => navigate('/classes')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Kelas</div>
+              </button>
+
+              <button
+                onClick={() => navigate('/students')}
+                className="w-full rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-left hover:bg-yellow-100"
+              >
+                <div className="font-semibold text-slate-900">Urus Murid</div>
+              </button>
+            </div>
+          </div>
+
+          {isSchoolAdmin && (
+            <div className="rounded-2xl bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Pengurusan Pengguna</h2>
+
+              <div className="mb-4 flex flex-wrap gap-2">
+                {['pending', 'approved', 'rejected', 'semua'].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setUserFilter(filter)}
+                    className={`rounded-lg border px-3 py-2 text-sm ${
+                      userFilter === filter
+                        ? 'border-green-600 bg-green-600 text-white'
+                        : 'border-slate-300 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    {filter === 'pending'
+                      ? 'Pending'
+                      : filter === 'approved'
+                        ? 'Approved'
+                        : filter === 'rejected'
+                          ? 'Rejected'
+                          : 'Semua'}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Cari nama, email, role..."
+                className="mb-4 w-full rounded-xl border px-4 py-3"
+              />
 
               <button
                 onClick={() => navigate('/school-admin')}
-                className="flex items-center gap-3 rounded-xl bg-slate-700 px-5 py-4 text-left font-semibold text-white shadow-sm hover:bg-slate-800"
+                className="mb-4 w-full rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-left hover:bg-green-100"
               >
-                <span className="text-xl">👥</span>
-                <div>
-                  <div>Urus Pengguna</div>
-                  <div className="text-xs font-normal opacity-80">Semak & luluskan pengguna sekolah</div>
-                </div>
+                <div className="font-semibold text-slate-900">Buka Modul Urus Pengguna</div>
+                <div className="text-sm text-slate-600">Semak, lulus atau tolak pengguna sekolah</div>
               </button>
-            </>
-          )}
 
-          {/* Master Admin sahaja */}
-          {isMasterAdmin && (
-            <button
-              onClick={() => navigate('/master-admin')}
-              className="flex items-center gap-3 rounded-xl bg-purple-700 px-5 py-4 text-left font-semibold text-white shadow-sm hover:bg-purple-800"
-            >
-              <span className="text-xl">🛡️</span>
-              <div>
-                <div>Master Admin</div>
-                <div className="text-xs font-normal opacity-80">Pengurusan semua sekolah</div>
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
+                Pengurusan terperinci pengguna tersedia dalam modul School Admin.
               </div>
-            </button>
+            </div>
           )}
+        </div>
 
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-5 py-4 text-left font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
+            className="rounded-xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
           >
-            <span className="text-xl">🚪</span>
-            <div>
-              <div>Log Keluar</div>
-              <div className="text-xs font-normal text-slate-500">Tamat sesi semasa</div>
-            </div>
+            Logout
+          </button>
+
+          <button
+            onClick={() => navigate('/school-admin')}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-700 hover:bg-slate-50"
+          >
+            Buka Dashboard Admin
           </button>
         </div>
       </div>

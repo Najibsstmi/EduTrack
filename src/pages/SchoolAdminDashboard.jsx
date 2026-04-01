@@ -15,11 +15,13 @@ export default function SchoolAdminDashboard() {
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [users, setUsers] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
-  const [classCount, setClassCount] = useState(0)
-  const [studentCount, setStudentCount] = useState(0)
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showTopNav, setShowTopNav] = useState(true)
+  const [showInputMenu, setShowInputMenu] = useState(true)
+  const [showAcademicMenu, setShowAcademicMenu] = useState(true)
+  const [showUserMenu, setShowUserMenu] = useState(true)
 
   useEffect(() => {
     checkAccessAndFetch()
@@ -89,37 +91,6 @@ export default function SchoolAdminDashboard() {
 
     setSetupConfig(setupConfig)
 
-    const { count: classTotal, error: classCountError } = await supabase
-      .from('classes')
-      .select('*', { count: 'exact', head: true })
-      .eq('school_id', profile.school_id)
-
-    if (classCountError) {
-      console.error('Class count error:', classCountError)
-    }
-
-    let studentCountQuery = supabase
-      .from('student_enrollments')
-      .select('*', { count: 'exact', head: true })
-      .eq('school_id', profile.school_id)
-      .eq('is_active', true)
-
-    if (setupConfig.current_academic_year) {
-      studentCountQuery = studentCountQuery.eq(
-        'academic_year',
-        setupConfig.current_academic_year
-      )
-    }
-
-    const { count: studentTotal, error: studentCountError } = await studentCountQuery
-
-    if (studentCountError) {
-      console.error('Student count error:', studentCountError)
-    }
-
-    setClassCount(classTotal || 0)
-    setStudentCount(studentTotal || 0)
-
     setAdminProfile(profile)
     await fetchSchoolData(profile.school_id)
     setLoading(false)
@@ -127,10 +98,6 @@ export default function SchoolAdminDashboard() {
 
   const setupStep = setupConfig?.setup_step || 0
   const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
-
-  const classesComplete = classCount > 0
-  const studentsComplete = studentCount > 0
-  const academicDataComplete = classesComplete && studentsComplete
 
   const fetchSchoolData = async (schoolId) => {
     setRefreshing(true)
@@ -269,6 +236,11 @@ export default function SchoolAdminDashboard() {
     navigate('/login')
   }
 
+  const goTo = (path) => {
+    navigate(path)
+    setShowTopNav(false)
+  }
+
   const getStatusBadge = (status) => {
     if (status === 'approved') return 'bg-green-100 text-green-700'
     if (status === 'pending') return 'bg-yellow-100 text-yellow-700'
@@ -281,50 +253,77 @@ export default function SchoolAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">School Admin Dashboard</h1>
-              <p className="mt-2 text-slate-600">
-                Urus pengguna, semakan pendaftaran, dan pentadbiran sekolah anda.
-              </p>
-
-              <div className="mt-4 space-y-1 text-sm text-slate-600">
-                <div>
-                  <span className="font-semibold text-slate-800">Sekolah:</span>{' '}
-                  {schoolInfo?.school_name || '-'}
-                  {schoolInfo?.school_code ? ` (${schoolInfo.school_code})` : ''}
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-800">Jenis:</span>{' '}
-                  {schoolInfo?.school_type || '-'}
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-800">Negeri / PPD:</span>{' '}
-                  {[schoolInfo?.state, schoolInfo?.district].filter(Boolean).join(' / ') || '-'}
-                </div>
-                <div>
-                  <span className="font-semibold text-slate-800">Admin semasa:</span>{' '}
-                  {adminProfile?.full_name || '-'} ({adminProfile?.email || '-'})
-                </div>
+        <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="rounded-lg bg-blue-100 p-2">
+                <img src="/favicon.svg" alt="EduTrack" className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-base font-bold text-slate-900">Sistem Tambahan Bilik</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {schoolInfo?.school_name || 'Portal Sekolah'}
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col items-end gap-2 md:ml-auto">
               <button
-                onClick={refreshData}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                type="button"
+                onClick={() => setShowTopNav((prev) => !prev)}
+                className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 md:hidden"
               >
-                {refreshing ? 'Refreshing...' : 'Refresh'}
+                {showTopNav ? 'Tutup Menu' : 'Menu'}
               </button>
-              <button
-                onClick={handleLogout}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+
+              <div
+                className={`${showTopNav ? 'flex' : 'hidden'} flex-wrap items-center justify-end gap-1 text-xs font-semibold text-slate-600 md:flex`}
               >
-                Logout
-              </button>
+                <button onClick={() => goTo('/school-admin')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Dashboard</button>
+                <button onClick={() => goTo('/scores')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Analisis</button>
+                <button onClick={() => { setShowUserMenu(true); setShowTopNav(false) }} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Pengguna</button>
+                <button onClick={() => goTo('/classes')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Bilik</button>
+                <button onClick={() => goTo('/school-setup')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Tetapan Sekolah</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <img src="/favicon.svg" alt="Logo sekolah" className="h-11 w-11" />
+              </div>
+
+              <div>
+                <h1 className="text-3xl font-bold leading-none text-slate-900 md:text-5xl">Dashboard</h1>
+                <p className="mt-2 text-base font-semibold text-slate-900">{schoolInfo?.school_name || '-'}</p>
+                <p className="mt-1 text-sm text-slate-700">Selamat datang, {adminProfile?.full_name || '-'}.</p>
+
+                <div className="mt-5 space-y-2 text-sm text-slate-700">
+                  <p>Email: {adminProfile?.email || '-'}</p>
+                  <p>Peranan: {adminProfile?.role || '-'}</p>
+                  <p>Status kelulusan: {adminProfile?.approval_status || '-'}</p>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={handleLogout}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    Log Keluar
+                  </button>
+                  <button
+                    onClick={refreshData}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    {refreshing ? 'Refreshing...' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -337,154 +336,157 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Admin Sekolah" value={stats.admins} />
         </div>
 
-        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">
-            Status School Setup
-          </h2>
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowInputMenu((prev) => !prev)}
+            className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
+          >
+            <span>Menu Input Data</span>
+            <span className="text-slate-500">{showInputMenu ? 'Tutup' : 'Buka'}</span>
+          </button>
 
-          {setupComplete ? (
-            <div className="space-y-2 text-slate-700">
-              <p className="font-semibold text-green-700">Setup sekolah lengkap</p>
-              <p>✅ Setup struktur akademik</p>
-              <p>✅ Setup peperiksaan</p>
-              <p>✅ Setup grade</p>
-              <p>✅ Setup subjek</p>
-              <p className="pt-2 font-medium">Semua step telah lengkap.</p>
-            </div>
-          ) : (
-            <div className="space-y-2 text-slate-700">
-              <p className="font-semibold text-amber-700">Setup sekolah belum lengkap</p>
-              <p>{setupStep >= 1 ? '✅' : '❌'} Setup struktur akademik</p>
-              <p>{setupStep >= 2 ? '✅' : '❌'} Setup peperiksaan</p>
-              <p>{setupStep >= 3 ? '✅' : '❌'} Setup grade</p>
-              <p>{setupStep >= 4 ? '✅' : '❌'} Setup subjek</p>
-              <p className="pt-2 font-medium">Sila lengkapkan step yang belum selesai.</p>
+          {showInputMenu && (
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <button
+                onClick={() => navigate('/scores')}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
+              >
+                <div className="font-semibold text-slate-900">Input Markah</div>
+                <div className="text-sm text-slate-600">Masukkan markah peperiksaan murid</div>
+              </button>
+
+              <button
+                onClick={() => navigate('/students/import')}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
+              >
+                <div className="font-semibold text-slate-900">Import Murid CSV</div>
+                <div className="text-sm text-slate-600">Import senarai murid secara pukal</div>
+              </button>
             </div>
           )}
-
         </div>
 
-        <div className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">
-            Status Data Akademik
-          </h2>
+        <div className="mb-6 grid gap-6 lg:grid-cols-1">
 
-          {academicDataComplete ? (
-            <div className="space-y-2 text-slate-700">
-              <p className="font-semibold text-green-700">Data akademik asas telah lengkap</p>
-              <p>✅ Setup kelas</p>
-              <p>✅ Setup murid</p>
-              <p className="pt-2 font-medium">Sistem sedia untuk langkah seterusnya.</p>
-            </div>
-          ) : (
-            <div className="space-y-2 text-slate-700">
-              <p className="font-semibold text-amber-700">Data akademik asas belum lengkap</p>
-              <p>{classesComplete ? '✅' : '❌'} Setup kelas</p>
-              <p>{studentsComplete ? '✅' : '❌'} Setup murid</p>
-              <p className="pt-2 font-medium">
-                Lengkapkan kelas dahulu, kemudian masukkan murid.
-              </p>
-            </div>
-          )}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-2 text-lg font-semibold text-slate-900">Menu Utama</h2>
+            <p className="mb-4 text-sm text-slate-600">
+              Paparan minimum untuk operasi harian. Guna menu burger di bawah.
+            </p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            {!setupComplete && (
+            <div className="space-y-3">
               <button
-                onClick={() => {
-                  if (setupStep === 0) navigate('/school-setup')
-                  else if (setupStep === 1) navigate('/school-setup/exams')
-                  else if (setupStep === 2) navigate('/school-setup/grades')
-                  else if (setupStep === 3) navigate('/school-setup/subjects')
-                }}
-                className="rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
+                type="button"
+                onClick={() => setShowAcademicMenu((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
               >
-                Sambung Setup
+                <span>Menu Tetapan Akademik</span>
+                <span className="text-slate-500">{showAcademicMenu ? 'Tutup' : 'Buka'}</span>
               </button>
-            )}
 
-            <button
-              onClick={() => navigate('/scores')}
-              className="rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
-            >
-              Input Markah
-            </button>
+              {showAcademicMenu && (
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {!setupComplete && (
+                    <button
+                      onClick={() => {
+                        if (setupStep === 0) navigate('/school-setup')
+                        else if (setupStep === 1) navigate('/school-setup/exams')
+                        else if (setupStep === 2) navigate('/school-setup/grades')
+                        else if (setupStep === 3) navigate('/school-setup/subjects')
+                      }}
+                      className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-indigo-100"
+                    >
+                      Sambung Setup
+                    </button>
+                  )}
 
-            <button
-              onClick={() => navigate('/school-setup')}
-              className="rounded-xl bg-slate-700 px-5 py-3 font-medium text-white hover:bg-slate-800"
-            >
-              Urus Struktur Akademik
-            </button>
+                  <button
+                    onClick={() => navigate('/school-setup')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Struktur Akademik
+                  </button>
+                  <button
+                    onClick={() => navigate('/school-setup/exams')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Peperiksaan
+                  </button>
+                  <button
+                    onClick={() => navigate('/school-setup/grades')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Grade
+                  </button>
+                  <button
+                    onClick={() => navigate('/school-setup/subjects')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Subjek
+                  </button>
+                  <button
+                    onClick={() => navigate('/classes')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Kelas
+                  </button>
+                  <button
+                    onClick={() => navigate('/students')}
+                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
+                  >
+                    Urus Murid
+                  </button>
+                </div>
+              )}
 
-            <button
-              onClick={() => navigate('/school-setup/exams')}
-              className="rounded-xl bg-indigo-600 px-5 py-3 font-medium text-white hover:bg-indigo-700"
-            >
-              Urus Peperiksaan
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowUserMenu((prev) => !prev)}
+                className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                <span>Menu Pengurusan Pengguna</span>
+                <span className="text-slate-500">{showUserMenu ? 'Tutup' : 'Buka'}</span>
+              </button>
 
-            <button
-              onClick={() => navigate('/school-setup/grades')}
-              className="rounded-xl bg-amber-600 px-5 py-3 font-medium text-white hover:bg-amber-700"
-            >
-              Urus Grade
-            </button>
+              {showUserMenu && (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap gap-2">
+                    {TABS.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                          activeTab === tab
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      </button>
+                    ))}
+                  </div>
 
-            <button
-              onClick={() => navigate('/school-setup/subjects')}
-              className="rounded-xl bg-green-600 px-5 py-3 font-medium text-white hover:bg-green-700"
-            >
-              Urus Subjek
-            </button>
-
-            <button
-              onClick={() => navigate('/classes')}
-              className="rounded-xl bg-cyan-600 px-5 py-3 font-medium text-white hover:bg-cyan-700"
-            >
-              Urus Kelas
-            </button>
-
-            <button
-              onClick={() => navigate('/students')}
-              className="rounded-xl bg-purple-600 px-5 py-3 font-medium text-white hover:bg-purple-700"
-            >
-              Urus Murid
-            </button>
-
-            <button
-              onClick={() => navigate('/students/import')}
-              className="rounded-xl bg-emerald-600 px-5 py-3 font-medium text-white hover:bg-emerald-700"
-            >
-              Import Murid CSV
-            </button>
+                  <input
+                    type="text"
+                    placeholder="Cari nama, email, role..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {TABS.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                    activeTab === tab
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </div>
-
-            <input
-              type="text"
-              placeholder="Cari nama, email, role..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500 lg:w-80"
-            />
+        {showUserMenu && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 border-b border-slate-200 pb-3">
+            <h2 className="text-lg font-semibold text-slate-900">Senarai Pengguna</h2>
+            <p className="text-sm text-slate-500">
+              Paparan ditapis berdasarkan tab "{activeTab === 'all' ? 'Semua' : activeTab}".
+            </p>
           </div>
 
           {filteredUsers.length === 0 ? (
@@ -600,6 +602,7 @@ export default function SchoolAdminDashboard() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   )
@@ -607,8 +610,8 @@ export default function SchoolAdminDashboard() {
 
 function StatCard({ title, value }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      <div className="text-sm text-slate-500">{title}</div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</div>
       <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
     </div>
   )

@@ -15,6 +15,13 @@ export default function SchoolSetupPage() {
   const [classCountByGrade, setClassCountByGrade] = useState({})
   const [arCountByGrade, setArCountByGrade] = useState({})
   const [otrCountByGrade, setOtrCountByGrade] = useState({})
+  const [setupStatus, setSetupStatus] = useState({
+    exams: false,
+    grades: false,
+    subjects: false,
+    classes: false,
+    students: false,
+  })
 
   const menengahOptions = [
     'Tingkatan 1',
@@ -120,7 +127,51 @@ export default function SchoolSetupPage() {
       setOtrCountByGrade(setupData.otr_count_by_grade || {})
     }
 
+    await loadSetupStatus(profileData.school_id, setupData)
+
     setLoading(false)
+  }
+
+  const loadSetupStatus = async (schoolId, setupData) => {
+    const setupStep = setupData?.setup_step || 0
+    const academicYear = setupData?.current_academic_year || new Date().getFullYear()
+
+    const [{ count: examCount }, { count: gradeCount }, { count: subjectCount }, { count: classCount }, { count: studentCount }] = await Promise.all([
+      supabase
+        .from('exam_configs')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+      supabase
+        .from('grade_scales')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+      supabase
+        .from('subjects')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId),
+      supabase
+        .from('classes')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('is_active', true)
+        .eq('academic_year', academicYear),
+      supabase
+        .from('student_enrollments')
+        .select('*', { count: 'exact', head: true })
+        .eq('school_id', schoolId)
+        .eq('is_active', true)
+        .eq('academic_year', academicYear),
+    ])
+
+    setSetupStatus({
+      exams: setupStep >= 2 || (examCount || 0) > 0,
+      grades: setupStep >= 3 || (gradeCount || 0) > 0,
+      subjects: setupStep >= 4 || (subjectCount || 0) > 0,
+      classes: (classCount || 0) > 0,
+      students: (studentCount || 0) > 0,
+    })
   }
 
   const gradeOptions = useMemo(() => {
@@ -237,9 +288,34 @@ export default function SchoolSetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">EduTrack</p>
+              <p className="text-lg font-bold text-slate-900">Tetapan Akademik Sekolah</p>
+            </div>
+            <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/school-admin')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/school-setup/exams')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Step 2
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
             School Setup Wizard — Step 1
           </div>
@@ -267,7 +343,30 @@ export default function SchoolSetupPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-xl font-semibold text-slate-900">Status Tetapan Akademik</h2>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="mb-2 font-semibold text-slate-800">Status Setup</h3>
+              <div className="space-y-1 text-sm text-slate-700">
+                <p>{setupStatus.exams ? '✅' : '⬜'} Setup peperiksaan</p>
+                <p>{setupStatus.grades ? '✅' : '⬜'} Setup grade</p>
+                <p>{setupStatus.subjects ? '✅' : '⬜'} Setup subjek</p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-2 font-semibold text-slate-800">Status Data Akademik</h3>
+              <div className="space-y-1 text-sm text-slate-700">
+                <p>{setupStatus.classes ? '✅' : '⬜'} Setup kelas</p>
+                <p>{setupStatus.students ? '✅' : '⬜'} Setup murid</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">
               Pilih Tingkatan / Tahun Aktif
@@ -286,7 +385,7 @@ export default function SchoolSetupPage() {
                   key={label}
                   type="button"
                   onClick={() => toggleGradeLabel(label)}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
                     selected
                       ? 'bg-slate-900 text-white'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -305,7 +404,7 @@ export default function SchoolSetupPage() {
           ) : (
             <div className="space-y-4">
               {activeGradeLabels.map((label) => (
-                <div key={label} className="rounded-2xl border border-slate-200 p-4">
+                <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <h3 className="mb-4 text-lg font-semibold text-slate-900">{label}</h3>
 
                   <div className="grid gap-4 md:grid-cols-3">

@@ -296,9 +296,41 @@ export default function SchoolSetupGradesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">EduTrack</p>
+              <p className="text-lg font-bold text-slate-900">Tetapan Akademik Sekolah</p>
+            </div>
+            <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/school-admin')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/school-setup/exams')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Step 2
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/school-setup/subjects')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Step 4
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
             School Setup Wizard — Step 3
           </div>
@@ -312,7 +344,7 @@ export default function SchoolSetupGradesPage() {
 
         <div className="space-y-6">
           {Object.keys(gradeScalesByLabel).map((gradeLabel) => (
-            <div key={gradeLabel} className="rounded-2xl bg-white p-5 shadow-sm">
+            <div key={gradeLabel} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold text-slate-900">
                 {gradeLabel}
               </h2>

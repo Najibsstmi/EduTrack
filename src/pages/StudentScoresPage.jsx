@@ -203,83 +203,111 @@ export default function StudentScoresPage() {
   }
 
   return (
-    <div className="p-6">
-      <h1 className="mb-4 text-2xl font-bold">Input Markah Murid</h1>
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">EduTrack</p>
+              <h1 className="text-2xl font-bold text-slate-900">Input Markah Murid</h1>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/school-admin')}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              Kembali Dashboard
+            </button>
+          </div>
+        </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <select
-          value={selectedClass}
-          onChange={(e) => setSelectedClass(e.target.value)}
-          className="rounded border px-3 py-2"
-        >
-          <option value="">Pilih Kelas</option>
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>{`${c.tingkatan || ''} ${c.class_name}`.trim()}</option>
-          ))}
-        </select>
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">Penapis Data Markah</h2>
+          <div className="grid gap-3 md:grid-cols-3">
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Pilih Kelas</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{`${c.tingkatan || ''} ${c.class_name}`.trim()}</option>
+              ))}
+            </select>
 
-        <select
-          value={selectedSubject}
-          onChange={(e) => setSelectedSubject(e.target.value)}
-          className="rounded border px-3 py-2"
-        >
-          <option value="">Pilih Subjek</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>{s.subject_name}</option>
-          ))}
-        </select>
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Pilih Subjek</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.subject_name}</option>
+              ))}
+            </select>
 
-        <select
-          value={selectedExam}
-          onChange={(e) => setSelectedExam(e.target.value)}
-          className="rounded border px-3 py-2"
-        >
-          <option value="">Pilih Peperiksaan</option>
-          {exams.map((e) => (
-            <option key={`${e.id}-${e.exam_key}`} value={e.exam_key}>
-              {e.exam_name}
-            </option>
-          ))}
-        </select>
+            <select
+              value={selectedExam}
+              onChange={(e) => setSelectedExam(e.target.value)}
+              className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
+            >
+              <option value="">Pilih Peperiksaan</option>
+              {exams.map((e) => (
+                <option key={`${e.id}-${e.exam_key}`} value={e.exam_key}>
+                  {e.exam_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Senarai Murid & Markah</h2>
+            <span className="text-sm text-slate-500">Jumlah murid: {students.length}</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b bg-slate-50 text-left text-slate-700">
+                  <th className="px-3 py-3 font-semibold">Nama</th>
+                  <th className="px-3 py-3 font-semibold">No IC</th>
+                  <th className="px-3 py-3 font-semibold">Markah</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {students.map((student) => (
+                  <tr key={student.student_id} className="border-b">
+                    <td className="px-3 py-3 text-slate-900">{student.full_name}</td>
+                    <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
+
+                    <td className="px-3 py-3">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={scores[student.student_id]?.mark ?? ''}
+                        onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
+                        className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving || !selectedClass || !selectedSubject || !selectedExam}
+            className="mt-5 rounded-xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            {saving ? 'Menyimpan...' : 'Simpan Markah'}
+          </button>
+        </div>
       </div>
-
-      <table className="w-full border">
-        <thead>
-          <tr>
-            <th className="border px-3 py-2 text-left">Nama</th>
-            <th className="border px-3 py-2 text-left">No IC</th>
-            <th className="border px-3 py-2 text-left">Markah</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {students.map((student) => (
-            <tr key={student.student_id}>
-              <td className="border px-3 py-2">{student.full_name}</td>
-              <td className="border px-3 py-2">{student.ic_number}</td>
-
-              <td className="border px-3 py-2">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={scores[student.student_id]?.mark ?? ''}
-                  onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
-                  className="w-28 rounded border px-3 py-2"
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <button
-        onClick={handleSave}
-        disabled={saving || !selectedClass || !selectedSubject || !selectedExam}
-        className="mt-4 rounded bg-green-600 px-4 py-2 text-white disabled:opacity-60"
-      >
-        {saving ? 'Menyimpan...' : 'Simpan Markah'}
-      </button>
     </div>
   )
 }
