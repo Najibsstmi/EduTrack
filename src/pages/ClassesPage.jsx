@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
+const getTingkatanRank = (label) => {
+  const match = String(label || '').match(/\d+/)
+  if (!match) return Number.MAX_SAFE_INTEGER
+  return Number(match[0])
+}
+
 export default function ClassesPage() {
   const navigate = useNavigate()
 
@@ -20,6 +26,16 @@ export default function ClassesPage() {
     tingkatan: '',
     class_name: '',
   })
+
+  const orderedGrades = useMemo(() => {
+    const labels = setupConfig?.active_grade_labels || []
+
+    return [...labels].sort((a, b) => {
+      const rankDiff = getTingkatanRank(a) - getTingkatanRank(b)
+      if (rankDiff !== 0) return rankDiff
+      return String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' })
+    })
+  }, [setupConfig])
 
   useEffect(() => {
     initPage()
@@ -80,7 +96,12 @@ export default function ClassesPage() {
 
     setSetupConfig(configData)
 
-    const activeGrades = configData.active_grade_labels || []
+    const activeGrades = [...(configData.active_grade_labels || [])].sort((a, b) => {
+      const rankDiff = getTingkatanRank(a) - getTingkatanRank(b)
+      if (rankDiff !== 0) return rankDiff
+      return String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' })
+    })
+
     if (activeGrades.length > 0) {
       setForm((prev) => ({
         ...prev,
@@ -187,7 +208,7 @@ export default function ClassesPage() {
     })
   }, [classes, tingkatanFilter, search])
 
-  const groupedClasses = (setupConfig?.active_grade_labels || []).map((label) => ({
+  const groupedClasses = orderedGrades.map((label) => ({
     tingkatan: label,
     items: filteredClasses.filter((c) => c.tingkatan === label),
   }))
@@ -234,7 +255,7 @@ export default function ClassesPage() {
               onChange={(e) => setForm({ ...form, tingkatan: e.target.value })}
               className="rounded-lg border border-slate-300 px-3 py-2"
             >
-              {(setupConfig?.active_grade_labels || []).map((label) => (
+              {orderedGrades.map((label) => (
                 <option key={label} value={label}>
                   {label}
                 </option>
@@ -271,7 +292,7 @@ export default function ClassesPage() {
                 className="rounded-lg border border-slate-300 px-3 py-2"
               >
                 <option value="Semua">Semua Tingkatan</option>
-                {(setupConfig?.active_grade_labels || []).map((label) => (
+                {orderedGrades.map((label) => (
                   <option key={label} value={label}>
                     {label}
                   </option>

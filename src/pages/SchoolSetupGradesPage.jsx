@@ -29,6 +29,12 @@ function cloneTemplate(template) {
   return template.map((item) => ({ ...item }))
 }
 
+function getTingkatanRank(label) {
+  const match = String(label || '').match(/\d+/)
+  if (!match) return Number.MAX_SAFE_INTEGER
+  return Number(match[0])
+}
+
 function getDefaultTemplateByGradeLabel(label) {
   if (
     label === 'Tingkatan 4' ||
@@ -343,7 +349,13 @@ export default function SchoolSetupGradesPage() {
         </div>
 
         <div className="space-y-6">
-          {Object.keys(gradeScalesByLabel).map((gradeLabel) => (
+          {Object.keys(gradeScalesByLabel)
+            .sort((a, b) => {
+              const rankDiff = getTingkatanRank(a) - getTingkatanRank(b)
+              if (rankDiff !== 0) return rankDiff
+              return String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' })
+            })
+            .map((gradeLabel) => (
             <div key={gradeLabel} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="mb-4 text-xl font-semibold text-slate-900">
                 {gradeLabel}

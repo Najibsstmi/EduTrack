@@ -2,6 +2,26 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
+const TINGKATAN_ORDER = [
+  'Tingkatan 1',
+  'Tingkatan 2',
+  'Tingkatan 3',
+  'Tingkatan 4',
+  'Tingkatan 5',
+]
+
+const getTingkatanRank = (tingkatan = '') => {
+  const index = TINGKATAN_ORDER.indexOf(String(tingkatan).trim())
+  return index === -1 ? 999 : index
+}
+
+const getGenderRank = (gender = '') => {
+  const value = String(gender).trim().toUpperCase()
+  if (value === 'LELAKI') return 1
+  if (value === 'PEREMPUAN') return 2
+  return 3
+}
+
 export default function StudentsPage() {
   const navigate = useNavigate()
 
@@ -13,11 +33,11 @@ export default function StudentsPage() {
   const [setupConfig, setSetupConfig] = useState(null)
 
   const [classes, setClasses] = useState([])
-  const [enrollments, setEnrollments] = useState([])
+  const [students, setStudents] = useState([])
 
-  const [search, setSearch] = useState('')
-  const [gradeFilter, setGradeFilter] = useState('Semua')
-  const [classFilter, setClassFilter] = useState('Semua')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedTingkatan, setSelectedTingkatan] = useState('Tingkatan 1')
+  const [selectedClassFilter, setSelectedClassFilter] = useState('Semua Kelas')
 
   const [form, setForm] = useState({
     full_name: '',
@@ -103,7 +123,10 @@ export default function StudentsPage() {
 
     setClasses(classData || [])
 
-    const activeGrades = configData.active_grade_labels || []
+    const activeGrades = [...(configData.active_grade_labels || [])].sort(
+      (a, b) => getTingkatanRank(a) - getTingkatanRank(b)
+    )
+
     if (activeGrades.length > 0) {
       const firstGrade = activeGrades[0]
       const firstClass = (classData || []).find((c) => c.tingkatan === firstGrade)
@@ -126,24 +149,22 @@ export default function StudentsPage() {
       .select(`
         id,
         academic_year,
-        is_active,
-        student_profile_id,
         class_id,
+        student_profile_id,
+        classes (
+          id,
+          tingkatan,
+          class_name
+        ),
         student_profiles (
           id,
           ic_number,
           full_name,
           gender
-        ),
-        classes (
-          id,
-          tingkatan,
-          class_name
         )
       `)
       .eq('school_id', schoolId)
       .eq('academic_year', academicYear)
-      .eq('is_active', true)
       .order('id', { ascending: true })
 
     if (error) {
@@ -152,17 +173,45 @@ export default function StudentsPage() {
       return
     }
 
-    setEnrollments(data || [])
+    const mappedStudents = (data || []).map((row) => ({
+      enrollment_id: row.id,
+      id: row.student_profiles?.id,
+      student_profile_id: row.student_profile_id,
+      full_name: row.student_profiles?.full_name || '',
+      ic_number: row.student_profiles?.ic_number || '',
+      gender: row.student_profiles?.gender || '',
+      tingkatan: row.classes?.tingkatan || '',
+      class_name: row.classes?.class_name || '',
+      status: 'active',
+    }))
+
+    setStudents(mappedStudents)
   }
 
   const availableClassesForForm = useMemo(() => {
     return classes.filter((c) => c.tingkatan === form.tingkatan)
   }, [classes, form.tingkatan])
 
-  const availableClassesForFilter = useMemo(() => {
-    if (gradeFilter === 'Semua') return classes
-    return classes.filter((c) => c.tingkatan === gradeFilter)
-  }, [classes, gradeFilter])
+  const availableTingkatan = useMemo(() => {
+    const raw = [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))]
+    return raw.sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
+  }, [classes])
+
+  const availableClassesForSelectedTingkatan = useMemo(() => {
+    return classes
+      .filter((c) => c.tingkatan === selectedTingkatan)
+      .sort((a, b) =>
+        String(a.class_name || '').localeCompare(String(b.class_name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      )
+  }, [classes, selectedTingkatan])
+
+  useEffect(() => {
+    if (!selectedTingkatan && availableTingkatan.length > 0) {
+      setSelectedTingkatan(availableTingkatan[0])
+    }
+  }, [availableTingkatan, selectedTingkatan])
 
   const handleGradeChange = (tingkatan) => {
     const matchedClass = classes.find((c) => c.tingkatan === tingkatan)
@@ -321,43 +370,51 @@ export default function StudentsPage() {
     await loadEnrollments(profile.school_id, setupConfig.current_academic_year)
   }
 
-  const normalizedRows = useMemo(() => {
-    return enrollments.map((item) => ({
-      enrollment_id: item.id,
-      academic_year: item.academic_year,
-      status: item.is_active ? 'active' : 'inactive',
-      student_profile_id: item.student_profiles?.id || '',
-      full_name: item.student_profiles?.full_name || '-',
-      ic_number: item.student_profiles?.ic_number || '-',
-      gender: item.student_profiles?.gender || '-',
-      tingkatan: item.classes?.tingkatan || '-',
-      class_name: item.classes?.class_name || '-',
-    }))
-  }, [enrollments])
-
   const filteredStudents = useMemo(() => {
-    const keyword = search.trim().toLowerCase()
+    let result = [...students]
 
-    return normalizedRows.filter((row) => {
-      const matchGrade = gradeFilter === 'Semua' ? true : row.tingkatan === gradeFilter
-      const matchClass = classFilter === 'Semua' ? true : row.class_name === classFilter
+    if (selectedTingkatan) {
+      result = result.filter((student) => student.tingkatan === selectedTingkatan)
+    }
 
-      const matchSearch =
-        !keyword ||
-        row.full_name.toLowerCase().includes(keyword) ||
-        row.ic_number.toLowerCase().includes(keyword) ||
-        row.class_name.toLowerCase().includes(keyword)
+    if (selectedClassFilter && selectedClassFilter !== 'Semua Kelas') {
+      result = result.filter((student) => student.class_name === selectedClassFilter)
+    }
 
-      return matchGrade && matchClass && matchSearch
+    const keyword = String(searchTerm || '').trim().toLowerCase()
+    if (keyword) {
+      result = result.filter((student) => {
+        const name = String(student.full_name || '').toLowerCase()
+        const ic = String(student.ic_number || '').toLowerCase()
+        const kelas = String(student.class_name || '').toLowerCase()
+        return name.includes(keyword) || ic.includes(keyword) || kelas.includes(keyword)
+      })
+    }
+
+    result.sort((a, b) => {
+      const classCompare = String(a.class_name || '').localeCompare(
+        String(b.class_name || ''),
+        'ms',
+        { sensitivity: 'base' }
+      )
+      if (classCompare !== 0) return classCompare
+
+      const genderCompare = getGenderRank(a.gender) - getGenderRank(b.gender)
+      if (genderCompare !== 0) return genderCompare
+
+      return String(a.full_name || '').localeCompare(
+        String(b.full_name || ''),
+        'ms',
+        { sensitivity: 'base' }
+      )
     })
-  }, [normalizedRows, gradeFilter, classFilter, search])
 
-  const groupedStudents = useMemo(() => {
-    return (setupConfig?.active_grade_labels || []).map((grade) => ({
-      grade,
-      items: filteredStudents.filter((s) => s.tingkatan === grade),
-    }))
-  }, [setupConfig, filteredStudents])
+    return result
+  }, [students, selectedTingkatan, selectedClassFilter, searchTerm])
+
+  const handleDeleteStudent = (student) => {
+    handleDelete(student.enrollment_id || student.id)
+  }
 
   if (loading) {
     return <div className="p-6">Loading Student Module...</div>
@@ -421,7 +478,7 @@ export default function StudentsPage() {
               onChange={(e) => handleGradeChange(e.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2"
             >
-              {(setupConfig?.active_grade_labels || []).map((label) => (
+              {availableTingkatan.map((label) => (
                 <option key={label} value={label}>
                   {label}
                 </option>
@@ -453,33 +510,35 @@ export default function StudentsPage() {
         </div>
 
         <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-slate-900">Senarai Murid</h2>
+            <div className="text-sm text-slate-500">
+              Jumlah murid: <strong>{filteredStudents.length}</strong>
+            </div>
 
             <div className="flex flex-col gap-3 md:flex-row">
               <select
-                value={gradeFilter}
+                value={selectedTingkatan}
                 onChange={(e) => {
-                  setGradeFilter(e.target.value)
-                  setClassFilter('Semua')
+                  setSelectedTingkatan(e.target.value)
+                  setSelectedClassFilter('Semua Kelas')
                 }}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                className="rounded-xl border border-slate-300 px-4 py-2"
               >
-                <option value="Semua">Semua Tingkatan</option>
-                {(setupConfig?.active_grade_labels || []).map((label) => (
-                  <option key={label} value={label}>
-                    {label}
+                {availableTingkatan.map((tingkatan) => (
+                  <option key={tingkatan} value={tingkatan}>
+                    {tingkatan}
                   </option>
                 ))}
               </select>
 
               <select
-                value={classFilter}
-                onChange={(e) => setClassFilter(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2"
+                value={selectedClassFilter}
+                onChange={(e) => setSelectedClassFilter(e.target.value)}
+                className="rounded-xl border border-slate-300 px-4 py-2"
               >
-                <option value="Semua">Semua Kelas</option>
-                {availableClassesForFilter.map((item) => (
+                <option value="Semua Kelas">Semua Kelas</option>
+                {availableClassesForSelectedTingkatan.map((item) => (
                   <option key={item.id} value={item.class_name}>
                     {item.class_name}
                   </option>
@@ -489,60 +548,84 @@ export default function StudentsPage() {
               <input
                 type="text"
                 placeholder="Cari nama / IC / kelas"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2"
               />
             </div>
           </div>
 
-          <div className="space-y-6">
-            {groupedStudents.map(({ grade, items }) => (
-              <div key={grade}>
-                <h3 className="mb-3 text-lg font-semibold text-slate-800">{grade}</h3>
+          <div className="mt-6">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">
+              {selectedTingkatan}
+            </h3>
 
-                {items.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-                    Tiada murid untuk {grade}.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse">
-                      <thead>
-                        <tr className="border-b bg-slate-50 text-left">
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">Nama</th>
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">IC / Dokumen</th>
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">Jantina</th>
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">Kelas</th>
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">Status</th>
-                          <th className="px-3 py-3 text-sm font-semibold text-slate-700">Tindakan</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((row) => (
-                          <tr key={row.enrollment_id} className="border-b">
-                            <td className="px-3 py-3">{row.full_name}</td>
-                            <td className="px-3 py-3">{row.ic_number}</td>
-                            <td className="px-3 py-3">{row.gender}</td>
-                            <td className="px-3 py-3">{row.class_name}</td>
-                            <td className="px-3 py-3">{row.status}</td>
-                            <td className="px-3 py-3">
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(row.enrollment_id)}
-                                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
-                              >
-                                Padam
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+            {filteredStudents.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
+                Tiada murid untuk {selectedTingkatan}.
               </div>
-            ))}
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Bil
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Nama
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        IC / Dokumen
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Jantina
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Kelas
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Status
+                      </th>
+                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                        Tindakan
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {filteredStudents.map((student, index) => (
+                      <tr key={student.enrollment_id || student.id} className="border-b border-slate-100">
+                        <td className="px-4 py-3 text-sm">{index + 1}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-800">
+                          {student.full_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {student.ic_number}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {student.gender}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {student.class_name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {student.status || 'active'}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <button
+                            onClick={() => handleDeleteStudent(student)}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                          >
+                            Padam
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex gap-3">

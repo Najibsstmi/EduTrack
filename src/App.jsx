@@ -13,6 +13,8 @@ import StudentsPage from './pages/StudentsPage'
 import ClassesPage from './pages/ClassesPage'
 import StudentImportPage from './pages/StudentImportPage'
 import StudentScoresPage from './pages/StudentScoresPage'
+import TargetsPage from './pages/TargetsPage'
+import AnalysisPage from './pages/AnalysisPage'
 
 function App() {
   return (
@@ -31,6 +33,8 @@ function App() {
       <Route path="/students/import" element={<StudentImportPage />} />
       <Route path="/scores" element={<StudentScoresPage />} />
       <Route path="/classes" element={<ClassesPage />} />
+      <Route path="/targets" element={<TargetsPage />} />
+      <Route path="/analysis" element={<AnalysisPage />} />
       <Route path="/pending" element={<PendingApprovalPage />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
