@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
@@ -6,6 +6,7 @@ const TABS = ['pending', 'approved', 'rejected', 'all']
 
 export default function SchoolAdminDashboard() {
   const navigate = useNavigate()
+  const settingsMenuRef = useRef(null)
 
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -15,16 +16,25 @@ export default function SchoolAdminDashboard() {
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [users, setUsers] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
+  const [classCount, setClassCount] = useState(0)
+  const [studentCount, setStudentCount] = useState(0)
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
-  const [showTopNav, setShowTopNav] = useState(true)
-  const [showInputMenu, setShowInputMenu] = useState(true)
-  const [showAcademicMenu, setShowAcademicMenu] = useState(true)
-  const [showUserMenu, setShowUserMenu] = useState(true)
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
 
   useEffect(() => {
     checkAccessAndFetch()
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
+        setShowSettingsMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const checkAccessAndFetch = async () => {
@@ -42,16 +52,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select(`
-        id,
-        full_name,
-        email,
-        school_id,
-        role,
-        approval_status,
-        is_school_admin,
-        is_master_admin
-      `)
+      .select('id, full_name, email, school_id, role, approval_status, is_school_admin, is_master_admin')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -74,102 +75,69 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    const { data: setupConfig, error: setupError } = await supabase
+    const { data: setupData, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('id, setup_step, is_setup_complete, current_academic_year')
+      .select('id, setup_step, is_setup_complete')
       .eq('school_id', profile.school_id)
       .maybeSingle()
 
-    if (setupError) {
-      console.error(setupError)
-    }
+    if (setupError) console.error(setupError)
 
-    if (!setupConfig) {
+    if (!setupData) {
       navigate('/school-setup', { replace: true })
       return
     }
 
-    setSetupConfig(setupConfig)
+    setSetupConfig(setupData)
 
+    const { count: classTotal, error: classCountError } = await supabase
+      .from('classes')
+      .select('*', { count: 'exact', head: true })
+      .eq('school_id', profile.school_id)
+
+    if (classCountError) console.error('Class count error:', classCountError)
+
+    const { count: studentTotal, error: studentCountError } = await supabase
+      .from('students')
+      .select('*', { count: 'exact', head: true })
+      .eq('school_id', profile.school_id)
+
+    if (studentCountError) console.error('Student count error:', studentCountError)
+
+    setClassCount(classTotal || 0)
+    setStudentCount(studentTotal || 0)
     setAdminProfile(profile)
+
     await fetchSchoolData(profile.school_id)
     setLoading(false)
   }
 
-  const setupStep = setupConfig?.setup_step || 0
-  const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
-
   const fetchSchoolData = async (schoolId) => {
     setRefreshing(true)
 
-    const [{ data: school, error: schoolError }, { data: profiles, error: profilesError }] =
-      await Promise.all([
-        supabase
-          .from('schools')
-          .select('id, school_name, school_code, school_type, state, district')
-          .eq('id', schoolId)
-          .maybeSingle(),
-        supabase
-          .from('profiles')
-          .select(`
-            id,
-            full_name,
-            email,
-            role,
-            approval_status,
-            is_school_admin,
-            is_master_admin,
-            school_id,
-            created_at
-          `)
-          .eq('school_id', schoolId)
-          .order('created_at', { ascending: false }),
-      ])
+    const [
+      { data: school, error: schoolError },
+      { data: profiles, error: profilesError },
+    ] = await Promise.all([
+      supabase
+        .from('schools')
+        .select('id, school_name, school_code, school_type, state, district')
+        .eq('id', schoolId)
+        .maybeSingle(),
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, role, approval_status, is_school_admin, is_master_admin, school_id, created_at')
+        .eq('school_id', schoolId)
+        .order('created_at', { ascending: false }),
+    ])
 
-    if (schoolError) {
-      console.error(schoolError)
-      alert('Gagal ambil maklumat sekolah')
-    }
-
-    if (profilesError) {
-      console.error(profilesError)
-      alert('Gagal ambil senarai pengguna sekolah')
-    }
+    if (schoolError) { console.error(schoolError); alert('Gagal ambil maklumat sekolah') }
+    if (profilesError) { console.error(profilesError); alert('Gagal ambil senarai pengguna sekolah') }
 
     setSchoolInfo(school || null)
     setUsers(profiles || [])
     setRefreshing(false)
   }
-
-  const filteredUsers = useMemo(() => {
-    let result = [...users]
-
-    if (activeTab !== 'all') {
-      result = result.filter((u) => u.approval_status === activeTab)
-    }
-
-    const q = searchTerm.trim().toLowerCase()
-    if (q) {
-      result = result.filter((u) => {
-        const name = (u.full_name || '').toLowerCase()
-        const email = (u.email || '').toLowerCase()
-        const role = (u.role || '').toLowerCase()
-        return name.includes(q) || email.includes(q) || role.includes(q)
-      })
-    }
-
-    return result
-  }, [users, activeTab, searchTerm])
-
-  const stats = useMemo(() => {
-    return {
-      total: users.length,
-      pending: users.filter((u) => u.approval_status === 'pending').length,
-      approved: users.filter((u) => u.approval_status === 'approved').length,
-      rejected: users.filter((u) => u.approval_status === 'rejected').length,
-      admins: users.filter((u) => u.is_school_admin).length,
-    }
-  }, [users])
 
   const refreshData = async () => {
     if (!adminProfile?.school_id) return
@@ -178,57 +146,28 @@ export default function SchoolAdminDashboard() {
 
   const updateUser = async (userId, payload, successMessage) => {
     setSavingId(userId)
-
-    const { error } = await supabase
-      .from('profiles')
-      .update(payload)
-      .eq('id', userId)
-
+    const { error } = await supabase.from('profiles').update(payload).eq('id', userId)
     if (error) {
       console.error(error)
       alert(error.message || 'Gagal kemas kini pengguna')
       setSavingId(null)
       return
     }
-
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, ...payload } : u))
-    )
-
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...payload } : u)))
     setSavingId(null)
-
-    if (successMessage) {
-      alert(successMessage)
-    }
+    if (successMessage) alert(successMessage)
   }
 
-  const handleApprove = async (userId) => {
-    await updateUser(userId, { approval_status: 'approved' }, 'Pengguna berjaya diluluskan')
-  }
-
-  const handleReject = async (userId) => {
-    await updateUser(userId, { approval_status: 'rejected' }, 'Pengguna berjaya ditolak')
-  }
-
-  const handlePromoteAdmin = async (userId) => {
-    await updateUser(
-      userId,
-      { is_school_admin: true, role: 'school_admin', approval_status: 'approved' },
-      'Pengguna berjaya dijadikan admin sekolah'
-    )
-  }
+  const handleApprove = (userId) => updateUser(userId, { approval_status: 'approved' }, 'Pengguna berjaya diluluskan')
+  const handleReject = (userId) => updateUser(userId, { approval_status: 'rejected' }, 'Pengguna berjaya ditolak')
+  const handlePromoteAdmin = (userId) => updateUser(userId, { is_school_admin: true, role: 'school_admin', approval_status: 'approved' }, 'Pengguna berjaya dijadikan admin sekolah')
 
   const handleRemoveAdmin = async (userId) => {
     if (userId === adminProfile?.id) {
       alert('Admin sekolah semasa tidak boleh buang status sendiri di sini.')
       return
     }
-
-    await updateUser(
-      userId,
-      { is_school_admin: false, role: 'teacher' },
-      'Status admin sekolah berjaya dibuang'
-    )
+    await updateUser(userId, { is_school_admin: false, role: 'teacher' }, 'Status admin sekolah berjaya dibuang')
   }
 
   const handleLogout = async () => {
@@ -236,361 +175,270 @@ export default function SchoolAdminDashboard() {
     navigate('/login')
   }
 
-  const goTo = (path) => {
-    navigate(path)
-    setShowTopNav(false)
+  const filteredUsers = useMemo(() => {
+    let result = [...users]
+    if (activeTab !== 'all') result = result.filter((u) => u.approval_status === activeTab)
+    const q = searchTerm.trim().toLowerCase()
+    if (q) {
+      result = result.filter((u) =>
+        (u.full_name || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q) ||
+        (u.role || '').toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [users, activeTab, searchTerm])
+
+  const stats = useMemo(() => ({
+    total: users.length,
+    pending: users.filter((u) => u.approval_status === 'pending').length,
+    approved: users.filter((u) => u.approval_status === 'approved').length,
+    rejected: users.filter((u) => u.approval_status === 'rejected').length,
+    admins: users.filter((u) => u.is_school_admin).length,
+  }), [users])
+
+  const setupStep = setupConfig?.setup_step || 0
+  const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
+  const classesComplete = classCount > 0
+  const studentsComplete = studentCount > 0
+  const academicDataComplete = classesComplete && studentsComplete
+
+  const goToNextSetupStep = () => {
+    if (setupStep === 0) navigate('/school-setup')
+    else if (setupStep === 1) navigate('/school-setup/exams')
+    else if (setupStep === 2) navigate('/school-setup/grades')
+    else if (setupStep === 3) navigate('/school-setup/subjects')
   }
 
-  const getStatusBadge = (status) => {
-    if (status === 'approved') return 'bg-green-100 text-green-700'
-    if (status === 'pending') return 'bg-yellow-100 text-yellow-700'
-    if (status === 'rejected') return 'bg-red-100 text-red-700'
-    return 'bg-gray-100 text-gray-700'
+  const getStatusText = (status) => {
+    if (status === 'approved') return 'Approved'
+    if (status === 'pending') return 'Pending'
+    if (status === 'rejected') return 'Rejected'
+    return status || '-'
+  }
+
+  const getStatusStyle = (status) => {
+    if (status === 'approved') return { backgroundColor: '#dcfce7', color: '#166534' }
+    if (status === 'pending') return { backgroundColor: '#fef3c7', color: '#92400e' }
+    if (status === 'rejected') return { backgroundColor: '#fee2e2', color: '#991b1b' }
+    return { backgroundColor: '#e5e7eb', color: '#374151' }
   }
 
   if (loading) {
-    return <div className="p-6">Loading school admin dashboard...</div>
+    return (
+      <div style={styles.loadingWrap}>
+        <div style={styles.loadingCard}>Loading school admin dashboard...</div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="rounded-lg bg-blue-100 p-2">
-                <img src="/favicon.svg" alt="EduTrack" className="h-6 w-6" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-base font-bold text-slate-900">Sistem Tambahan Bilik</p>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {schoolInfo?.school_name || 'Portal Sekolah'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-end gap-2 md:ml-auto">
-              <button
-                type="button"
-                onClick={() => setShowTopNav((prev) => !prev)}
-                className="rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 md:hidden"
-              >
-                {showTopNav ? 'Tutup Menu' : 'Menu'}
-              </button>
-
-              <div
-                className={`${showTopNav ? 'flex' : 'hidden'} flex-wrap items-center justify-end gap-1 text-xs font-semibold text-slate-600 md:flex`}
-              >
-                <button onClick={() => goTo('/school-admin')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Dashboard</button>
-                <button onClick={() => goTo('/scores')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Analisis</button>
-                <button onClick={() => { setShowUserMenu(true); setShowTopNav(false) }} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Pengguna</button>
-                <button onClick={() => goTo('/classes')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Bilik</button>
-                <button onClick={() => goTo('/school-setup')} className="rounded-md px-2 py-1 whitespace-nowrap hover:bg-slate-100">Tetapan Sekolah</button>
-              </div>
-            </div>
+    <div style={styles.page}>
+      <header style={styles.topbar}>
+        <div>
+          <div style={styles.brand}>EduTrack</div>
+          <div style={styles.schoolMeta}>
+            {schoolInfo?.school_name || '-'}
+            {schoolInfo?.school_code ? ` (${schoolInfo.school_code})` : ''}
           </div>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <img src="/favicon.svg" alt="Logo sekolah" className="h-11 w-11" />
+        <nav style={styles.nav}>
+          <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
+            Input Markah
+          </button>
+          <button style={styles.navButton} onClick={() => navigate('/students')}>
+            Input Murid
+          </button>
+
+          <div style={styles.menuWrap} ref={settingsMenuRef}>
+            <button style={styles.navButton} onClick={() => setShowSettingsMenu((prev) => !prev)}>
+              Tetapan ▾
+            </button>
+            {showSettingsMenu && (
+              <div style={styles.menuDropdown}>
+                <button style={styles.menuItem} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
+                <button style={styles.menuItem} onClick={() => navigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
+                <button style={styles.menuItem} onClick={() => navigate('/school-setup/grades')}>Tetapan Grade</button>
+                <button style={styles.menuItem} onClick={() => navigate('/school-setup/subjects')}>Tetapan Subjek</button>
+                <button style={styles.menuItem} onClick={() => navigate('/classes')}>Tetapan Kelas</button>
+                <button style={styles.menuItem} onClick={() => navigate('/students')}>Tetapan Murid</button>
               </div>
-
-              <div>
-                <h1 className="text-3xl font-bold leading-none text-slate-900 md:text-5xl">Dashboard</h1>
-                <p className="mt-2 text-base font-semibold text-slate-900">{schoolInfo?.school_name || '-'}</p>
-                <p className="mt-1 text-sm text-slate-700">Selamat datang, {adminProfile?.full_name || '-'}.</p>
-
-                <div className="mt-5 space-y-2 text-sm text-slate-700">
-                  <p>Email: {adminProfile?.email || '-'}</p>
-                  <p>Peranan: {adminProfile?.role || '-'}</p>
-                  <p>Status kelulusan: {adminProfile?.approval_status || '-'}</p>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    onClick={handleLogout}
-                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    Log Keluar
-                  </button>
-                  <button
-                    onClick={refreshData}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    {refreshing ? 'Refreshing...' : 'Refresh'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-        </div>
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard title="Jumlah User" value={stats.total} />
+          <button style={styles.navButton} onClick={() => alert('Route Analisis belum disambungkan')}>
+            Analisis
+          </button>
+        </nav>
+
+        <div style={styles.topbarRight}>
+          <button style={styles.ghostButton} onClick={refreshData}>
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button style={styles.darkButton} onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <main style={styles.container}>
+        <section style={styles.hero}>
+          <h1 style={styles.heroTitle}>Dashboard Admin Sekolah</h1>
+          <p style={styles.heroText}>
+            Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
+          </p>
+          <div style={styles.heroInfo}>
+            <span><strong>Admin:</strong> {adminProfile?.full_name || '-'} ({adminProfile?.email || '-'})</span>
+            <span><strong>Jenis:</strong> {schoolInfo?.school_type || '-'}</span>
+            <span><strong>Negeri / PPD:</strong> {[schoolInfo?.state, schoolInfo?.district].filter(Boolean).join(' / ') || '-'}</span>
+          </div>
+        </section>
+
+        <section style={styles.statsGrid}>
+          <StatCard title="Jumlah Pengguna" value={stats.total} />
           <StatCard title="Pending" value={stats.pending} />
           <StatCard title="Approved" value={stats.approved} />
           <StatCard title="Rejected" value={stats.rejected} />
           <StatCard title="Admin Sekolah" value={stats.admins} />
-        </div>
+          <StatCard title="Jumlah Murid" value={studentCount} />
+        </section>
 
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setShowInputMenu((prev) => !prev)}
-            className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
-          >
-            <span>Menu Input Data</span>
-            <span className="text-slate-500">{showInputMenu ? 'Tutup' : 'Buka'}</span>
-          </button>
-
-          {showInputMenu && (
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <button
-                onClick={() => navigate('/scores')}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
-              >
-                <div className="font-semibold text-slate-900">Input Markah</div>
-                <div className="text-sm text-slate-600">Masukkan markah peperiksaan murid</div>
-              </button>
-
-              <button
-                onClick={() => navigate('/students/import')}
-                className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
-              >
-                <div className="font-semibold text-slate-900">Import Murid CSV</div>
-                <div className="text-sm text-slate-600">Import senarai murid secara pukal</div>
-              </button>
+        <section style={styles.dualGrid}>
+          <div style={styles.card}>
+            <div style={styles.cardHeader}>
+              <h2 style={styles.cardTitle}>Status Setup Sistem</h2>
             </div>
-          )}
-        </div>
-
-        <div className="mb-6 grid gap-6 lg:grid-cols-1">
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-2 text-lg font-semibold text-slate-900">Menu Utama</h2>
-            <p className="mb-4 text-sm text-slate-600">
-              Paparan minimum untuk operasi harian. Guna menu burger di bawah.
+            <div style={styles.statusList}>
+              <StatusRow done={setupStep >= 1 || setupComplete} label="Setup struktur akademik" />
+              <StatusRow done={setupStep >= 2 || setupComplete} label="Setup peperiksaan" />
+              <StatusRow done={setupStep >= 3 || setupComplete} label="Setup grade" />
+              <StatusRow done={setupStep >= 4 || setupComplete} label="Setup subjek" />
+            </div>
+            <p style={styles.helperText}>
+              {setupComplete ? 'Semua step telah lengkap.' : 'Sila lengkapkan step setup yang belum selesai.'}
             </p>
+            {!setupComplete && (
+              <button style={styles.primaryButton} onClick={goToNextSetupStep}>Sambung Setup</button>
+            )}
+          </div>
 
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setShowAcademicMenu((prev) => !prev)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                <span>Menu Tetapan Akademik</span>
-                <span className="text-slate-500">{showAcademicMenu ? 'Tutup' : 'Buka'}</span>
-              </button>
+          <div style={styles.card}>
+            <div style={styles.cardHeader}>
+              <h2 style={styles.cardTitle}>Status Data Akademik</h2>
+            </div>
+            <div style={styles.statusList}>
+              <StatusRow done={classesComplete} label="Setup kelas" />
+              <StatusRow done={studentsComplete} label="Setup murid" />
+            </div>
+            <p style={styles.helperText}>
+              {academicDataComplete
+                ? 'Data akademik asas telah lengkap dan sistem sedia untuk langkah seterusnya.'
+                : 'Lengkapkan kelas dahulu, kemudian masukkan murid.'}
+            </p>
+          </div>
+        </section>
 
-              {showAcademicMenu && (
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  {!setupComplete && (
-                    <button
-                      onClick={() => {
-                        if (setupStep === 0) navigate('/school-setup')
-                        else if (setupStep === 1) navigate('/school-setup/exams')
-                        else if (setupStep === 2) navigate('/school-setup/grades')
-                        else if (setupStep === 3) navigate('/school-setup/subjects')
-                      }}
-                      className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-indigo-100"
-                    >
-                      Sambung Setup
-                    </button>
-                  )}
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.cardTitle}>Akses Pantas</h2>
+          </div>
+          <div style={styles.quickActions}>
+            <button style={styles.quickButton} onClick={() => navigate('/scores')}>Input Markah</button>
+            <button style={styles.quickButton} onClick={() => navigate('/students')}>Input Murid</button>
+            <button style={styles.quickButton} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
+            <button style={styles.quickButton} onClick={() => navigate('/school-setup/exams')}>Peperiksaan</button>
+            <button style={styles.quickButton} onClick={() => navigate('/school-setup/grades')}>Grade</button>
+            <button style={styles.quickButton} onClick={() => navigate('/school-setup/subjects')}>Subjek</button>
+            <button style={styles.quickButton} onClick={() => navigate('/classes')}>Kelas</button>
+            <button style={styles.quickButton} onClick={() => alert('Route Analisis belum disambungkan')}>Analisis</button>
+          </div>
+        </section>
 
-                  <button
-                    onClick={() => navigate('/school-setup')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Struktur Akademik
-                  </button>
-                  <button
-                    onClick={() => navigate('/school-setup/exams')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Peperiksaan
-                  </button>
-                  <button
-                    onClick={() => navigate('/school-setup/grades')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Grade
-                  </button>
-                  <button
-                    onClick={() => navigate('/school-setup/subjects')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Subjek
-                  </button>
-                  <button
-                    onClick={() => navigate('/classes')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Kelas
-                  </button>
-                  <button
-                    onClick={() => navigate('/students')}
-                    className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-medium text-slate-900 hover:bg-amber-100"
-                  >
-                    Urus Murid
-                  </button>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setShowUserMenu((prev) => !prev)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-4 py-3 text-left font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                <span>Menu Pengurusan Pengguna</span>
-                <span className="text-slate-500">{showUserMenu ? 'Tutup' : 'Buka'}</span>
-              </button>
-
-              {showUserMenu && (
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex flex-wrap gap-2">
-                    {TABS.map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                          activeTab === tab
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Cari nama, email, role..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-                  />
-                </div>
-              )}
+        <section style={styles.card}>
+          <div style={styles.sectionHeaderResponsive}>
+            <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
+            <div style={styles.filterWrap}>
+              {TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{ ...styles.filterButton, ...(activeTab === tab ? styles.filterButtonActive : {}) }}
+                >
+                  {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
 
-        {showUserMenu && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 border-b border-slate-200 pb-3">
-            <h2 className="text-lg font-semibold text-slate-900">Senarai Pengguna</h2>
-            <p className="text-sm text-slate-500">
-              Paparan ditapis berdasarkan tab "{activeTab === 'all' ? 'Semua' : activeTab}".
-            </p>
+          <div style={styles.searchRow}>
+            <input
+              type="text"
+              placeholder="Cari nama, email, role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={styles.searchInput}
+            />
           </div>
 
           {filteredUsers.length === 0 ? (
-            <p className="py-8 text-center text-slate-500">Tiada data untuk paparan ini.</p>
+            <div style={styles.emptyState}>Tiada data untuk paparan ini.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
+            <div style={styles.tableWrap}>
+              <table style={styles.table}>
                 <thead>
-                  <tr className="border-b bg-slate-50 text-left text-slate-700">
-                    <th className="px-3 py-3 font-semibold">Nama</th>
-                    <th className="px-3 py-3 font-semibold">Email</th>
-                    <th className="px-3 py-3 font-semibold">Role</th>
-                    <th className="px-3 py-3 font-semibold">Status</th>
-                    <th className="px-3 py-3 font-semibold">Admin</th>
-                    <th className="px-3 py-3 font-semibold">Tindakan</th>
+                  <tr>
+                    <th style={styles.th}>Nama</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Role</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Admin</th>
+                    <th style={styles.th}>Tindakan</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => {
                     const isCurrentAdmin = user.id === adminProfile?.id
-
                     return (
-                      <tr key={user.id} className="border-b align-top">
-                        <td className="px-3 py-3">
-                          <div className="font-medium text-slate-900">{user.full_name || '-'}</div>
-                        </td>
-                        <td className="px-3 py-3 text-slate-700">{user.email || '-'}</td>
-                        <td className="px-3 py-3 text-slate-700">{user.role || '-'}</td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
-                              user.approval_status
-                            )}`}
-                          >
-                            {user.approval_status || '-'}
+                      <tr key={user.id}>
+                        <td style={styles.td}>{user.full_name || '-'}</td>
+                        <td style={styles.td}>{user.email || '-'}</td>
+                        <td style={styles.td}>{user.role || '-'}</td>
+                        <td style={styles.td}>
+                          <span style={{ ...styles.badge, ...getStatusStyle(user.approval_status) }}>
+                            {getStatusText(user.approval_status)}
                           </span>
                         </td>
-                        <td className="px-3 py-3">
-                          {user.is_school_admin ? (
-                            <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                              Ya
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                              Tidak
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-2">
+                        <td style={styles.td}>{user.is_school_admin ? 'Ya' : 'Tidak'}</td>
+                        <td style={styles.td}>
+                          <div style={styles.actionRow}>
                             {user.approval_status === 'pending' && (
                               <>
-                                <button
-                                  onClick={() => handleApprove(user.id)}
-                                  disabled={savingId === user.id}
-                                  className="rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-60"
-                                >
+                                <button style={styles.successButton} onClick={() => handleApprove(user.id)} disabled={savingId === user.id}>
                                   {savingId === user.id ? 'Saving...' : 'Approve'}
                                 </button>
-
-                                <button
-                                  onClick={() => handleReject(user.id)}
-                                  disabled={savingId === user.id}
-                                  className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
-                                >
+                                <button style={styles.dangerButton} onClick={() => handleReject(user.id)} disabled={savingId === user.id}>
                                   Reject
                                 </button>
                               </>
                             )}
-
                             {user.approval_status === 'approved' && !user.is_school_admin && (
-                              <button
-                                onClick={() => handlePromoteAdmin(user.id)}
-                                disabled={savingId === user.id}
-                                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-                              >
+                              <button style={styles.infoButton} onClick={() => handlePromoteAdmin(user.id)} disabled={savingId === user.id}>
                                 Jadikan Admin
                               </button>
                             )}
-
                             {user.is_school_admin && !isCurrentAdmin && (
-                              <button
-                                onClick={() => handleRemoveAdmin(user.id)}
-                                disabled={savingId === user.id}
-                                className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
-                              >
+                              <button style={styles.warningButton} onClick={() => handleRemoveAdmin(user.id)} disabled={savingId === user.id}>
                                 Buang Admin
                               </button>
                             )}
-
                             {user.approval_status === 'rejected' && (
-                              <button
-                                onClick={() => handleApprove(user.id)}
-                                disabled={savingId === user.id}
-                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-60"
-                              >
+                              <button style={styles.successButton} onClick={() => handleApprove(user.id)} disabled={savingId === user.id}>
                                 Luluskan Semula
                               </button>
                             )}
-
                             {isCurrentAdmin && (
-                              <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600">
-                                Akaun anda
-                              </span>
+                              <span style={styles.selfTag}>Akaun anda</span>
                             )}
                           </div>
                         </td>
@@ -601,18 +449,84 @@ export default function SchoolAdminDashboard() {
               </table>
             </div>
           )}
-        </div>
-        )}
-      </div>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function StatusRow({ done, label }) {
+  return (
+    <div style={styles.statusRow}>
+      <span style={done ? styles.checkDone : styles.checkTodo}>{done ? '✓' : '○'}</span>
+      <span>{label}</span>
     </div>
   )
 }
 
 function StatCard({ title, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</div>
-      <div className="mt-2 text-3xl font-bold text-slate-900">{value}</div>
+    <div style={styles.statCard}>
+      <div style={styles.statTitle}>{title}</div>
+      <div style={styles.statValue}>{value}</div>
     </div>
   )
+}
+
+const styles = {
+  page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
+  loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
+  loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
+  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
+  schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
+  nav: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
+  navButtonPrimary: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  navButton: { background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  menuWrap: { position: 'relative' },
+  menuDropdown: { position: 'absolute', top: '48px', left: 0, width: '240px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', padding: '8px', display: 'grid', gap: '6px' },
+  menuItem: { background: '#ffffff', color: '#0f172a', border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
+  topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },
+  ghostButton: { background: '#ffffff', color: '#0f172a', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  darkButton: { background: '#111827', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
+  hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
+  heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
+  heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
+  heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
+  statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
+  statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
+  statValue: { fontSize: '28px', fontWeight: 800 },
+  dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
+  card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
+  cardHeader: { marginBottom: '14px' },
+  cardTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
+  statusList: { display: 'grid', gap: '10px', marginBottom: '14px' },
+  statusRow: { display: 'flex', alignItems: 'center', gap: '10px', color: '#334155' },
+  checkDone: { width: '26px', height: '26px', borderRadius: '999px', display: 'inline-grid', placeItems: 'center', background: '#dcfce7', color: '#166534', fontWeight: 700 },
+  checkTodo: { width: '26px', height: '26px', borderRadius: '999px', display: 'inline-grid', placeItems: 'center', background: '#f1f5f9', color: '#64748b', fontWeight: 700 },
+  helperText: { color: '#64748b', lineHeight: 1.6, marginBottom: '16px' },
+  primaryButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' },
+  sectionHeader: { marginBottom: '14px' },
+  sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
+  quickActions: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' },
+  quickButton: { background: '#f8fafc', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px 16px', fontWeight: 600, textAlign: 'left', cursor: 'pointer' },
+  filterWrap: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
+  filterButton: { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 12px', cursor: 'pointer', fontWeight: 600 },
+  filterButtonActive: { background: '#0f172a', color: '#ffffff', borderColor: '#0f172a' },
+  searchRow: { marginBottom: '16px' },
+  searchInput: { width: '100%', maxWidth: '360px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px 14px', outline: 'none', fontSize: '14px' },
+  tableWrap: { overflowX: 'auto' },
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '900px' },
+  th: { textAlign: 'left', padding: '12px 14px', fontSize: '13px', color: '#64748b', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' },
+  td: { padding: '14px', borderBottom: '1px solid #eef2f7', verticalAlign: 'top', fontSize: '14px', color: '#0f172a' },
+  badge: { display: 'inline-flex', alignItems: 'center', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 700 },
+  actionRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+  successButton: { background: '#16a34a', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
+  dangerButton: { background: '#dc2626', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
+  infoButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
+  warningButton: { background: '#d97706', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
+  selfTag: { background: '#e2e8f0', color: '#334155', borderRadius: '999px', padding: '7px 10px', fontSize: '12px', fontWeight: 700 },
+  emptyState: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '24px', color: '#64748b' },
 }

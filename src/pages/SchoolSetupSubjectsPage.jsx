@@ -287,7 +287,14 @@ export default function SchoolSetupSubjectsPage() {
     navigate('/school-admin')
   }
 
-  const groupedSubjects = (setupConfig?.active_grade_labels || []).map((grade) => ({
+  const getGradeOrder = (gradeLabel) => {
+    const match = String(gradeLabel || '').match(/(\d+)/)
+    return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+  }
+
+  const groupedSubjects = [...(setupConfig?.active_grade_labels || [])]
+    .sort((a, b) => getGradeOrder(a) - getGradeOrder(b))
+    .map((grade) => ({
     grade,
     items: subjects.filter((s) => s.tingkatan === grade),
   }))
@@ -378,7 +385,14 @@ export default function SchoolSetupSubjectsPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse">
+                    <table className="min-w-full table-fixed border-collapse">
+                      <colgroup>
+                        <col style={{ width: '40%' }} />
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '12%' }} />
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '20%' }} />
+                      </colgroup>
                       <thead>
                         <tr className="border-b bg-slate-50 text-left">
                           <th className="px-3 py-3 text-sm font-semibold text-slate-700">Nama</th>
@@ -391,11 +405,11 @@ export default function SchoolSetupSubjectsPage() {
                       <tbody>
                         {items.map((s) => (
                           <tr key={s.id} className="border-b">
-                            <td className="px-3 py-3">{s.subject_name}</td>
-                            <td className="px-3 py-3">{s.subject_code || '-'}</td>
-                            <td className="px-3 py-3">{s.is_core ? 'Ya' : 'Tidak'}</td>
-                            <td className="px-3 py-3">{s.is_active ? 'Aktif' : 'Tidak aktif'}</td>
-                            <td className="px-3 py-3">
+                            <td className="px-3 py-3 align-middle">{s.subject_name}</td>
+                            <td className="px-3 py-3 align-middle">{s.subject_code || '-'}</td>
+                            <td className="px-3 py-3 align-middle">{s.is_core ? 'Ya' : 'Tidak'}</td>
+                            <td className="px-3 py-3 align-middle">{s.is_active ? 'Aktif' : 'Tidak aktif'}</td>
+                            <td className="px-3 py-3 align-middle">
                               <button
                                 type="button"
                                 onClick={() => handleDelete(s.id)}
