@@ -15,6 +15,27 @@ const getTingkatanRank = (tingkatan = '') => {
   return index === -1 ? 999 : index
 }
 
+const GRADE_ORDER = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'D', 'E', 'G', 'TH']
+
+const getExamMetric = (analysis, examKey) => {
+  const key = String(examKey || '').toUpperCase()
+  return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
+}
+
+const isPassGrade = (grade) => {
+  const value = String(grade || '').trim().toUpperCase()
+  return ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'D', 'E'].includes(value)
+}
+
+const isFailGrade = (grade) => {
+  const value = String(grade || '').trim().toUpperCase()
+  return value === 'G'
+}
+
+const isTHGrade = (grade) => {
+  return String(grade || '').trim().toUpperCase() === 'TH'
+}
+
 export default function AnalysisPage() {
   const navigate = useNavigate()
 
@@ -26,6 +47,7 @@ export default function AnalysisPage() {
   const [studentRows, setStudentRows] = useState([])
   const [scores, setScores] = useState([])
   const [targets, setTargets] = useState([])
+  const [gradeScales, setGradeScales] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
@@ -77,6 +99,7 @@ export default function AnalysisPage() {
       { data: enrollmentsData, error: enrollmentsError },
       { data: scoresData, error: scoresError },
       { data: targetsData, error: targetsError },
+      { data: gradeScalesData, error: gradeScalesError },
       { data: setupConfigData, error: setupConfigError },
     ] = await Promise.all([
       supabase
@@ -125,6 +148,11 @@ export default function AnalysisPage() {
         .eq('academic_year', currentYear),
 
       supabase
+        .from('grade_scales')
+        .select('*')
+        .eq('school_id', schoolId),
+
+      supabase
         .from('school_setup_configs')
         .select('*')
         .eq('school_id', schoolId)
@@ -136,6 +164,7 @@ export default function AnalysisPage() {
     if (enrollmentsError) console.error(enrollmentsError)
     if (scoresError) console.error(scoresError)
     if (targetsError) console.error(targetsError)
+    if (gradeScalesError) console.error(gradeScalesError)
     if (setupConfigError) console.error(setupConfigError)
 
     const mappedStudents = (enrollmentsData || []).map((row) => ({
@@ -154,6 +183,7 @@ export default function AnalysisPage() {
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
     setTargets(targetsData || [])
+    setGradeScales(gradeScalesData || [])
     setSetupConfig(setupConfigData || null)
 
     const availableTingkatan = [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))]
@@ -234,6 +264,27 @@ export default function AnalysisPage() {
     return setupConfig?.exam_structure?.[selectedTingkatan] || []
   }, [setupConfig, selectedTingkatan])
 
+  const gradeColumns = useMemo(() => {
+    return (gradeScales || [])
+      .filter((grade) => {
+        const label =
+          grade.tingkatan ??
+          grade.grade_label ??
+          grade.form_level ??
+          grade.level ??
+          ''
+
+        return String(label).trim().toLowerCase() === String(selectedTingkatan).trim().toLowerCase()
+      })
+      .sort((a, b) => {
+        const minA = Number(a.min_mark ?? a.min_score ?? 0)
+        const minB = Number(b.min_mark ?? b.min_score ?? 0)
+        return minB - minA
+      })
+      .map((grade) => grade.grade_name ?? grade.grade ?? '')
+      .filter(Boolean)
+  }, [gradeScales, selectedTingkatan])
+
   const mergedRows = useMemo(() => {
     if (!selectedSubjectId) return []
 
@@ -256,7 +307,7 @@ export default function AnalysisPage() {
         const key = String(exam.key || '').toUpperCase()
 
         if (key.startsWith('OTR') || key === 'ETR') {
-          const targetRow = studentTargets.find((t) => t.target_key === key)
+          const targetRow = studentTargets.find((t) => String(t.target_key || '').toUpperCase() === key)
 
           analysis[key] = {
             mark: targetRow?.target_mark ?? null,
@@ -265,7 +316,7 @@ export default function AnalysisPage() {
             label: exam.name || key,
           }
         } else {
-          const scoreRow = studentScores.find((s) => s.exam_key === key)
+          const scoreRow = studentScores.find((s) => String(s.exam_key || '').toUpperCase() === key)
 
           analysis[key] = {
             mark: scoreRow?.mark ?? null,
@@ -283,31 +334,12 @@ export default function AnalysisPage() {
     })
   }, [filteredStudents, scores, targets, selectedSubjectId, analysisColumns])
 
-  const validRows = useMemo(() => {
-    if (!analysisColumns.length) return []
-
-    return mergedRows.map((row) => {
-      const summaryMap = {}
-
-      analysisColumns.forEach((exam) => {
-        const key = String(exam.key || '').toUpperCase()
-        summaryMap[key] = row.analysis?.[key] || {
-          mark: null,
-          grade_name: null,
-          grade_point: null,
-        }
-      })
-
-      return {
-        ...row,
-        summaryMap,
-      }
-    })
-  }, [mergedRows, analysisColumns])
-
   const summaryExamKey = useMemo(() => {
-    const lastExam = analysisColumns[analysisColumns.length - 1]
-    return String(lastExam?.key || '').toUpperCase()
+    const firstRealExam = analysisColumns.find((exam) => {
+      const key = String(exam.key || '').toUpperCase()
+      return key === 'TOV' || /^AR\d+$/.test(key) || key === 'ETR' || key.startsWith('OTR')
+    })
+    return String(firstRealExam?.key || '').toUpperCase()
   }, [analysisColumns])
 
   const gradeDistribution = useMemo(() => {
@@ -315,52 +347,117 @@ export default function AnalysisPage() {
 
     const map = {}
 
-    validRows.forEach((row) => {
-      const grade = row.summaryMap?.[summaryExamKey]?.grade_name || 'N/A'
+    mergedRows.forEach((row) => {
+      const grade = getExamMetric(row.analysis, summaryExamKey).grade_name || 'N/A'
       map[grade] = (map[grade] || 0) + 1
     })
 
-    return Object.entries(map)
-      .map(([grade, count]) => ({ grade, count }))
-      .sort((a, b) => String(a.grade).localeCompare(String(b.grade), 'ms', { sensitivity: 'base' }))
-  }, [validRows, summaryExamKey])
+    return GRADE_ORDER
+      .filter((grade) => map[grade])
+      .map((grade) => ({ grade, count: map[grade] }))
+      .concat(map['N/A'] ? [{ grade: 'N/A', count: map['N/A'] }] : [])
+  }, [mergedRows, summaryExamKey])
 
-  const gpmp = useMemo(() => {
-    const points = validRows
-      .map((row) => row.summaryMap?.[summaryExamKey]?.grade_point)
+  const summaryStats = useMemo(() => {
+    if (!summaryExamKey) {
+      return {
+        totalStudents: filteredStudents.length,
+        totalWithScore: 0,
+        highest: null,
+        lowest: null,
+        average: null,
+        gpmp: null,
+      }
+    }
+
+    const examRows = mergedRows.map((row) => getExamMetric(row.analysis, summaryExamKey))
+
+    const marks = examRows
+      .map((item) => item.mark)
       .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
       .map((v) => Number(v))
 
-    if (!points.length) return null
-
-    const total = points.reduce((sum, val) => sum + val, 0)
-    return Number((total / points.length).toFixed(2))
-  }, [validRows, summaryExamKey])
-
-  const summaryHeadcount = useMemo(() => {
-    const marks = validRows
-      .map((row) => row.summaryMap?.[summaryExamKey]?.mark)
+    const points = examRows
+      .map((item) => item.grade_point)
       .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
       .map((v) => Number(v))
-
-    const overallGrade =
-      gradeDistribution.length > 0
-        ? gradeDistribution.reduce((max, item) => (item.count > max.count ? item : max), gradeDistribution[0])?.grade
-        : '-'
 
     return {
-      jumlahPelajar: filteredStudents.length,
-      jumlahHadir: marks.length,
-      jumlahTidakHadir: filteredStudents.length - marks.length,
-      markahTertinggi: marks.length ? Math.max(...marks) : '-',
-      markahTerendah: marks.length ? Math.min(...marks) : '-',
-      markahPurata: marks.length
+      totalStudents: filteredStudents.length,
+      totalWithScore: marks.length,
+      highest: marks.length ? Math.max(...marks) : null,
+      lowest: marks.length ? Math.min(...marks) : null,
+      average: marks.length
         ? Number((marks.reduce((a, b) => a + b, 0) / marks.length).toFixed(2))
-        : '-',
-      gpmp: gpmp ?? '-',
-      gred: overallGrade || '-',
+        : null,
+      gpmp: points.length
+        ? Number((points.reduce((a, b) => a + b, 0) / points.length).toFixed(2))
+        : null,
     }
-  }, [filteredStudents, validRows, summaryExamKey, gpmp, gradeDistribution])
+  }, [filteredStudents, mergedRows, summaryExamKey])
+
+  const summaryTableRows = useMemo(() => {
+    if (!analysisColumns.length) return []
+
+    return analysisColumns.map((exam) => {
+      const examKey = String(exam.key || '').toUpperCase()
+      const examLabel = exam.name || examKey
+
+      const examData = mergedRows.map((row) => getExamMetric(row.analysis, examKey))
+
+      const marks = examData
+        .map((item) => item.mark)
+        .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
+        .map((v) => Number(v))
+
+      const grades = examData.map((item) => item.grade_name || null)
+
+      const gradeCounts = {}
+      gradeColumns.forEach((grade) => {
+        gradeCounts[grade] = grades.filter(
+          (g) => String(g || '').trim().toUpperCase() === String(grade).trim().toUpperCase()
+        ).length
+      })
+
+      const jumlahMurid = mergedRows.length
+
+      const thCount = grades.filter((g) => isTHGrade(g)).length
+
+      const hadir = grades.filter((g) => {
+        const value = String(g || '').trim().toUpperCase()
+        return value && value !== 'TH'
+      }).length
+
+      const tidakHadir = thCount
+
+      const lulus = grades.filter((g) => isPassGrade(g)).length
+      const gagal = grades.filter((g) => isFailGrade(g)).length
+
+      const points = examData
+        .map((item) => item.grade_point)
+        .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
+        .map((v) => Number(v))
+
+      const gpmp =
+        points.length > 0
+          ? Number((points.reduce((a, b) => a + b, 0) / points.length).toFixed(2))
+          : null
+
+      return {
+        examKey,
+        examLabel,
+        jumlahMurid,
+        hadir,
+        tidakHadir,
+        ...gradeCounts,
+        lulus,
+        peratusLulus: jumlahMurid ? Number(((lulus / jumlahMurid) * 100).toFixed(2)) : 0,
+        gagal,
+        peratusGagal: jumlahMurid ? Number(((gagal / jumlahMurid) * 100).toFixed(2)) : 0,
+        gpmp,
+      }
+    })
+  }, [analysisColumns, mergedRows, gradeColumns])
 
   if (loading) {
     return <div className="p-6">Loading Analysis...</div>
@@ -432,11 +529,11 @@ export default function AnalysisPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-5">
-          <Card title="Jumlah Murid" value={summaryHeadcount.jumlahPelajar} />
-          <Card title="Ada Markah" value={summaryHeadcount.jumlahHadir} />
-          <Card title="GPMP" value={summaryHeadcount.gpmp} />
-          <Card title="Markah Tertinggi" value={summaryHeadcount.markahTertinggi} />
-          <Card title="Markah Purata" value={summaryHeadcount.markahPurata} />
+          <Card title="Jumlah Murid" value={summaryStats.totalStudents} />
+          <Card title="Ada Markah" value={summaryStats.totalWithScore} />
+          <Card title="GPMP" value={summaryStats.gpmp ?? '-'} />
+          <Card title="Markah Tertinggi" value={summaryStats.highest ?? '-'} />
+          <Card title="Markah Purata" value={summaryStats.average ?? '-'} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -471,34 +568,57 @@ export default function AnalysisPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
             <h2 className="mb-4 text-xl font-semibold text-slate-900">Ringkasan</h2>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm text-slate-700">
-              <div>Jumlah pelajar</div>
-              <div><strong>{summaryHeadcount.jumlahPelajar}</strong></div>
-
-              <div>Jumlah hadir</div>
-              <div><strong>{summaryHeadcount.jumlahHadir}</strong></div>
-
-              <div>Jumlah tidak hadir</div>
-              <div><strong>{summaryHeadcount.jumlahTidakHadir}</strong></div>
-
-              <div>Markah tertinggi</div>
-              <div><strong>{summaryHeadcount.markahTertinggi}</strong></div>
-
-              <div>Markah terendah</div>
-              <div><strong>{summaryHeadcount.markahTerendah}</strong></div>
-
-              <div>Markah purata</div>
-              <div><strong>{summaryHeadcount.markahPurata}</strong></div>
-
-              <div>GPMP</div>
-              <div><strong>{summaryHeadcount.gpmp}</strong></div>
-
-              <div>Gred</div>
-              <div><strong>{summaryHeadcount.gred}</strong></div>
-            </div>
+            {summaryTableRows.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
+                Tiada data ringkasan untuk paparan ini.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Jenis Peperiksaan</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Jumlah Murid</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Hadir</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Tak Hadir</th>
+                      {gradeColumns.map((grade) => (
+                        <th key={grade} className="border-b px-3 py-3 text-left font-semibold">
+                          {grade}
+                        </th>
+                      ))}
+                      <th className="border-b px-3 py-3 text-left font-semibold">Lulus</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">% Lulus</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Gagal</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">% Gagal</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">GPMP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryTableRows.map((row) => (
+                      <tr key={row.examKey} className="border-b border-slate-100">
+                        <td className="px-3 py-3 font-medium">{row.examLabel}</td>
+                        <td className="px-3 py-3">{row.jumlahMurid}</td>
+                        <td className="px-3 py-3">{row.hadir}</td>
+                        <td className="px-3 py-3">{row.tidakHadir}</td>
+                        {gradeColumns.map((grade) => (
+                          <td key={`${row.examKey}-${grade}`} className="px-3 py-3">
+                            {row[grade] ?? 0}
+                          </td>
+                        ))}
+                        <td className="px-3 py-3">{row.lulus}</td>
+                        <td className="px-3 py-3">{row.peratusLulus}%</td>
+                        <td className="px-3 py-3">{row.gagal}</td>
+                        <td className="px-3 py-3">{row.peratusGagal}%</td>
+                        <td className="px-3 py-3">{row.gpmp ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
