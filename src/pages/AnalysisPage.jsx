@@ -15,8 +15,6 @@ const getTingkatanRank = (tingkatan = '') => {
   return index === -1 ? 999 : index
 }
 
-const GRADE_ORDER = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'D', 'E', 'G', 'TH']
-
 const getExamMetric = (analysis, examKey) => {
   const key = String(examKey || '').toUpperCase()
   return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
@@ -34,6 +32,27 @@ const isFailGrade = (grade) => {
 
 const isTHGrade = (grade) => {
   return String(grade || '').trim().toUpperCase() === 'TH'
+}
+
+const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
+  const grade = String(gradeName || '').trim().toUpperCase()
+  const form = String(tingkatan || '').trim().toLowerCase()
+
+  const matched = (gradeScales || []).find((item) => {
+    const itemGrade = String(item.grade_name ?? item.grade ?? '').trim().toUpperCase()
+    const itemForm = String(
+      item.tingkatan ?? item.grade_label ?? item.form_level ?? item.level ?? ''
+    )
+      .trim()
+      .toLowerCase()
+
+    return itemGrade === grade && itemForm === form
+  })
+
+  const point = matched?.grade_point
+  return point === null || point === undefined || point === ''
+    ? null
+    : Number(point)
 }
 
 export default function AnalysisPage() {
@@ -342,22 +361,6 @@ export default function AnalysisPage() {
     return String(firstRealExam?.key || '').toUpperCase()
   }, [analysisColumns])
 
-  const gradeDistribution = useMemo(() => {
-    if (!summaryExamKey) return []
-
-    const map = {}
-
-    mergedRows.forEach((row) => {
-      const grade = getExamMetric(row.analysis, summaryExamKey).grade_name || 'N/A'
-      map[grade] = (map[grade] || 0) + 1
-    })
-
-    return GRADE_ORDER
-      .filter((grade) => map[grade])
-      .map((grade) => ({ grade, count: map[grade] }))
-      .concat(map['N/A'] ? [{ grade: 'N/A', count: map['N/A'] }] : [])
-  }, [mergedRows, summaryExamKey])
-
   const summaryStats = useMemo(() => {
     if (!summaryExamKey) {
       return {
@@ -377,8 +380,11 @@ export default function AnalysisPage() {
       .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
       .map((v) => Number(v))
 
-    const points = examRows
-      .map((item) => item.grade_point)
+    const points = mergedRows
+      .map((row) => {
+        const metric = getExamMetric(row.analysis, summaryExamKey)
+        return getCurrentGradePoint(metric.grade_name, row.tingkatan, gradeScales)
+      })
       .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
       .map((v) => Number(v))
 
@@ -394,7 +400,7 @@ export default function AnalysisPage() {
         ? Number((points.reduce((a, b) => a + b, 0) / points.length).toFixed(2))
         : null,
     }
-  }, [filteredStudents, mergedRows, summaryExamKey])
+  }, [filteredStudents, mergedRows, summaryExamKey, gradeScales])
 
   const summaryTableRows = useMemo(() => {
     if (!analysisColumns.length) return []
@@ -433,8 +439,11 @@ export default function AnalysisPage() {
       const lulus = grades.filter((g) => isPassGrade(g)).length
       const gagal = grades.filter((g) => isFailGrade(g)).length
 
-      const points = examData
-        .map((item) => item.grade_point)
+      const points = mergedRows
+        .map((row) => {
+          const metric = getExamMetric(row.analysis, examKey)
+          return getCurrentGradePoint(metric.grade_name, row.tingkatan, gradeScales)
+        })
         .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
         .map((v) => Number(v))
 
@@ -457,7 +466,7 @@ export default function AnalysisPage() {
         gpmp,
       }
     })
-  }, [analysisColumns, mergedRows, gradeColumns])
+  }, [analysisColumns, mergedRows, gradeColumns, gradeScales])
 
   if (loading) {
     return <div className="p-6">Loading Analysis...</div>
@@ -475,12 +484,26 @@ export default function AnalysisPage() {
               <h1 className="text-3xl font-bold text-slate-900">Analisis Akademik</h1>
             </div>
 
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
-            >
-              Kembali Dashboard
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigate('/analysis/student')}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Analisis Individu
+              </button>
+              <button
+                onClick={() => navigate('/analysis/student-subject')}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Analisis Trend
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Kembali Dashboard
+              </button>
+            </div>
           </div>
         </div>
 
@@ -537,37 +560,6 @@ export default function AnalysisPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">Agihan Gred</h2>
-
-            {gradeDistribution.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-                Tiada data gred untuk paparan ini.
-              </div>
-            ) : (
-              <table className="min-w-full border-collapse">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                      Gred
-                    </th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                      Bil Murid
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gradeDistribution.map((item) => (
-                    <tr key={item.grade} className="border-b border-slate-100">
-                      <td className="px-4 py-3 text-sm">{item.grade}</td>
-                      <td className="px-4 py-3 text-sm font-medium">{item.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
             <h2 className="mb-4 text-xl font-semibold text-slate-900">Ringkasan</h2>
 

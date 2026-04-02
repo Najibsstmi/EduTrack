@@ -14,6 +14,9 @@ import StudentImportPage from './pages/StudentImportPage'
 import StudentScoresPage from './pages/StudentScoresPage'
 import TargetsPage from './pages/TargetsPage'
 import AnalysisPage from './pages/AnalysisPage'
+import AnalysisHubPage from './pages/AnalysisHubPage'
+import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
+import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 
 function App() {
   return (
@@ -32,7 +35,10 @@ function App() {
       <Route path="/scores" element={<StudentScoresPage />} />
       <Route path="/classes" element={<ClassesPage />} />
       <Route path="/targets" element={<TargetsPage />} />
-      <Route path="/analysis" element={<AnalysisPage />} />
+      <Route path="/analysis" element={<AnalysisHubPage />} />
+      <Route path="/analysis/class" element={<AnalysisPage />} />
+      <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />
+      <Route path="/analysis/student-subject" element={<StudentSubjectTrendPage />} />
       <Route path="/pending" element={<PendingApprovalPage />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
