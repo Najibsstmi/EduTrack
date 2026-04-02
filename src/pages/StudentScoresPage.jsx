@@ -13,8 +13,31 @@ const REQUIRED_HEADERS = [
 const normalizeText = (value) =>
   String(value || '').trim()
 
+function normalizeIC(ic) {
+  return String(ic || '')
+    .trim()
+    .replace(/\D/g, '')
+    .padStart(12, '0')
+}
+
 const normalizeKey = (value) =>
   String(value || '').trim().toLowerCase()
+
+const normalizeCsvHeader = (value) => {
+  const normalized = normalizeKey(value)
+  const compact = normalized.replace(/[^a-z0-9]/g, '')
+
+  if (compact === 'noic' || compact === 'ic' || compact === 'nokadpengenalan') {
+    return 'no_ic'
+  }
+
+  if (compact === 'namamurid') return 'nama_murid'
+  if (compact === 'subjek') return 'subjek'
+  if (compact === 'jenispeperiksaan') return 'jenis_peperiksaan'
+  if (compact === 'markah') return 'markah'
+
+  return normalized
+}
 
 const normalizeExamKey = (value) =>
   String(value || '').trim().toUpperCase()
@@ -25,6 +48,7 @@ const isAllowedExamKey = (value) => {
   if (key === 'TOV' || key === 'ETR') return true
   if (/^AR\d+$/.test(key)) return true
 
+  // OTR tak perlu import manual sebab sistem jana automatik
   return false
 }
 
@@ -66,7 +90,7 @@ const parseCsvText = (text) => {
     return { headers: [], rows: [] }
   }
 
-  const headers = parseCsvLine(lines[0]).map((h) => normalizeKey(h))
+  const headers = parseCsvLine(lines[0]).map((h) => normalizeCsvHeader(h))
 
   const rows = lines.slice(1).map((line, index) => {
     const values = parseCsvLine(line)
@@ -141,6 +165,80 @@ const validateCsvData = (headers, rows) => {
   return errors
 }
 
+const findGradeFromMark = (mark, gradeScales = []) => {
+  const numericMark = Number(mark)
+  if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
+
+  const matched = gradeScales.find((grade) => {
+    const min = Number(grade.min_mark ?? grade.min_score ?? 0)
+    const max = Number(grade.max_mark ?? grade.max_score ?? 100)
+    return numericMark >= min && numericMark <= max
+  })
+
+  if (!matched) {
+    return { grade_name: null, grade_point: null }
+  }
+
+  return {
+    grade_name: matched.grade_name ?? matched.grade ?? null,
+    grade_point: matched.grade_point ?? matched.point_value ?? matched.grade_value ?? null,
+  }
+}
+
+const getOtrKeysForTingkatan = (tingkatan, setupConfig) => {
+  const exams = setupConfig?.exam_structure?.[tingkatan] || []
+  return exams
+    .filter((item) => String(item.key || '').toUpperCase().startsWith('OTR'))
+    .map((item) => String(item.key).toUpperCase())
+}
+
+const generateOtrRows = ({
+  schoolId,
+  academicYear,
+  studentEnrollmentId,
+  studentProfileId,
+  classId,
+  subjectId,
+  enteredBy,
+  tingkatan,
+  tovMark,
+  etrMark,
+  setupConfig,
+}) => {
+  const otrKeys = getOtrKeysForTingkatan(tingkatan, setupConfig)
+  if (!otrKeys.length) return []
+
+  const start = Number(tovMark)
+  const end = Number(etrMark)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) return []
+
+  const gap = end - start
+
+  return otrKeys.map((key, index) => {
+    const i = index + 1
+    const value = Number((start + (gap * i) / (otrKeys.length + 1)).toFixed(1))
+
+    return {
+      school_id: schoolId,
+      academic_year: academicYear,
+      student_enrollment_id: studentEnrollmentId,
+      class_id: classId,
+      subject_id: subjectId,
+      target_key: key,
+      target_mark: value,
+      grade_name: null,
+      grade_point: null,
+      generated_by_system: true,
+      manually_adjusted: false,
+      remarks: 'Dijana automatik oleh sistem',
+      entered_by: enteredBy,
+      student_profile_id: studentProfileId,
+      updated_at: new Date().toISOString(),
+    }
+  })
+}
+
 export default function StudentScoresPage() {
   const navigate = useNavigate()
 
@@ -161,6 +259,8 @@ export default function StudentScoresPage() {
   const [csvRows, setCsvRows] = useState([])
   const [csvErrors, setCsvErrors] = useState([])
   const [csvFileName, setCsvFileName] = useState('')
+  const [importingCsv, setImportingCsv] = useState(false)
+  const [importSummary, setImportSummary] = useState(null)
 
   useEffect(() => {
     init()
@@ -422,6 +522,341 @@ export default function StudentScoresPage() {
     setCsvErrors(errors)
   }
 
+  const importCsvToSupabase = async () => {
+    if (!profile?.school_id) {
+      alert('Maklumat sekolah tidak ditemui.')
+      return
+    }
+
+    if (!csvRows.length) {
+      alert('Tiada data CSV untuk diimport.')
+      return
+    }
+
+    if (csvErrors.length > 0) {
+      alert('Sila betulkan ralat CSV dahulu sebelum import.')
+      return
+    }
+
+    setImportingCsv(true)
+    setImportSummary(null)
+
+    try {
+      const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+      const schoolId = profile.school_id
+
+      // 1. Ambil semua data rujukan sekali
+      const [
+        { data: studentProfilesData, error: studentProfilesError },
+        { data: studentEnrollmentsData, error: studentEnrollmentsError },
+        { data: subjectsData, error: subjectsError },
+        { data: classesData, error: classesError },
+        { data: setupConfigData, error: setupConfigError },
+        { data: gradeScalesData, error: gradeScalesError },
+      ] = await Promise.all([
+        supabase
+          .from('student_profiles')
+          .select('id, ic_number, full_name, gender')
+          .eq('school_id', schoolId),
+
+        supabase
+          .from('student_enrollments')
+          .select(`
+            id,
+            student_profile_id,
+            class_id,
+            academic_year,
+            classes (
+              id,
+              tingkatan,
+              class_name
+            )
+          `)
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentYear),
+
+        supabase
+          .from('subjects')
+          .select('*')
+          .eq('school_id', schoolId),
+
+        supabase
+          .from('classes')
+          .select('*')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentYear),
+
+        supabase
+          .from('school_setup_configs')
+          .select('*')
+          .eq('school_id', schoolId)
+          .maybeSingle(),
+
+        supabase
+          .from('grade_scales')
+          .select('*')
+          .eq('school_id', schoolId),
+      ])
+
+      if (studentProfilesError) throw studentProfilesError
+      if (studentEnrollmentsError) throw studentEnrollmentsError
+      if (subjectsError) throw subjectsError
+      if (classesError) throw classesError
+      if (setupConfigError) throw setupConfigError
+      if (gradeScalesError) throw gradeScalesError
+
+      const studentByIc = new Map()
+      ;(studentProfilesData || []).forEach((student) => {
+        const normalizedStudentIc = normalizeIC(student.ic_number)
+        if (normalizedStudentIc) {
+          studentByIc.set(normalizedStudentIc, student)
+        }
+      })
+
+      const enrollmentByStudentId = new Map()
+      ;(studentEnrollmentsData || []).forEach((enrollment) => {
+        enrollmentByStudentId.set(enrollment.student_profile_id, enrollment)
+      })
+
+      const subjectByName = new Map()
+      ;(subjectsData || []).forEach((subject) => {
+        subjectByName.set(
+          String(subject.subject_name || '').trim().toLowerCase(),
+          subject
+        )
+      })
+
+      const targetRows = []
+      const scoreRows = []
+      const importErrors = []
+
+      // untuk auto jana OTR selepas import
+      const targetPairs = new Map()
+
+      for (const row of csvRows) {
+        const rowNumber = row.__rowNumber
+        const ic = normalizeIC(row.no_ic)
+        const subjectName = String(row.subjek || '').trim().toLowerCase()
+        const examKey = String(row.jenis_peperiksaan || '').trim().toUpperCase()
+        const mark = Number(row.markah)
+
+        let student = studentByIc.get(ic)
+        if (!student) {
+          const { data: studentData, error: studentLookupError } = await supabase
+            .from('student_profiles')
+            .select('id, ic_number, full_name, gender')
+            .eq('school_id', profile.school_id)
+            .eq('ic_number', ic)
+            .maybeSingle()
+
+          if (studentLookupError) throw studentLookupError
+
+          if (studentData) {
+            student = studentData
+            studentByIc.set(ic, studentData)
+          }
+        }
+
+        if (!student) {
+          importErrors.push(`Baris ${rowNumber}: No IC ${ic} tidak ditemui.`)
+          continue
+        }
+
+        const enrollment = enrollmentByStudentId.get(student.id)
+        if (!enrollment) {
+          importErrors.push(`Baris ${rowNumber}: Enrolment murid ${ic} untuk tahun semasa tidak ditemui.`)
+          continue
+        }
+
+        const subject = subjectByName.get(subjectName)
+        if (!subject) {
+          importErrors.push(`Baris ${rowNumber}: Subjek '${row.subjek}' tidak ditemui.`)
+          continue
+        }
+
+        const classId = enrollment.class_id
+        const tingkatan = enrollment.classes?.tingkatan || ''
+
+        if (examKey === 'ETR') {
+          targetRows.push({
+            school_id: schoolId,
+            academic_year: currentYear,
+            student_enrollment_id: enrollment.id,
+            class_id: classId,
+            subject_id: subject.id,
+            target_key: examKey,
+            target_mark: mark,
+            grade_name: null,
+            grade_point: null,
+            generated_by_system: false,
+            manually_adjusted: false,
+            remarks: null,
+            entered_by: profile.id,
+            student_profile_id: student.id,
+            updated_at: new Date().toISOString(),
+          })
+
+          const pairKey = `${enrollment.id}__${subject.id}`
+          const existing = targetPairs.get(pairKey) || {
+            school_id: schoolId,
+            academic_year: currentYear,
+            student_enrollment_id: enrollment.id,
+            student_profile_id: student.id,
+            class_id: classId,
+            subject_id: subject.id,
+            tingkatan,
+            tov_mark: null,
+            etr_mark: null,
+          }
+
+          existing.etr_mark = mark
+          targetPairs.set(pairKey, existing)
+        } else if (examKey === 'TOV' || /^AR\d+$/.test(examKey)) {
+          const gradeScalesForTingkatan = (gradeScalesData || []).filter((grade) => {
+            const label =
+              grade.tingkatan ??
+              grade.grade_label ??
+              grade.form_level ??
+              grade.level ??
+              ''
+
+            return String(label).trim().toLowerCase() === String(tingkatan).trim().toLowerCase()
+          })
+
+          const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+
+          scoreRows.push({
+            school_id: schoolId,
+            academic_year: currentYear,
+            student_enrollment_id: enrollment.id,
+            class_id: classId,
+            subject_id: subject.id,
+            exam_config_id: null,
+            exam_key: examKey,
+            mark,
+            grade_name: gradeInfo.grade_name,
+            grade_point: gradeInfo.grade_point,
+            is_absent: false,
+            remarks: null,
+            entered_by: profile.id,
+            verified_by: null,
+            verified_at: null,
+            student_profile_id: student.id,
+            updated_at: new Date().toISOString(),
+          })
+
+          if (examKey === 'TOV') {
+            const pairKey = `${enrollment.id}__${subject.id}`
+            const existing = targetPairs.get(pairKey) || {
+              school_id: schoolId,
+              academic_year: currentYear,
+              student_enrollment_id: enrollment.id,
+              student_profile_id: student.id,
+              class_id: classId,
+              subject_id: subject.id,
+              tingkatan,
+              tov_mark: null,
+              etr_mark: null,
+            }
+
+            existing.tov_mark = mark
+            targetPairs.set(pairKey, existing)
+          }
+        } else {
+          importErrors.push(`Baris ${rowNumber}: Jenis peperiksaan '${examKey}' tidak sah.`)
+        }
+      }
+
+      if (importErrors.length > 0) {
+        setImportSummary({
+          success: false,
+          importedTargets: 0,
+          importedScores: 0,
+          generatedOtrs: 0,
+          errors: importErrors,
+        })
+        setImportingCsv(false)
+        return
+      }
+
+      // 2. Simpan TOV & ETR
+      if (targetRows.length > 0) {
+        const { error: targetError } = await supabase
+          .from('student_targets')
+          .upsert(targetRows, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+          })
+
+        if (targetError) throw targetError
+      }
+
+      // 3. Simpan AR actual score
+      if (scoreRows.length > 0) {
+        const { error: scoreError } = await supabase
+          .from('student_scores')
+          .upsert(scoreRows, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
+          })
+
+        if (scoreError) throw scoreError
+      }
+
+      // 4. Jana OTR automatik
+      const otrRows = []
+
+      for (const [, pair] of targetPairs.entries()) {
+        if (pair.tov_mark !== null && pair.etr_mark !== null) {
+          const generated = generateOtrRows({
+            schoolId: pair.school_id,
+            academicYear: pair.academic_year,
+            studentEnrollmentId: pair.student_enrollment_id,
+            studentProfileId: pair.student_profile_id,
+            classId: pair.class_id,
+            subjectId: pair.subject_id,
+            enteredBy: profile.id,
+            tingkatan: pair.tingkatan,
+            tovMark: pair.tov_mark,
+            etrMark: pair.etr_mark,
+            setupConfig: setupConfigData,
+          })
+
+          otrRows.push(...generated)
+        }
+      }
+
+      if (otrRows.length > 0) {
+        const { error: otrError } = await supabase
+          .from('student_targets')
+          .upsert(otrRows, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+          })
+
+        if (otrError) throw otrError
+      }
+
+      setImportSummary({
+        success: true,
+        importedTargets: targetRows.length,
+        importedScores: scoreRows.length,
+        generatedOtrs: otrRows.length,
+        errors: [],
+      })
+
+      alert('Import CSV berjaya disimpan.')
+    } catch (error) {
+      console.error(error)
+      setImportSummary({
+        success: false,
+        importedTargets: 0,
+        importedScores: 0,
+        generatedOtrs: 0,
+        errors: [error.message || 'Import gagal.'],
+      })
+    } finally {
+      setImportingCsv(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!profile?.school_id) return
 
@@ -631,6 +1066,43 @@ export default function StudentScoresPage() {
                 <p className="mt-2 text-sm text-slate-500">
                   Preview memaparkan 15 row pertama sahaja.
                 </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={importCsvToSupabase}
+              disabled={importingCsv || csvRows.length === 0 || csvErrors.length > 0}
+              className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {importingCsv ? 'Mengimport...' : 'Import Sekarang'}
+            </button>
+          </div>
+
+          {importSummary && (
+            <div
+              className={`mt-4 rounded-xl p-4 text-sm ${
+                importSummary.success
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-red-200 bg-red-50 text-red-700'
+              }`}
+            >
+              {importSummary.success ? (
+                <div className="space-y-1">
+                  <div><strong>Import berjaya.</strong></div>
+                  <div>Target disimpan: {importSummary.importedTargets}</div>
+                  <div>Score disimpan: {importSummary.importedScores}</div>
+                  <div>OTR dijana automatik: {importSummary.generatedOtrs}</div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div><strong>Import gagal / ada ralat.</strong></div>
+                  {importSummary.errors.map((err, i) => (
+                    <div key={i}>- {err}</div>
+                  ))}
+                </div>
               )}
             </div>
           )}

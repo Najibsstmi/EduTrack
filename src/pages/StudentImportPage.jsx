@@ -339,6 +339,7 @@ export default function StudentImportPage() {
       const { data: existingProfiles, error: existingProfilesError } = await supabase
         .from('student_profiles')
         .select('id, ic_number')
+        .eq('school_id', profile.school_id)
         .in('ic_number', icNumbers)
 
       if (existingProfilesError) {
@@ -352,6 +353,7 @@ export default function StudentImportPage() {
       const profilesToInsert = parsedRows
         .filter((row) => !existingMap.has(row.ic_number))
         .map((row) => ({
+          school_id: profile.school_id,
           ic_number: row.ic_number,
           full_name: row.full_name,
           gender: row.gender || null,
@@ -370,6 +372,7 @@ export default function StudentImportPage() {
       const { data: refreshedProfiles, error: refreshedProfilesError } = await supabase
         .from('student_profiles')
         .select('id, ic_number')
+        .eq('school_id', profile.school_id)
         .in('ic_number', icNumbers)
 
       if (refreshedProfilesError) {

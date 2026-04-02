@@ -257,6 +257,7 @@ export default function StudentsPage() {
       const { data: existingProfile, error: existingProfileError } = await supabase
         .from('student_profiles')
         .select('id, ic_number')
+        .eq('school_id', profile.school_id)
         .eq('ic_number', form.ic_number.trim())
         .maybeSingle()
 
@@ -282,6 +283,7 @@ export default function StudentsPage() {
         const { data: insertedProfile, error: insertProfileError } = await supabase
           .from('student_profiles')
           .insert({
+            school_id: profile.school_id,
             ic_number: form.ic_number.trim(),
             full_name: form.full_name.trim(),
             gender: form.gender || null,
