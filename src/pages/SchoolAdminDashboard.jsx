@@ -34,6 +34,7 @@ export default function SchoolAdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [showMobileSettingsMenu, setShowMobileSettingsMenu] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
 
@@ -46,6 +47,7 @@ export default function SchoolAdminDashboard() {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
         setShowSettingsMenu(false)
         setShowMobileMenu(false)
+        setShowMobileSettingsMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -58,6 +60,7 @@ export default function SchoolAdminDashboard() {
       setIsMobileView(nextIsMobile)
       if (!nextIsMobile) {
         setShowMobileMenu(false)
+        setShowMobileSettingsMenu(false)
       }
     }
 
@@ -363,6 +366,12 @@ export default function SchoolAdminDashboard() {
     else if (setupStep === 3) navigate('/school-setup/subjects')
   }
 
+  const handleMobileNavigate = (path) => {
+    setShowMobileMenu(false)
+    setShowMobileSettingsMenu(false)
+    navigate(path)
+  }
+
   const getStatusText = (status) => {
     if (status === 'approved') return 'Approved'
     if (status === 'pending') return 'Pending'
@@ -426,18 +435,41 @@ export default function SchoolAdminDashboard() {
         {isMobileView ? (
           <div style={styles.mobileMenuWrap} ref={settingsMenuRef}>
             <button
-              style={styles.navButton}
-              onClick={() => setShowMobileMenu((prev) => !prev)}
+              style={styles.mobileToggleButton}
+              onClick={() => {
+                setShowMobileMenu((prev) => {
+                  const nextValue = !prev
+                  if (!nextValue) {
+                    setShowMobileSettingsMenu(false)
+                  }
+                  return nextValue
+                })
+              }}
             >
-              {showMobileMenu ? 'Tutup ✕' : 'Menu ☰'}
+              {showMobileMenu ? '✕ Tutup' : '☰ Menu'}
             </button>
             {showMobileMenu && (
               <div style={styles.mobileMenuPanel}>
                 <div style={styles.mobileMenuGrid}>
-                  <button style={styles.mobileMenuItem} onClick={() => navigate('/scores')}>Input Markah</button>
-                  <button style={styles.mobileMenuItem} onClick={() => navigate('/students')}>Input Murid</button>
-                  <button style={styles.mobileMenuItem} onClick={() => navigate('/analysis')}>Analisis</button>
-                  <button style={styles.mobileMenuItem} onClick={() => navigate('/school-setup')}>Tetapan</button>
+                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/scores')}>Input Markah</button>
+                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/students')}>Input Murid</button>
+                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/analysis')}>Analisis</button>
+                  <button
+                    style={styles.mobileMenuItemWide}
+                    onClick={() => setShowMobileSettingsMenu((prev) => !prev)}
+                  >
+                    {showMobileSettingsMenu ? 'Tutup Tetapan ▲' : 'Tetapan ▼'}
+                  </button>
+                  {showMobileSettingsMenu && (
+                    <div style={styles.mobileSubmenuPanel}>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup')}>Struktur Akademik</button>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/grades')}>Tetapan Grade</button>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/subjects')}>Tetapan Subjek</button>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/classes')}>Tetapan Kelas</button>
+                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/students')}>Tetapan Murid</button>
+                    </div>
+                  )}
                   <button style={styles.mobileMenuItemDangerFull} onClick={handleLogout}>Logout</button>
                 </div>
               </div>
@@ -694,10 +726,14 @@ const styles = {
   menuWrap: { position: 'relative' },
   menuDropdown: { position: 'absolute', top: '48px', left: 0, width: '240px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', padding: '8px', display: 'grid', gap: '6px' },
   menuItem: { background: '#ffffff', color: '#0f172a', border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
-  mobileMenuWrap: { width: '100%', display: 'grid', gap: '10px' },
+  mobileMenuWrap: { width: '100%', display: 'grid', gap: '10px', justifyItems: 'start' },
+  mobileToggleButton: { width: '100%', background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px', textAlign: 'left' },
   mobileMenuPanel: { width: '100%', background: '#ffffff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: '14px', padding: '10px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)' },
-  mobileMenuGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' },
+  mobileMenuGrid: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '8px' },
   mobileMenuItem: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 },
+  mobileMenuItemWide: { gridColumn: '1 / -1', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
+  mobileSubmenuPanel: { gridColumn: '1 / -1', display: 'grid', gap: '8px', padding: '10px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' },
+  mobileSubmenuItem: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
   mobileMenuItemDanger: { background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
   mobileMenuItemDangerFull: { gridColumn: '1 / -1', background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
   topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },

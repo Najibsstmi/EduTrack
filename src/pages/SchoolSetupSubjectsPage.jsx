@@ -129,7 +129,10 @@ export default function SchoolSetupSubjectsPage() {
       }))
     }
 
-    await ensureDefaultSubjects(profileData.school_id, activeGrades)
+    if (!configData.is_setup_complete) {
+      await ensureDefaultSubjects(profileData.school_id, activeGrades)
+    }
+
     await loadSubjects(profileData.school_id)
 
     setLoading(false)
@@ -169,6 +172,7 @@ export default function SchoolSetupSubjectsPage() {
           subject_code: null,
           tingkatan: grade,
           is_core: !!subject.is_core,
+          is_default: true,
           is_active: true,
         })
       }
@@ -241,19 +245,32 @@ export default function SchoolSetupSubjectsPage() {
     setSaving(false)
   }
 
-  const handleDelete = async (id) => {
-    const confirmDelete = window.confirm('Padam subjek ini?')
+  const handleDelete = async (subject) => {
+    const confirmDelete = window.confirm('Padam / nyahaktifkan subjek ini?')
     if (!confirmDelete) return
 
-    const { error } = await supabase
-      .from('subjects')
-      .delete()
-      .eq('id', id)
+    let query = supabase.from('subjects')
 
-    if (error) {
-      console.error(error)
-      alert(`Gagal padam subject: ${error.message}`)
-      return
+    if (subject.is_default) {
+      const { error } = await query
+        .update({ is_active: false })
+        .eq('id', subject.id)
+
+      if (error) {
+        console.error(error)
+        alert(`Gagal nyahaktifkan subject: ${error.message}`)
+        return
+      }
+    } else {
+      const { error } = await query
+        .delete()
+        .eq('id', subject.id)
+
+      if (error) {
+        console.error(error)
+        alert(`Gagal padam subject: ${error.message}`)
+        return
+      }
     }
 
     await loadSubjects(profile.school_id)
@@ -313,7 +330,7 @@ export default function SchoolSetupSubjectsPage() {
           <h1 className="text-3xl font-bold text-slate-900">Setup Subjek</h1>
           <p className="mt-2 text-slate-600">
             Default subject akan dimasukkan secara automatik ikut tingkatan aktif.
-            Admin masih boleh tambah subjek lain atau padam subject default.
+            Admin masih boleh tambah subjek lain dan nyahaktifkan subjek default jika tidak digunakan.
           </p>
         </div>
 
@@ -412,10 +429,10 @@ export default function SchoolSetupSubjectsPage() {
                             <td className="px-3 py-3 align-middle">
                               <button
                                 type="button"
-                                onClick={() => handleDelete(s.id)}
+                                onClick={() => handleDelete(s)}
                                 className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
                               >
-                                Padam
+                                {s.is_default ? 'Nyahaktif' : 'Padam'}
                               </button>
                             </td>
                           </tr>
