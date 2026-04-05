@@ -1,11 +1,67 @@
+import { Link } from 'react-router-dom'
+
 function PendingApprovalPage() {
   return (
-    <div style={{ padding: '40px', textAlign: 'center' }}>
-      <h1>Akaun Masih Menunggu Kelulusan</h1>
-      <p>
-        Akaun anda telah berjaya didaftarkan, tetapi masih menunggu kelulusan
-        daripada admin sekolah atau master admin.
-      </p>
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-md items-center justify-center md:min-h-[calc(100vh-3rem)]">
+        <div className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+
+          <div className="mt-5 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              EduTrack
+            </p>
+            <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">
+              Akaun Menunggu Kelulusan
+            </h1>
+            <p className="mt-3 text-sm leading-6 text-slate-600 md:text-base">
+              Akaun anda telah berjaya didaftarkan, tetapi akses sistem masih belum dibuka.
+              Sila tunggu semakan daripada admin sekolah atau master admin.
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-amber-500" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Status semasa: Pending approval</p>
+                <p className="mt-1 text-sm text-amber-800">
+                  Anda akan boleh log masuk ke modul sekolah selepas akaun diluluskan.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            <div>
+              <p className="font-semibold text-slate-800">Apa yang perlu dibuat sekarang?</p>
+            </div>
+            <p>Pastikan anda mendaftar menggunakan sekolah yang betul.</p>
+            <p>Hubungi admin sekolah jika kelulusan mengambil masa terlalu lama.</p>
+            <p>Selepas diluluskan, anda boleh log masuk semula seperti biasa.</p>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Link
+              to="/login"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Kembali ke Login
+            </Link>
+            <Link
+              to="/register"
+              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Semak Pendaftaran
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

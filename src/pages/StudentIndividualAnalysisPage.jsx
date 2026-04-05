@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,6 +223,8 @@ export default function StudentIndividualAnalysisPage() {
   const [selectedStudentId, setSelectedStudentId] = useState(
     location.state?.selectedStudentId || ''
   )
+
+  const dashboardPath = getDashboardPath(profile)
   const [selectedExamKey, setSelectedExamKey] = useState('')
   const [hasAppliedInitialState, setHasAppliedInitialState] = useState(false)
 
@@ -569,7 +572,7 @@ export default function StudentIndividualAnalysisPage() {
               </button>
 
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate(dashboardPath)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
               >
                 <ChevronLeftIcon />

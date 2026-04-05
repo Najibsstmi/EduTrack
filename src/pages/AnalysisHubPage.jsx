@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath'
 
 function ChevronLeftIcon() {
   return (
@@ -10,6 +13,38 @@ function ChevronLeftIcon() {
 
 export default function AnalysisHubPage() {
   const navigate = useNavigate()
+  const [profile, setProfile] = useState(null)
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        navigate('/login', { replace: true })
+        return
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role, is_school_admin')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profileError || !profileData) {
+        navigate('/login', { replace: true })
+        return
+      }
+
+      setProfile(profileData)
+    }
+
+    loadProfile()
+  }, [navigate])
+
+  const dashboardPath = getDashboardPath(profile)
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -47,7 +82,7 @@ export default function AnalysisHubPage() {
             </button>
 
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(dashboardPath)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <ChevronLeftIcon />

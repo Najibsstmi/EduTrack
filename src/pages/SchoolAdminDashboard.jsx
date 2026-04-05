@@ -4,6 +4,17 @@ import { supabase } from '../lib/supabaseClient'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 
+const DESIGNATION_OPTIONS = [
+  'Pengetua',
+  'Penolong kanan',
+  'Guru Kanan Matapelajaran',
+  'Ketua Panita',
+  'Guru subjek',
+]
+
+const getDisplayName = (user) =>
+  user?.full_name || user?.email?.split('@')[0] || user?.email || '-'
+
 export default function SchoolAdminDashboard() {
   const navigate = useNavigate()
   const settingsMenuRef = useRef(null)
@@ -22,6 +33,7 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [actionDrafts, setActionDrafts] = useState({})
 
   useEffect(() => {
     checkAccessAndFetch()
@@ -52,7 +64,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, full_name, email, school_id, role, approval_status, is_school_admin, is_master_admin')
+      .select('id, full_name, email, school_id, role, designation, approval_status, is_school_admin, is_master_admin')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -139,7 +151,7 @@ export default function SchoolAdminDashboard() {
         .maybeSingle(),
       supabase
         .from('profiles')
-        .select('id, full_name, email, role, approval_status, is_school_admin, is_master_admin, school_id, created_at')
+        .select('id, full_name, email, role, designation, approval_status, is_school_admin, is_master_admin, school_id, created_at')
         .eq('school_id', schoolId)
         .order('created_at', { ascending: false }),
     ])
@@ -183,6 +195,117 @@ export default function SchoolAdminDashboard() {
     await updateUser(userId, { is_school_admin: false, role: 'teacher' }, 'Status admin sekolah berjaya dibuang')
   }
 
+  const handleRemoveAccount = async (user) => {
+    if (!user?.id) return
+
+    if (user.is_master_admin) {
+      alert('Akaun master admin tidak boleh disingkirkan oleh admin sekolah.')
+      return
+    }
+
+    if (user.id === adminProfile?.id) {
+      alert('Admin sekolah semasa tidak boleh singkir akaun sendiri.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Singkir ${getDisplayName(user)} daripada sekolah ini? Akaun ini akan hilang daripada senarai pengguna sekolah dan aksesnya akan dihentikan.`
+    )
+
+    if (!confirmed) return
+
+    setSavingId(user.id)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        school_id: null,
+        approval_status: 'rejected',
+        is_school_admin: false,
+        role: 'teacher',
+      })
+      .eq('id', user.id)
+
+    if (error) {
+      console.error(error)
+      alert(error.message || 'Gagal menyingkirkan akaun')
+      setSavingId(null)
+      return
+    }
+
+    setUsers((prev) => prev.filter((item) => item.id !== user.id))
+    setSavingId(null)
+    alert('Akaun berjaya disingkirkan dari sekolah ini')
+  }
+
+  const handleSaveDesignation = async (user, nextDesignationRaw) => {
+    if (!user?.id) return
+
+    if (user.is_master_admin) {
+      alert('Designation master admin tidak boleh diubah oleh admin sekolah.')
+      return
+    }
+
+    const nextDesignation = String(nextDesignationRaw || '').trim()
+    const currentDesignation = String(user.designation || '').trim()
+
+    if (nextDesignation === currentDesignation) {
+      return
+    }
+
+    setSavingId(user.id)
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ designation: nextDesignation || null })
+      .eq('id', user.id)
+
+    if (error) {
+      console.error(error)
+      alert(error.message || 'Gagal mengemaskini designation')
+      setSavingId(null)
+      return
+    }
+
+    setUsers((prev) =>
+      prev.map((item) =>
+        item.id === user.id ? { ...item, designation: nextDesignation || null } : item
+      )
+    )
+    setSavingId(null)
+    alert('Designation berjaya dikemaskini')
+  }
+
+  const handleActionChange = async (user, action) => {
+    if (!action) return
+
+    setActionDrafts((prev) => ({ ...prev, [user.id]: '' }))
+
+    if (action === 'approve') {
+      await handleApprove(user.id)
+      return
+    }
+
+    if (action === 'reject') {
+      await handleReject(user.id)
+      return
+    }
+
+    if (action === 'promote-admin') {
+      await handlePromoteAdmin(user.id)
+      return
+    }
+
+    if (action === 'remove-admin') {
+      await handleRemoveAdmin(user.id)
+      return
+    }
+
+    if (action === 'remove-account') {
+      await handleRemoveAccount(user)
+    }
+  }
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     navigate('/login')
@@ -194,9 +317,10 @@ export default function SchoolAdminDashboard() {
     const q = searchTerm.trim().toLowerCase()
     if (q) {
       result = result.filter((u) =>
-        (u.full_name || '').toLowerCase().includes(q) ||
+        getDisplayName(u).toLowerCase().includes(q) ||
         (u.email || '').toLowerCase().includes(q) ||
-        (u.role || '').toLowerCase().includes(q)
+        (u.role || '').toLowerCase().includes(q) ||
+        (u.designation || '').toLowerCase().includes(q)
       )
     }
     return result
@@ -235,6 +359,33 @@ export default function SchoolAdminDashboard() {
     if (status === 'pending') return { backgroundColor: '#fef3c7', color: '#92400e' }
     if (status === 'rejected') return { backgroundColor: '#fee2e2', color: '#991b1b' }
     return { backgroundColor: '#e5e7eb', color: '#374151' }
+  }
+
+  const getActionOptions = (user, isCurrentAdmin, isProtectedMasterAdmin) => {
+    if (isProtectedMasterAdmin || isCurrentAdmin) return []
+
+    const options = []
+
+    if (user.approval_status === 'pending') {
+      options.push({ value: 'approve', label: 'Luluskan akaun' })
+      options.push({ value: 'reject', label: 'Tolak akaun' })
+    }
+
+    if (user.approval_status === 'approved' && !user.is_school_admin) {
+      options.push({ value: 'promote-admin', label: 'Jadikan admin' })
+    }
+
+    if (user.approval_status === 'approved' && user.is_school_admin) {
+      options.push({ value: 'remove-admin', label: 'Singkir admin' })
+    }
+
+    if (user.approval_status === 'rejected') {
+      options.push({ value: 'approve', label: 'Luluskan semula' })
+    }
+
+    options.push({ value: 'remove-account', label: 'Singkir akaun' })
+
+    return options
   }
 
   if (loading) {
@@ -302,7 +453,7 @@ export default function SchoolAdminDashboard() {
             Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
           </p>
           <div style={styles.heroInfo}>
-            <span><strong>Admin:</strong> {adminProfile?.full_name || '-'} ({adminProfile?.email || '-'})</span>
+            <span><strong>Admin:</strong> {getDisplayName(adminProfile)} ({adminProfile?.email || '-'})</span>
             <span><strong>Jenis:</strong> {schoolInfo?.school_type || '-'}</span>
             <span><strong>Negeri / PPD:</strong> {[schoolInfo?.state, schoolInfo?.district].filter(Boolean).join(' / ') || '-'}</span>
           </div>
@@ -353,22 +504,6 @@ export default function SchoolAdminDashboard() {
         </section>
 
         <section style={styles.card}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.cardTitle}>Akses Pantas</h2>
-          </div>
-          <div style={styles.quickActions}>
-            <button style={styles.quickButton} onClick={() => navigate('/scores')}>Input Markah</button>
-            <button style={styles.quickButton} onClick={() => navigate('/students')}>Input Murid</button>
-            <button style={styles.quickButton} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
-            <button style={styles.quickButton} onClick={() => navigate('/school-setup/exams')}>Peperiksaan</button>
-            <button style={styles.quickButton} onClick={() => navigate('/school-setup/grades')}>Grade</button>
-            <button style={styles.quickButton} onClick={() => navigate('/school-setup/subjects')}>Subjek</button>
-            <button style={styles.quickButton} onClick={() => navigate('/classes')}>Kelas</button>
-            <button style={styles.quickButton} onClick={() => navigate('/analysis')}>Analisis</button>
-          </div>
-        </section>
-
-        <section style={styles.card}>
           <div style={styles.sectionHeaderResponsive}>
             <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
             <div style={styles.filterWrap}>
@@ -404,6 +539,7 @@ export default function SchoolAdminDashboard() {
                     <th style={styles.th}>Nama</th>
                     <th style={styles.th}>Email</th>
                     <th style={styles.th}>Role</th>
+                    <th style={styles.th}>Designation</th>
                     <th style={styles.th}>Status</th>
                     <th style={styles.th}>Admin</th>
                     <th style={styles.th}>Tindakan</th>
@@ -412,11 +548,32 @@ export default function SchoolAdminDashboard() {
                 <tbody>
                   {filteredUsers.map((user) => {
                     const isCurrentAdmin = user.id === adminProfile?.id
+                    const isProtectedMasterAdmin = user.is_master_admin === true || user.role === 'master_admin'
+
                     return (
                       <tr key={user.id}>
-                        <td style={styles.td}>{user.full_name || '-'}</td>
+                        <td style={styles.td}>{getDisplayName(user)}</td>
                         <td style={styles.td}>{user.email || '-'}</td>
                         <td style={styles.td}>{user.role || '-'}</td>
+                        <td style={styles.td}>
+                          {isProtectedMasterAdmin ? (
+                            <span style={styles.readonlyTag}>Master Admin</span>
+                          ) : (
+                            <select
+                              value={user.designation || ''}
+                              onChange={(e) => handleSaveDesignation(user, e.target.value)}
+                              style={styles.designationSelect}
+                              disabled={savingId === user.id}
+                            >
+                              <option value="">Pilih designation</option>
+                              {DESIGNATION_OPTIONS.map((designation) => (
+                                <option key={designation} value={designation}>
+                                  {designation}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </td>
                         <td style={styles.td}>
                           <span style={{ ...styles.badge, ...getStatusStyle(user.approval_status) }}>
                             {getStatusText(user.approval_status)}
@@ -425,33 +582,31 @@ export default function SchoolAdminDashboard() {
                         <td style={styles.td}>{user.is_school_admin ? 'Ya' : 'Tidak'}</td>
                         <td style={styles.td}>
                           <div style={styles.actionRow}>
-                            {user.approval_status === 'pending' && (
-                              <>
-                                <button style={styles.successButton} onClick={() => handleApprove(user.id)} disabled={savingId === user.id}>
-                                  {savingId === user.id ? 'Saving...' : 'Approve'}
-                                </button>
-                                <button style={styles.dangerButton} onClick={() => handleReject(user.id)} disabled={savingId === user.id}>
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                            {user.approval_status === 'approved' && !user.is_school_admin && (
-                              <button style={styles.infoButton} onClick={() => handlePromoteAdmin(user.id)} disabled={savingId === user.id}>
-                                Jadikan Admin
-                              </button>
-                            )}
-                            {user.is_school_admin && !isCurrentAdmin && (
-                              <button style={styles.warningButton} onClick={() => handleRemoveAdmin(user.id)} disabled={savingId === user.id}>
-                                Buang Admin
-                              </button>
-                            )}
-                            {user.approval_status === 'rejected' && (
-                              <button style={styles.successButton} onClick={() => handleApprove(user.id)} disabled={savingId === user.id}>
-                                Luluskan Semula
-                              </button>
-                            )}
-                            {isCurrentAdmin && (
+                            {isCurrentAdmin ? (
                               <span style={styles.selfTag}>Akaun anda</span>
+                            ) : isProtectedMasterAdmin ? (
+                              <span style={styles.protectedTag}>Master admin dilindungi</span>
+                            ) : (
+                              <select
+                                value={actionDrafts[user.id] ?? ''}
+                                onChange={async (e) => {
+                                  const selectedAction = e.target.value
+                                  setActionDrafts((prev) => ({
+                                    ...prev,
+                                    [user.id]: selectedAction,
+                                  }))
+                                  await handleActionChange(user, selectedAction)
+                                }}
+                                style={styles.actionSelect}
+                                disabled={savingId === user.id}
+                              >
+                                <option value="">Pilih tindakan</option>
+                                {getActionOptions(user, isCurrentAdmin, isProtectedMasterAdmin).map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             )}
                           </div>
                         </td>
@@ -541,5 +696,9 @@ const styles = {
   infoButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
   warningButton: { background: '#d97706', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },
   selfTag: { background: '#e2e8f0', color: '#334155', borderRadius: '999px', padding: '7px 10px', fontSize: '12px', fontWeight: 700 },
+  protectedTag: { background: '#fee2e2', color: '#991b1b', borderRadius: '999px', padding: '7px 10px', fontSize: '12px', fontWeight: 700 },
+  readonlyTag: { background: '#f1f5f9', color: '#475569', borderRadius: '999px', padding: '7px 10px', fontSize: '12px', fontWeight: 700, display: 'inline-flex' },
+  designationSelect: { width: '100%', minWidth: '220px', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '8px 10px', outline: 'none', fontSize: '13px', background: '#ffffff' },
+  actionSelect: { width: '100%', minWidth: '190px', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '8px 10px', outline: 'none', fontSize: '13px', background: '#ffffff' },
   emptyState: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '24px', color: '#64748b' },
 }

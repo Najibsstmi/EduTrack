@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,6 +79,8 @@ export default function AnalysisPage() {
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('all')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
+
+  const dashboardPath = getDashboardPath(profile)
 
   useEffect(() => {
     loadInitialData()
@@ -504,7 +507,7 @@ export default function AnalysisPage() {
                 Analisis Trend
               </button>
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate(dashboardPath)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
               >
                 <ChevronLeftIcon />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 
 function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -133,7 +133,9 @@ function SignupPage() {
     e.preventDefault()
     setLoading(true)
 
-    if (!fullName || !email || !password || !schoolId) {
+    const trimmedFullName = fullName.trim()
+
+    if (!trimmedFullName || !email || !password || !schoolId) {
       alert('Sila lengkapkan semua maklumat termasuk sekolah.')
       setLoading(false)
       return
@@ -156,33 +158,18 @@ function SignupPage() {
       return
     }
 
-    const userId = authData.user.id
-
-    const { data: existingAdmin } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('school_id', schoolId)
-      .eq('is_school_admin', true)
-      .maybeSingle()
-
-    let isAdmin = false
-    let status = 'pending'
-
-    if (!existingAdmin) {
-      isAdmin = true
-      status = 'approved'
-    }
+    const user = authData.user
 
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: userId,
-        full_name: fullName,
-        email: email,
+        id: user.id,
+        full_name: trimmedFullName,
+        email,
         school_id: schoolId,
-        role: 'user',
-        is_school_admin: isAdmin,
-        approval_status: status,
+        role: 'teacher',
+        is_school_admin: false,
+        approval_status: 'pending',
       })
 
     if (profileError) {
@@ -191,103 +178,164 @@ function SignupPage() {
       return
     }
 
-    if (status === 'approved') {
-      navigate('/dashboard')
-    } else {
-      navigate('/pending')
-    }
+    navigate('/pending')
 
     setLoading(false)
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Daftar Guru</h1>
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          EDUTRACK
+        </p>
 
-      <form onSubmit={handleSignup}>
-        <input
-          type="text"
-          placeholder="Nama Penuh"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
-        <br /><br />
+        <h1 className="mt-2 text-3xl font-bold text-slate-900">
+          Daftar Guru
+        </h1>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <br /><br />
+        <p className="mt-2 text-sm text-slate-600">
+          Daftar akaun untuk akses dashboard sekolah anda.
+        </p>
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <br /><br />
+        <form onSubmit={handleSignup} className="mt-8 space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Nama
+            </label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
+              placeholder="Masukkan nama penuh"
+              required
+            />
+          </div>
 
-        <select
-          value={schoolType}
-          onChange={(e) => handleTypeChange(e.target.value)}
-        >
-          <option value="">Pilih jenis sekolah</option>
-          {schoolTypes.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-        <br /><br />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
+              placeholder="nama@sekolah.edu.my"
+              required
+            />
+          </div>
 
-        <select
-          value={state}
-          onChange={(e) => handleStateChange(e.target.value)}
-          disabled={!schoolType}
-        >
-          <option value="">Pilih negeri</option>
-          {states.map((stateName) => (
-            <option key={stateName} value={stateName}>
-              {stateName}
-            </option>
-          ))}
-        </select>
-        <br /><br />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Kata laluan
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
+              placeholder="Masukkan kata laluan"
+              required
+            />
+          </div>
 
-        <select
-          value={district}
-          onChange={(e) => handleDistrictChange(e.target.value)}
-          disabled={!state}
-        >
-          <option value="">Pilih PPD / daerah</option>
-          {districts.map((districtName) => (
-            <option key={districtName} value={districtName}>
-              {districtName}
-            </option>
-          ))}
-        </select>
-        <br /><br />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Jenis sekolah
+            </label>
+            <select
+              value={schoolType}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500"
+              required
+            >
+              <option value="">Pilih jenis sekolah</option>
+              {schoolTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <select
-          value={schoolId}
-          onChange={(e) => setSchoolId(e.target.value)}
-          disabled={!district}
-        >
-          <option value="">Pilih nama sekolah</option>
-          {schools.map((school) => (
-            <option key={school.id} value={school.id}>
-              {school.school_name} ({school.school_code})
-            </option>
-          ))}
-        </select>
-        <br /><br />
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Negeri
+            </label>
+            <select
+              value={state}
+              onChange={(e) => handleStateChange(e.target.value)}
+              disabled={!schoolType}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              required
+            >
+              <option value="">Pilih negeri</option>
+              {states.map((stateName) => (
+                <option key={stateName} value={stateName}>
+                  {stateName}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <button type="submit" disabled={loading}>
-          {loading ? 'Loading...' : 'Daftar'}
-        </button>
-      </form>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              PPD / Daerah
+            </label>
+            <select
+              value={district}
+              onChange={(e) => handleDistrictChange(e.target.value)}
+              disabled={!state}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              required
+            >
+              <option value="">Pilih PPD / daerah</option>
+              {districts.map((districtName) => (
+                <option key={districtName} value={districtName}>
+                  {districtName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Nama sekolah
+            </label>
+            <select
+              value={schoolId}
+              onChange={(e) => setSchoolId(e.target.value)}
+              disabled={!district}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+              required
+            >
+              <option value="">Pilih nama sekolah</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>
+                  {school.school_name} ({school.school_code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {loading ? 'Loading...' : 'Daftar'}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Sudah ada akaun?{' '}
+          <Link to="/login" className="font-medium text-slate-900 hover:underline">
+            Login di sini
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }

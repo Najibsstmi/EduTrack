@@ -1,375 +1,553 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  School,
+  Search,
+  Shield,
+  UserCheck,
+  UserCog,
+  Users,
+  UserX,
+} from 'lucide-react'
+
+const ROLE_LABEL = {
+  master_admin: 'Master Admin',
+  school_admin: 'Admin Sekolah',
+  teacher: 'Guru',
+  viewer: 'Viewer',
+  user: 'Pengguna',
+}
+
+const getDisplayName = (user) =>
+  user?.full_name || user?.email?.split('@')[0] || user?.email || '-'
+
+function StatCard({ title, value, icon: Icon }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <h3 className="mt-2 text-3xl font-bold text-slate-900">{value}</h3>
+        </div>
+        <div className="rounded-2xl bg-slate-100 p-3">
+          <Icon className="h-5 w-5 text-slate-700" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Badge({ children, tone = 'slate' }) {
+  const tones = {
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+    red: 'bg-red-50 text-red-700 border-red-200',
+    blue: 'bg-blue-50 text-blue-700 border-blue-200',
+    slate: 'bg-slate-50 text-slate-700 border-slate-200',
+  }
+
+  return (
+    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${tones[tone]}`}>
+      {children}
+    </span>
+  )
+}
+
+function ActionButton({ children, onClick, variant = 'default', disabled = false }) {
+  const variants = {
+    default: 'border-slate-300 text-slate-700 hover:bg-slate-50',
+    primary: 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800',
+    danger: 'border-red-300 text-red-700 hover:bg-red-50',
+    success: 'border-emerald-300 text-emerald-700 hover:bg-emerald-50',
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-xl border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]}`}
+    >
+      {children}
+    </button>
+  )
+}
 
 export default function MasterAdminDashboard() {
   const navigate = useNavigate()
 
-  const [pendingUsers, setPendingUsers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [savingId, setSavingId] = useState(null)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [profiles, setProfiles] = useState([])
+  const [schools, setSchools] = useState([])
+  const [expandedSchoolId, setExpandedSchoolId] = useState(null)
+  const [search, setSearch] = useState('')
+  const [busyId, setBusyId] = useState(null)
 
-  const [schoolTypes, setSchoolTypes] = useState([])
-
-  const [selectedType, setSelectedType] = useState({})
-  const [selectedState, setSelectedState] = useState({})
-  const [selectedDistrict, setSelectedDistrict] = useState({})
-  const [selectedSchool, setSelectedSchool] = useState({})
-
-  const [statesByUser, setStatesByUser] = useState({})
-  const [districtsByUser, setDistrictsByUser] = useState({})
-  const [schoolsByUser, setSchoolsByUser] = useState({})
+  const currentUserDisplayName = getDisplayName(currentUser)
 
   useEffect(() => {
-    checkAccessAndFetch()
+    loadPage()
   }, [])
 
-  const checkAccessAndFetch = async () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    navigate('/login', { replace: true })
+  }
+
+  const loadPage = async () => {
     setLoading(true)
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser()
 
-    if (userError || !user) {
-      navigate('/login', { replace: true })
-      return
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, is_master_admin, approval_status')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError || !profile) {
-      navigate('/login', { replace: true })
-      return
-    }
-
-    if (!profile.is_master_admin) {
-      if (profile.approval_status === 'pending') {
-        navigate('/pending', { replace: true })
-      } else if (profile.approval_status === 'approved') {
-        navigate('/dashboard', { replace: true })
-      } else {
+      if (authError || !user) {
         navigate('/login', { replace: true })
+        return
       }
-      return
-    }
 
-    await Promise.all([fetchPendingUsers(), fetchSchoolTypes()])
-    setLoading(false)
-  }
+      const { data: myProfile, error: myProfileError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, school_id, is_active, approval_status, is_master_admin')
+        .eq('id', user.id)
+        .maybeSingle()
 
-  const uniqueSorted = (arr) =>
-    [...new Set((arr || []).map((v) => (typeof v === 'string' ? v.trim() : v)).filter(Boolean))]
-      .sort((a, b) => String(a).localeCompare(String(b)))
+      if (myProfileError || !myProfile) {
+        navigate('/login', { replace: true })
+        return
+      }
 
-  const fetchPendingUsers = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, role, approval_status, created_at')
-      .eq('approval_status', 'pending')
-      .order('created_at', { ascending: false })
+      setCurrentUser(myProfile)
 
-    if (error) {
+      const isMasterAdmin = myProfile.is_master_admin === true || myProfile.role === 'master_admin'
+      if (!isMasterAdmin) {
+        if (myProfile.approval_status === 'pending') {
+          navigate('/pending', { replace: true })
+        } else if (myProfile.approval_status === 'approved') {
+          navigate('/dashboard', { replace: true })
+        } else {
+          navigate('/login', { replace: true })
+        }
+        return
+      }
+
+      const [{ data: profilesData, error: profilesError }, { data: schoolsData, error: schoolsError }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, role, designation, school_id, approval_status, is_active, created_at, is_master_admin')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('schools')
+          .select('id, school_name, school_code, school_type, state, district, is_active')
+          .order('school_name'),
+      ])
+
+      if (profilesError) throw profilesError
+      if (schoolsError) throw schoolsError
+
+      setProfiles(profilesData || [])
+      setSchools((schoolsData || []).filter((school) => school.is_active !== false))
+    } catch (error) {
       console.error(error)
-      alert('Gagal ambil senarai pending user')
-      return
-    }
-
-    setPendingUsers(data || [])
-  }
-
-  const fetchSchoolTypes = async () => {
-    const { data, error } = await supabase
-      .from('schools')
-      .select('school_type')
-      .eq('is_active', true)
-      .range(0, 20000)
-
-    if (error) {
-      console.error(error)
-      alert('Gagal ambil jenis sekolah')
-      return
-    }
-
-    setSchoolTypes(uniqueSorted(data.map((item) => item.school_type)))
-  }
-
-  const fetchStates = async (userId, schoolType) => {
-    const { data, error } = await supabase
-      .from('schools')
-      .select('state')
-      .eq('is_active', true)
-      .eq('school_type', schoolType)
-      .range(0, 20000)
-
-    if (error) {
-      console.error(error)
-      alert('Gagal ambil negeri')
-      return
-    }
-
-    setStatesByUser((prev) => ({
-      ...prev,
-      [userId]: uniqueSorted(data.map((item) => item.state)),
-    }))
-  }
-
-  const fetchDistricts = async (userId, schoolType, state) => {
-    const { data, error } = await supabase
-      .from('schools')
-      .select('district')
-      .eq('is_active', true)
-      .eq('school_type', schoolType)
-      .eq('state', state)
-      .range(0, 20000)
-
-    if (error) {
-      console.error(error)
-      alert('Gagal ambil PPD / daerah')
-      return
-    }
-
-    setDistrictsByUser((prev) => ({
-      ...prev,
-      [userId]: uniqueSorted(data.map((item) => item.district)),
-    }))
-  }
-
-  const fetchSchools = async (userId, schoolType, state, district) => {
-    const { data, error } = await supabase
-      .from('schools')
-      .select('id, school_name, school_code')
-      .eq('is_active', true)
-      .eq('school_type', schoolType)
-      .eq('state', state)
-      .eq('district', district)
-      .order('school_name', { ascending: true })
-      .range(0, 5000)
-
-    if (error) {
-      console.error(error)
-      alert('Gagal ambil nama sekolah')
-      return
-    }
-
-    setSchoolsByUser((prev) => ({
-      ...prev,
-      [userId]: data || [],
-    }))
-  }
-
-  const handleTypeChange = async (userId, value) => {
-    setSelectedType((prev) => ({ ...prev, [userId]: value }))
-    setSelectedState((prev) => ({ ...prev, [userId]: '' }))
-    setSelectedDistrict((prev) => ({ ...prev, [userId]: '' }))
-    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
-
-    setStatesByUser((prev) => ({ ...prev, [userId]: [] }))
-    setDistrictsByUser((prev) => ({ ...prev, [userId]: [] }))
-    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
-
-    if (value) {
-      await fetchStates(userId, value)
+      alert(error.message || 'Gagal memuatkan dashboard master admin.')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleStateChange = async (userId, value) => {
-    setSelectedState((prev) => ({ ...prev, [userId]: value }))
-    setSelectedDistrict((prev) => ({ ...prev, [userId]: '' }))
-    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
+  const schoolMap = useMemo(() => {
+    const map = new Map()
+    schools.forEach((school) => map.set(school.id, school))
+    return map
+  }, [schools])
 
-    setDistrictsByUser((prev) => ({ ...prev, [userId]: [] }))
-    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
+  const schoolsWithUsers = useMemo(() => {
+    const grouped = new Map()
 
-    if (value) {
-      await fetchDistricts(userId, selectedType[userId], value)
-    }
-  }
+    profiles
+      .filter((profile) => profile.school_id)
+      .forEach((profile) => {
+        const school = schoolMap.get(profile.school_id)
+        if (!school) return
 
-  const handleDistrictChange = async (userId, value) => {
-    setSelectedDistrict((prev) => ({ ...prev, [userId]: value }))
-    setSelectedSchool((prev) => ({ ...prev, [userId]: '' }))
+        if (!grouped.has(profile.school_id)) {
+          grouped.set(profile.school_id, {
+            school,
+            users: [],
+          })
+        }
 
-    setSchoolsByUser((prev) => ({ ...prev, [userId]: [] }))
-
-    if (value) {
-      await fetchSchools(userId, selectedType[userId], selectedState[userId], value)
-    }
-  }
-
-  const handleSchoolChange = (userId, value) => {
-    setSelectedSchool((prev) => ({ ...prev, [userId]: value }))
-  }
-
-  const handleApprove = async (userId) => {
-    const schoolId = selectedSchool[userId]
-
-    if (!schoolId) {
-      alert('Sila pilih sekolah dahulu')
-      return
-    }
-
-    setSavingId(userId)
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        approval_status: 'approved',
-        school_id: schoolId,
+        grouped.get(profile.school_id).users.push(profile)
       })
-      .eq('id', userId)
 
-    if (error) {
-      console.error(error)
-      alert('Gagal approve user')
-      setSavingId(null)
-      return
+    let result = Array.from(grouped.values()).map((item) => {
+      const admin = item.users.find((user) => user.role === 'school_admin' && user.is_active !== false)
+
+      return {
+        ...item,
+        admin,
+        totalUsers: item.users.length,
+        totalActiveUsers: item.users.filter((user) => user.is_active !== false).length,
+        totalPending: item.users.filter((user) => user.approval_status === 'pending').length,
+      }
+    })
+
+    const keyword = search.trim().toLowerCase()
+    if (keyword) {
+      result = result.filter((item) => {
+        const haystack = [
+          item.school.school_name,
+          item.school.school_code,
+          item.school.state,
+          item.school.district,
+          getDisplayName(item.admin),
+          ...item.users.map((user) => `${getDisplayName(user)} ${user.email} ${user.designation || ''}`),
+        ]
+          .join(' ')
+          .toLowerCase()
+
+        return haystack.includes(keyword)
+      })
     }
 
-    setPendingUsers((prev) => prev.filter((user) => user.id !== userId))
-    setSavingId(null)
+    return result.sort((a, b) => a.school.school_name.localeCompare(b.school.school_name, 'ms'))
+  }, [profiles, schoolMap, search])
+
+  const stats = useMemo(() => {
+    const schoolIds = new Set(profiles.filter((profile) => profile.school_id).map((profile) => profile.school_id))
+
+    return {
+      totalSchools: schoolIds.size,
+      totalUsers: profiles.filter((profile) => profile.role !== 'master_admin' && profile.is_master_admin !== true).length,
+      totalAdmins: profiles.filter((profile) => profile.role === 'school_admin').length,
+      totalPending: profiles.filter((profile) => profile.approval_status === 'pending').length,
+    }
+  }, [profiles])
+
+  const handlePromoteAdmin = async (user) => {
+    if (!user?.school_id) return
+
+    const oldAdmin = profiles.find(
+      (profile) => profile.school_id === user.school_id && profile.role === 'school_admin' && profile.id !== user.id
+    )
+
+    const targetName = getDisplayName(user)
+    const oldAdminName = oldAdmin ? getDisplayName(oldAdmin) : null
+
+    const ok = window.confirm(
+      `Jadikan ${targetName} sebagai admin sekolah?${oldAdminName ? `\n\nAdmin semasa (${oldAdminName}) akan ditukar kepada Guru.` : ''}`
+    )
+    if (!ok) return
+
+    setBusyId(user.id)
+    try {
+      if (oldAdmin) {
+        const { error: demoteError } = await supabase
+          .from('profiles')
+          .update({ role: 'teacher' })
+          .eq('id', oldAdmin.id)
+
+        if (demoteError) throw demoteError
+      }
+
+      const { error: promoteError } = await supabase
+        .from('profiles')
+        .update({ role: 'school_admin', approval_status: 'approved', is_active: true })
+        .eq('id', user.id)
+
+      if (promoteError) throw promoteError
+
+      await loadPage()
+    } catch (error) {
+      console.error(error)
+      alert(error.message || 'Gagal menukar admin sekolah.')
+    } finally {
+      setBusyId(null)
+    }
   }
 
-  const handleReject = async (userId) => {
-    setSavingId(userId)
+  const handleToggleActive = async (user) => {
+    const nextValue = !(user.is_active !== false)
+    const targetName = getDisplayName(user)
+    const ok = window.confirm(
+      nextValue ? `Aktifkan semula pengguna ${targetName}?` : `Nyahaktifkan pengguna ${targetName}?`
+    )
+    if (!ok) return
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        approval_status: 'rejected',
-      })
-      .eq('id', userId)
+    setBusyId(user.id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: nextValue })
+        .eq('id', user.id)
 
-    if (error) {
+      if (error) throw error
+      await loadPage()
+    } catch (error) {
       console.error(error)
-      alert('Gagal reject user')
-      setSavingId(null)
-      return
+      alert(error.message || 'Gagal mengemaskini status pengguna.')
+    } finally {
+      setBusyId(null)
     }
+  }
 
-    setPendingUsers((prev) => prev.filter((user) => user.id !== userId))
-    setSavingId(null)
+  const handleApprove = async (user) => {
+    setBusyId(user.id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ approval_status: 'approved', is_active: true })
+        .eq('id', user.id)
+
+      if (error) throw error
+      await loadPage()
+    } catch (error) {
+      console.error(error)
+      alert(error.message || 'Gagal meluluskan pengguna.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleReject = async (user) => {
+    const ok = window.confirm(`Tolak permohonan ${getDisplayName(user)}?`)
+    if (!ok) return
+
+    setBusyId(user.id)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ approval_status: 'rejected', is_active: false })
+        .eq('id', user.id)
+
+      if (error) throw error
+      await loadPage()
+    } catch (error) {
+      console.error(error)
+      alert(error.message || 'Gagal menolak pengguna.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const renderRoleBadge = (role, isMasterAdmin) => {
+    if (isMasterAdmin || role === 'master_admin') return <Badge tone="green">Master Admin</Badge>
+    if (role === 'school_admin') return <Badge tone="blue">Admin Sekolah</Badge>
+    return <Badge tone="slate">{ROLE_LABEL[role] || role || 'Pengguna'}</Badge>
+  }
+
+  const renderStatusBadge = (user) => {
+    if (user.is_active === false) return <Badge tone="red">Tidak Aktif</Badge>
+    if (user.approval_status === 'pending') return <Badge tone="amber">Pending</Badge>
+    if (user.approval_status === 'rejected') return <Badge tone="red">Ditolak</Badge>
+    return <Badge tone="green">Aktif</Badge>
   }
 
   if (loading) {
-    return <div className="p-6">Loading master admin dashboard...</div>
+    return (
+      <div className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
+        <div className="mx-auto max-w-7xl animate-pulse space-y-6">
+          <div className="h-10 w-72 rounded-xl bg-slate-200" />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="h-28 rounded-2xl bg-slate-200" />
+            ))}
+          </div>
+          <div className="h-96 rounded-2xl bg-slate-200" />
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Master Admin Dashboard</h1>
+    <div className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">EDUTRACK</p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900">Master Admin Dashboard</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Pantau sekolah yang menggunakan sistem, urus admin sekolah, dan kawal status pengguna.
+            </p>
+            <p className="mt-2 text-sm text-slate-500">Log masuk sebagai {currentUserDisplayName}</p>
+          </div>
 
-      <div className="bg-white rounded-xl shadow p-4 overflow-x-auto">
-        <h2 className="text-lg font-semibold mb-4">Senarai Pengguna Pending</h2>
+          <div className="flex w-full max-w-2xl flex-col gap-3 md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:max-w-md">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari sekolah, kod sekolah, nama pengguna atau email"
+                className="w-full rounded-2xl border border-slate-300 bg-white py-3 pl-11 pr-4 text-sm outline-none transition focus:border-slate-500"
+              />
+            </div>
 
-        {pendingUsers.length === 0 ? (
-          <p>Tiada pengguna pending buat masa ini.</p>
-        ) : (
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="py-3 px-2">Nama</th>
-                <th className="py-3 px-2">Email</th>
-                <th className="py-3 px-2">Role</th>
-                <th className="py-3 px-2">Penetapan Sekolah</th>
-                <th className="py-3 px-2">Tindakan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingUsers.map((user) => (
-                <tr key={user.id} className="border-b align-top">
-                  <td className="py-3 px-2">{user.full_name || '-'}</td>
-                  <td className="py-3 px-2">{user.email}</td>
-                  <td className="py-3 px-2">{user.role || '-'}</td>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
 
-                  <td className="py-3 px-2 min-w-[430px]">
-                    <div className="grid gap-2">
-                      <select
-                        className="border rounded px-3 py-2"
-                        value={selectedType[user.id] || ''}
-                        onChange={(e) => handleTypeChange(user.id, e.target.value)}
-                      >
-                        <option value="">Pilih jenis sekolah</option>
-                        {schoolTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard title="Jumlah Sekolah Guna Sistem" value={stats.totalSchools} icon={School} />
+          <StatCard title="Jumlah Pengguna" value={stats.totalUsers} icon={Users} />
+          <StatCard title="Admin Sekolah" value={stats.totalAdmins} icon={Shield} />
+          <StatCard title="Pengguna Pending" value={stats.totalPending} icon={Clock3} />
+        </div>
 
-                      <select
-                        className="border rounded px-3 py-2"
-                        value={selectedState[user.id] || ''}
-                        onChange={(e) => handleStateChange(user.id, e.target.value)}
-                        disabled={!selectedType[user.id]}
-                      >
-                        <option value="">Pilih negeri</option>
-                        {(statesByUser[user.id] || []).map((state) => (
-                          <option key={state} value={state}>
-                            {state}
-                          </option>
-                        ))}
-                      </select>
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <h2 className="text-xl font-semibold text-slate-900">Senarai Sekolah & Pengguna</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Klik pada sekolah untuk lihat admin, pengguna, designation, dan tindakan pengurusan.
+            </p>
+          </div>
 
-                      <select
-                        className="border rounded px-3 py-2"
-                        value={selectedDistrict[user.id] || ''}
-                        onChange={(e) => handleDistrictChange(user.id, e.target.value)}
-                        disabled={!selectedState[user.id]}
-                      >
-                        <option value="">Pilih PPD / daerah</option>
-                        {(districtsByUser[user.id] || []).map((district) => (
-                          <option key={district} value={district}>
-                            {district}
-                          </option>
-                        ))}
-                      </select>
+          <div className="divide-y divide-slate-200">
+            {schoolsWithUsers.length === 0 ? (
+              <div className="px-6 py-10 text-sm text-slate-500">Tiada data sekolah ditemui.</div>
+            ) : (
+              schoolsWithUsers.map((item) => {
+                const isOpen = expandedSchoolId === item.school.id
+                return (
+                  <div key={item.school.id}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSchoolId(isOpen ? null : item.school.id)}
+                      className="flex w-full items-start justify-between gap-4 px-6 py-5 text-left transition hover:bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-slate-900">{item.school.school_name}</h3>
+                          <Badge tone="slate">{item.school.school_code}</Badge>
+                          {item.totalPending > 0 ? <Badge tone="amber">{item.totalPending} Pending</Badge> : null}
+                        </div>
 
-                      <select
-                        className="border rounded px-3 py-2"
-                        value={selectedSchool[user.id] || ''}
-                        onChange={(e) => handleSchoolChange(user.id, e.target.value)}
-                        disabled={!selectedDistrict[user.id]}
-                      >
-                        <option value="">Pilih nama sekolah</option>
-                        {(schoolsByUser[user.id] || []).map((school) => (
-                          <option key={school.id} value={school.id}>
-                            {school.school_name} ({school.school_code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </td>
+                        <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                          <p>
+                            <span className="font-medium text-slate-800">Jenis:</span> {item.school.school_type || '-'}
+                          </p>
+                          <p>
+                            <span className="font-medium text-slate-800">Negeri:</span> {item.school.state || '-'}
+                          </p>
+                          <p>
+                            <span className="font-medium text-slate-800">Admin:</span> {item.admin ? getDisplayName(item.admin) : 'Belum ditetapkan'}
+                          </p>
+                          <p>
+                            <span className="font-medium text-slate-800">Jumlah pengguna:</span> {item.totalUsers}
+                          </p>
+                        </div>
+                      </div>
 
-                  <td className="py-3 px-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleApprove(user.id)}
-                        disabled={savingId === user.id}
-                        className="bg-green-600 text-white px-3 py-2 rounded"
-                      >
-                        {savingId === user.id ? 'Saving...' : 'Approve'}
-                      </button>
+                      <div className="pt-1 text-slate-500">
+                        {isOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                      </div>
+                    </button>
 
-                      <button
-                        onClick={() => handleReject(user.id)}
-                        disabled={savingId === user.id}
-                        className="bg-red-600 text-white px-3 py-2 rounded"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                    {isOpen ? (
+                      <div className="border-t border-slate-200 bg-slate-50/60 px-6 py-5">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full overflow-hidden rounded-2xl bg-white">
+                            <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              <tr>
+                                <th className="px-4 py-3">Nama</th>
+                                <th className="px-4 py-3">Email</th>
+                                <th className="px-4 py-3">Peranan</th>
+                                <th className="px-4 py-3">Designation</th>
+                                <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Tindakan</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 text-sm">
+                              {item.users
+                                .slice()
+                                .sort((a, b) => {
+                                  const aScore = a.role === 'school_admin' ? 0 : 1
+                                  const bScore = b.role === 'school_admin' ? 0 : 1
+                                  if (aScore !== bScore) return aScore - bScore
+                                  return getDisplayName(a).localeCompare(getDisplayName(b), 'ms')
+                                })
+                                .map((user) => (
+                                  <tr key={user.id} className="align-top">
+                                    <td className="px-4 py-4">
+                                      <div className="font-medium text-slate-900">{getDisplayName(user)}</div>
+                                    </td>
+                                    <td className="px-4 py-4 text-slate-600">{user.email || '-'}</td>
+                                    <td className="px-4 py-4">{renderRoleBadge(user.role, user.is_master_admin)}</td>
+                                    <td className="px-4 py-4 text-slate-600">{user.designation || '-'}</td>
+                                    <td className="px-4 py-4">{renderStatusBadge(user)}</td>
+                                    <td className="px-4 py-4">
+                                      <div className="flex flex-wrap gap-2">
+                                        {user.role !== 'school_admin' && user.is_master_admin !== true ? (
+                                          <ActionButton
+                                            onClick={() => handlePromoteAdmin(user)}
+                                            disabled={busyId === user.id}
+                                            variant="primary"
+                                          >
+                                            <span className="inline-flex items-center gap-1">
+                                              <UserCog className="h-3.5 w-3.5" /> Jadikan Admin
+                                            </span>
+                                          </ActionButton>
+                                        ) : null}
+
+                                        {user.approval_status === 'pending' ? (
+                                          <>
+                                            <ActionButton
+                                              onClick={() => handleApprove(user)}
+                                              disabled={busyId === user.id}
+                                              variant="success"
+                                            >
+                                              <span className="inline-flex items-center gap-1">
+                                                <UserCheck className="h-3.5 w-3.5" /> Lulus
+                                              </span>
+                                            </ActionButton>
+                                            <ActionButton
+                                              onClick={() => handleReject(user)}
+                                              disabled={busyId === user.id}
+                                              variant="danger"
+                                            >
+                                              <span className="inline-flex items-center gap-1">
+                                                <UserX className="h-3.5 w-3.5" /> Tolak
+                                              </span>
+                                            </ActionButton>
+                                          </>
+                                        ) : user.is_master_admin === true ? null : (
+                                          <ActionButton
+                                            onClick={() => handleToggleActive(user)}
+                                            disabled={busyId === user.id}
+                                            variant={user.is_active === false ? 'success' : 'danger'}
+                                          >
+                                            {user.is_active === false ? 'Aktifkan' : 'Nyahaktifkan'}
+                                          </ActionButton>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

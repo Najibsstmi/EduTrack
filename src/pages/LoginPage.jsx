@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 
 function LoginPage() {
   const [email, setEmail] = useState('')
@@ -55,7 +55,7 @@ function LoginPage() {
     } else if (profile?.approval_status === 'pending') {
       navigate('/pending')
     } else if (profile?.approval_status === 'approved') {
-      navigate('/scores')
+      navigate('/home')
     } else {
       navigate('/login')
     }
@@ -107,6 +107,16 @@ function LoginPage() {
             {loading ? 'Loading...' : 'Login'}
           </button>
         </form>
+
+        <div className="mt-6 border-t pt-4 text-center">
+          <p className="text-sm text-slate-600">Belum ada akaun sekolah?</p>
+          <Link
+            to="/register"
+            className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Daftar Akaun
+          </Link>
+        </div>
       </div>
     </div>
   )
