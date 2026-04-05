@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -244,6 +245,7 @@ export default function StudentScoresPage() {
 
   const [profile, setProfile] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
+  const [gradeScales, setGradeScales] = useState([])
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -261,6 +263,8 @@ export default function StudentScoresPage() {
   const [csvFileName, setCsvFileName] = useState('')
   const [importingCsv, setImportingCsv] = useState(false)
   const [importSummary, setImportSummary] = useState(null)
+
+  const dashboardPath = getDashboardPath(profile)
 
   useEffect(() => {
     init()
@@ -362,7 +366,7 @@ export default function StudentScoresPage() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, school_id')
+      .select('id, school_id, role, is_school_admin')
       .eq('id', user.id)
       .single()
 
@@ -400,13 +404,20 @@ export default function StudentScoresPage() {
     const { data: classData } = await classQuery
     setClasses(classData || [])
 
-    const { data: subjectData } = await supabase
-      .from('subjects')
-      .select('id, subject_name, subject_code, tingkatan')
-      .eq('school_id', profileData.school_id)
-      .order('subject_name', { ascending: true })
+    const [{ data: subjectData }, { data: gradeScaleData }] = await Promise.all([
+      supabase
+        .from('subjects')
+        .select('id, subject_name, subject_code, tingkatan')
+        .eq('school_id', profileData.school_id)
+        .order('subject_name', { ascending: true }),
+      supabase
+        .from('grade_scales')
+        .select('*')
+        .eq('school_id', profileData.school_id),
+    ])
 
     setSubjects(subjectData || [])
+    setGradeScales(gradeScaleData || [])
   }
 
   const loadStudentsAndScores = async () => {
@@ -439,6 +450,7 @@ export default function StudentScoresPage() {
     const { data: enrollmentData } = await enrollmentQuery
 
     const studentRows = (enrollmentData || []).map((row) => ({
+      enrollment_id: row.id,
       student_id: row.student_profile_id,
       full_name: row.student_profiles?.full_name || '-',
       ic_number: row.student_profiles?.ic_number || '-',
@@ -858,30 +870,68 @@ export default function StudentScoresPage() {
   }
 
   const handleSave = async () => {
-    if (!profile?.school_id) return
+    if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
 
     setSaving(true)
 
-    const payload = students.map((student) => ({
-      student_profile_id: student.student_id,
-      class_id: selectedClass,
-      subject_id: selectedSubject,
-      exam_key: selectedExam,
-      mark: scores[student.student_id]?.mark === '' ? null : Number(scores[student.student_id]?.mark),
-      school_id: profile.school_id,
-      academic_year: setupConfig?.current_academic_year || null,
-    }))
+    const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+    const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
+      const label =
+        grade.tingkatan ??
+        grade.grade_label ??
+        grade.form_level ??
+        grade.level ??
+        ''
+
+      return String(label).trim().toLowerCase() === String(selectedGradeLabel).trim().toLowerCase()
+    })
+
+    const payload = students
+      .filter((student) => {
+        const rawMark = scores[student.student_id]?.mark
+        return rawMark !== '' && rawMark !== null && rawMark !== undefined && !Number.isNaN(Number(rawMark))
+      })
+      .map((student) => {
+        const mark = Number(scores[student.student_id]?.mark)
+        const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+
+        return {
+          student_enrollment_id: student.enrollment_id,
+          student_profile_id: student.student_id,
+          class_id: selectedClass,
+          subject_id: selectedSubject,
+          exam_config_id: null,
+          exam_key: selectedExam,
+          mark,
+          grade_name: gradeInfo.grade_name,
+          grade_point: gradeInfo.grade_point,
+          is_absent: false,
+          remarks: null,
+          entered_by: profile.id,
+          verified_by: null,
+          verified_at: null,
+          school_id: profile.school_id,
+          academic_year: currentYear,
+          updated_at: new Date().toISOString(),
+        }
+      })
+
+    if (payload.length === 0) {
+      setSaving(false)
+      alert('Sila masukkan sekurang-kurangnya satu markah sebelum simpan.')
+      return
+    }
 
     const { error } = await supabase
       .from('student_scores')
       .upsert(payload, {
-        onConflict: 'student_profile_id,subject_id,exam_key',
+        onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
       })
 
     setSaving(false)
 
     if (error) {
-      alert('Error simpan markah')
+      alert(error.message || 'Error simpan markah')
       console.error(error)
       return
     }
@@ -900,7 +950,7 @@ export default function StudentScoresPage() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(dashboardPath)}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
               Kembali Dashboard

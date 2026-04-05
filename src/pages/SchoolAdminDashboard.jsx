@@ -522,7 +522,7 @@ export default function SchoolAdminDashboard() {
           <div style={styles.searchRow}>
             <input
               type="text"
-              placeholder="Cari nama, email, role..."
+              placeholder="Cari nama, email, role, designation..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}

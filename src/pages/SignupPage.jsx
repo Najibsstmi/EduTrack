@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 
 function SignupPage() {
   const [fullName, setFullName] = useState('')
+  const [designation, setDesignation] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [schoolType, setSchoolType] = useState('')
@@ -134,9 +135,10 @@ function SignupPage() {
     setLoading(true)
 
     const trimmedFullName = fullName.trim()
+    const trimmedDesignation = designation.trim()
 
-    if (!trimmedFullName || !email || !password || !schoolId) {
-      alert('Sila lengkapkan semua maklumat termasuk sekolah.')
+    if (!trimmedFullName || !trimmedDesignation || !email || !password || !schoolId) {
+      alert('Sila lengkapkan semua maklumat termasuk sekolah dan designation.')
       setLoading(false)
       return
     }
@@ -165,6 +167,7 @@ function SignupPage() {
       .insert({
         id: user.id,
         full_name: trimmedFullName,
+        designation: trimmedDesignation,
         email,
         school_id: schoolId,
         role: 'teacher',
@@ -223,6 +226,20 @@ function SignupPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
               placeholder="nama@sekolah.edu.my"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Designation / Jawatan
+            </label>
+            <input
+              type="text"
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
+              placeholder="Contoh: Guru, Ketua Panitia, GKMP"
               required
             />
           </div>

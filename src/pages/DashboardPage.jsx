@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
@@ -6,16 +6,6 @@ const ChevronRightIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
   </svg>
-)
-
-const CheckIcon = ({ done }) => (
-  <span
-    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-      done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
-    }`}
-  >
-    {done ? '✓' : '•'}
-  </span>
 )
 
 function DashboardPage() {
@@ -30,6 +20,10 @@ function DashboardPage() {
     subjects: false,
     classes: false,
     students: false,
+    examNames: [],
+    subjectNames: [],
+    classItems: [],
+    studentCount: 0,
   })
 
   useEffect(() => {
@@ -84,33 +78,81 @@ function DashboardPage() {
   const loadSetupStatus = async (schoolId) => {
     if (!schoolId) return
 
-    const [{ data: setupData }, { count: classTotal }, { count: studentTotal }] = await Promise.all([
+    const { data: setupData } = await supabase
+      .from('school_setup_configs')
+      .select('setup_step, is_setup_complete, current_academic_year, exam_structure')
+      .eq('school_id', schoolId)
+      .maybeSingle()
+
+    let classQuery = supabase
+      .from('classes')
+      .select('id, tingkatan, class_name', { count: 'exact' })
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+
+    let enrollmentQuery = supabase
+      .from('student_enrollments')
+      .select('id, class_id', { count: 'exact' })
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+
+    if (setupData?.current_academic_year) {
+      classQuery = classQuery.eq('academic_year', setupData.current_academic_year)
+      enrollmentQuery = enrollmentQuery.eq('academic_year', setupData.current_academic_year)
+    }
+
+    const [
+      { data: classesData, count: classTotal },
+      { data: enrollmentsData, count: studentTotal },
+      { data: subjectsData },
+    ] = await Promise.all([
+      classQuery,
+      enrollmentQuery,
       supabase
-        .from('school_setup_configs')
-        .select('setup_step, is_setup_complete, current_academic_year')
-        .eq('school_id', schoolId)
-        .maybeSingle(),
-      supabase
-        .from('classes')
-        .select('*', { count: 'exact', head: true })
-        .eq('school_id', schoolId)
-        .eq('is_active', true),
-      supabase
-        .from('student_enrollments')
-        .select('*', { count: 'exact', head: true })
-        .eq('school_id', schoolId)
-        .eq('is_active', true),
+        .from('subjects')
+        .select('id, subject_name')
+        .eq('school_id', schoolId),
     ])
 
     const setupStep = setupData?.setup_step || 0
     const setupComplete = !!setupData?.is_setup_complete || setupStep >= 4
+    const examNames = [...new Set(
+      Object.values(setupData?.exam_structure || {})
+        .flat()
+        .map((item) => item?.name)
+        .filter(Boolean)
+    )]
+    const subjectNames = [...new Set(
+      (subjectsData || [])
+        .map((item) => item.subject_name)
+        .filter(Boolean)
+    )]
+      .sort((a, b) => String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' }))
+    const studentCountByClassId = (enrollmentsData || []).reduce((acc, enrollment) => {
+      const classId = enrollment.class_id
+      if (!classId) return acc
+      acc[classId] = (acc[classId] || 0) + 1
+      return acc
+    }, {})
+    const classItems = (classesData || [])
+      .map((item) => ({
+        id: item.id,
+        name: `${item.tingkatan || ''} ${item.class_name || ''}`.trim(),
+        studentCount: studentCountByClassId[item.id] || 0,
+      }))
+      .filter((item) => item.name)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ms', { sensitivity: 'base' }))
 
     setSetupStatus({
-      exams: setupStep >= 2 || setupComplete,
+      exams: examNames.length > 0 || setupStep >= 2 || setupComplete,
       grades: setupStep >= 3 || setupComplete,
-      subjects: setupStep >= 4 || setupComplete,
+      subjects: subjectNames.length > 0 || setupStep >= 4 || setupComplete,
       classes: (classTotal || 0) > 0,
       students: (studentTotal || 0) > 0,
+      examNames,
+      subjectNames,
+      classItems,
+      studentCount: studentTotal || 0,
     })
   }
 
@@ -119,36 +161,12 @@ function DashboardPage() {
     navigate('/login', { replace: true })
   }
 
-  const setupCards = useMemo(
-    () => [
-      {
-        title: 'Peperiksaan',
-        done: setupStatus.exams,
-        note: setupStatus.exams ? 'Struktur peperiksaan telah disediakan.' : 'Tetapan peperiksaan belum lengkap.',
-      },
-      {
-        title: 'Grade',
-        done: setupStatus.grades,
-        note: setupStatus.grades ? 'Skala gred telah tersedia.' : 'Skala gred masih perlu disiapkan.',
-      },
-      {
-        title: 'Subjek',
-        done: setupStatus.subjects,
-        note: setupStatus.subjects ? 'Senarai subjek telah lengkap.' : 'Subjek sekolah masih belum lengkap.',
-      },
-      {
-        title: 'Kelas',
-        done: setupStatus.classes,
-        note: setupStatus.classes ? 'Kelas aktif telah didaftarkan.' : 'Tiada kelas aktif ditemui.',
-      },
-      {
-        title: 'Murid',
-        done: setupStatus.students,
-        note: setupStatus.students ? 'Data murid sudah dimasukkan.' : 'Data murid belum dimasukkan.',
-      },
-    ],
-    [setupStatus]
-  )
+  const isAcademicSetupComplete =
+    setupStatus.exams &&
+    setupStatus.grades &&
+    setupStatus.subjects &&
+    setupStatus.classes &&
+    setupStatus.students
 
   const quickActions = [
     {
@@ -160,50 +178,16 @@ function DashboardPage() {
     },
     {
       title: 'Analisis Prestasi',
-      description: 'Lihat analisis kelas, individu dan trend subjek.',
+      description: 'Lihat analisis kelas, individu dan prestasi subjek.',
       onClick: () => navigate('/analysis'),
       enabled: isAcademicSetupComplete,
       tone: 'emerald',
-    },
-    {
-      title: 'Sasaran Murid',
-      description: 'Tetapkan TOV, OTR dan ETR untuk murid.',
-      onClick: () => navigate('/targets'),
-      enabled: isAcademicSetupComplete,
-      tone: 'amber',
-    },
-    {
-      title: 'Import Murid CSV',
-      description: 'Import senarai murid secara pukal ke dalam sistem.',
-      onClick: () => navigate('/students/import'),
-      enabled: true,
-      tone: 'rose',
-    },
-  ]
-
-  const supportActions = [
-    {
-      title: 'Semak Murid',
-      description: 'Lihat dan semak rekod murid sekolah.',
-      onClick: () => navigate('/students'),
-    },
-    {
-      title: 'Lihat Kelas',
-      description: 'Semak senarai kelas aktif untuk tahun semasa.',
-      onClick: () => navigate('/classes'),
     },
   ]
 
   if (loading) {
     return <div className="p-6">Loading dashboard...</div>
   }
-
-  const isAcademicSetupComplete =
-    setupStatus.exams &&
-    setupStatus.grades &&
-    setupStatus.subjects &&
-    setupStatus.classes &&
-    setupStatus.students
 
   const displayName =
     profile?.full_name ||
@@ -212,156 +196,95 @@ function DashboardPage() {
     '-'
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.14),_transparent_32%),linear-gradient(135deg,#ffffff,#f8fafc)] p-5 md:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">EduTrack</p>
-                <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-4xl">Dashboard Guru</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                  Selamat datang, {displayName}. Gunakan paparan ini untuk terus ke modul markah,
-                  sasaran dan analisis tanpa perlu mencari menu satu per satu.
-                </p>
-              </div>
+    <div style={styles.page}>
+      <header style={styles.topbar}>
+        <div>
+          <div style={styles.brand}>EduTrack</div>
+          <div style={styles.schoolMeta}>{displayName} {profile?.email ? `(${profile.email})` : ''}</div>
+        </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[320px]">
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">Peranan</div>
-                  <div className="mt-2 text-lg font-bold text-blue-900">{profile?.role || '-'}</div>
-                </div>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Status Sistem</div>
-                  <div className="mt-2 text-lg font-bold text-emerald-900">
-                    {isAcademicSetupComplete ? 'Sedia Digunakan' : 'Perlu Lengkapkan Setup'}
-                  </div>
-                </div>
-              </div>
-            </div>
+        <nav style={styles.nav}>
+          <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
+            Input Markah
+          </button>
+          <button style={styles.navButton} onClick={() => navigate('/analysis')}>
+            Analisis
+          </button>
+        </nav>
+
+        <div style={styles.topbarRight}>
+          <button style={styles.darkButton} onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <main style={styles.container}>
+        <section style={styles.hero}>
+          <h1 style={styles.heroTitle}>Dashboard Guru</h1>
+          <p style={styles.heroText}>
+            Selamat datang, {displayName}. Gunakan dashboard ini untuk masukkan markah murid dan
+            melihat analisis prestasi sekolah anda.
+          </p>
+          <div style={styles.heroInfo}>
+            <span><strong>Peranan:</strong> {profile?.role || '-'}</span>
+            <span><strong>Status Sistem:</strong> {isAcademicSetupComplete ? 'Sedia Digunakan' : 'Perlu Lengkapkan Setup'}</span>
+            <span><strong>Jumlah Murid:</strong> {setupStatus.studentCount}</span>
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SummaryCard
-            title="Peperiksaan"
-            value={setupStatus.exams ? 'Lengkap' : 'Belum'}
-            tone="blue"
-          />
-          <SummaryCard
-            title="Grade"
-            value={setupStatus.grades ? 'Lengkap' : 'Belum'}
-            tone="amber"
-          />
-          <SummaryCard
-            title="Subjek"
-            value={setupStatus.subjects ? 'Lengkap' : 'Belum'}
-            tone="emerald"
-          />
-          <SummaryCard
-            title="Kelas"
-            value={setupStatus.classes ? 'Ada Data' : 'Kosong'}
-            tone="rose"
-          />
-          <SummaryCard
-            title="Murid"
-            value={setupStatus.students ? 'Ada Data' : 'Kosong'}
-            tone="slate"
-          />
-        </div>
+        <section style={styles.statsGrid}>
+          <StatCard title="Subjek" value={setupStatus.subjectNames.length} />
+          <StatCard title="Kelas" value={setupStatus.classItems.length} />
+          <StatCard title="Peperiksaan" value={setupStatus.examNames.length} />
+          <StatCard title="Murid" value={setupStatus.studentCount} />
+        </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <section style={styles.dualGrid}>
+          <div style={styles.card}>
+            <div style={styles.sectionHeaderResponsive}>
               <div>
-                <h2 className="text-xl font-semibold text-slate-900 md:text-2xl">Akses Pantas</h2>
-                <p className="text-sm text-slate-500">
+                <h2 style={styles.cardTitle}>Akses Pantas</h2>
+                <p style={styles.helperText}>
                   Modul paling kerap digunakan untuk kerja harian guru.
                 </p>
               </div>
-              <div className="text-sm text-slate-500">
-                {isAcademicSetupComplete ? 'Semua modul utama sedia digunakan.' : 'Sesetengah modul akan dihadkan sehingga setup lengkap.'}
+              <div style={styles.helperMetaText}>
+                {isAcademicSetupComplete
+                  ? 'Semua modul utama sedia digunakan.'
+                  : 'Sesetengah modul akan dihadkan sehingga setup lengkap.'}
               </div>
             </div>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div style={styles.quickActionGrid}>
               {quickActions.map((item) => (
                 <ActionCard key={item.title} {...item} />
               ))}
             </div>
           </div>
 
-          <div className="space-y-6">
-            <ChecklistCard
-              title="Status Setup Sistem"
-              description={isAcademicSetupComplete
-                ? 'Komponen asas sekolah telah lengkap dan anda boleh teruskan kerja harian.'
-                : 'Masih ada komponen yang belum lengkap. Selesaikan setup untuk buka semua modul utama.'}
-              items={setupCards}
-            />
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-              <h2 className="text-xl font-semibold text-slate-900">Akses Sokongan</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Pautan tambahan untuk semakan data dan navigasi pantas.
-              </p>
-
-              <div className="mt-5 space-y-3">
-                {supportActions.map((item) => (
-                  <button
-                    key={item.title}
-                    type="button"
-                    onClick={item.onClick}
-                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition hover:border-slate-300 hover:bg-white"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-900">{item.title}</div>
-                      <div className="mt-1 text-sm text-slate-600">{item.description}</div>
-                    </div>
-                    <ChevronRightIcon />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={handleLogout}
-            className="rounded-xl bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
-          >
-            Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SummaryCard({ title, value, tone = 'slate' }) {
-  const tones = {
-    blue: 'border-blue-200 bg-blue-50 text-blue-900',
-    amber: 'border-amber-200 bg-amber-50 text-amber-900',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    rose: 'border-rose-200 bg-rose-50 text-rose-900',
-    slate: 'border-slate-200 bg-white text-slate-900',
-  }
-
-  return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</div>
-      <div className="mt-2 text-xl font-bold">{value}</div>
+          <SetupSummaryCard
+            title="Status Setup Sistem"
+            description={isAcademicSetupComplete
+              ? 'Komponen asas sekolah telah lengkap dan anda boleh teruskan kerja harian.'
+              : 'Masih ada komponen yang belum lengkap. Selesaikan setup untuk buka semua modul utama.'}
+            examNames={setupStatus.examNames}
+            subjectNames={setupStatus.subjectNames}
+            classItems={setupStatus.classItems}
+            studentCount={setupStatus.studentCount}
+          />
+        </section>
+      </main>
     </div>
   )
 }
 
 function ActionCard({ title, description, onClick, enabled, tone }) {
-  const tones = {
-    blue: enabled ? 'border-blue-200 bg-blue-50 hover:bg-blue-100' : 'border-slate-200 bg-slate-100',
-    emerald: enabled ? 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-200 bg-slate-100',
-    amber: enabled ? 'border-amber-200 bg-amber-50 hover:bg-amber-100' : 'border-slate-200 bg-slate-100',
-    rose: enabled ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : 'border-slate-200 bg-slate-100',
+  const toneStyles = {
+    blue: enabled ? styles.actionToneBlue : styles.actionToneDisabled,
+    emerald: enabled ? styles.actionToneEmerald : styles.actionToneDisabled,
+    amber: enabled ? styles.actionToneAmber : styles.actionToneDisabled,
+    rose: enabled ? styles.actionToneRose : styles.actionToneDisabled,
   }
 
   return (
@@ -369,44 +292,171 @@ function ActionCard({ title, description, onClick, enabled, tone }) {
       type="button"
       onClick={onClick}
       disabled={!enabled}
-      className={`rounded-2xl border p-4 text-left transition ${tones[tone]} ${
-        enabled ? 'text-slate-900' : 'cursor-not-allowed text-slate-400'
-      }`}
+      style={{
+        ...styles.actionCard,
+        ...(toneStyles[tone] || styles.actionToneBlue),
+        ...(enabled ? null : styles.actionCardDisabled),
+      }}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div style={styles.actionCardInner}>
         <div>
-          <div className="font-semibold">{title}</div>
-          <div className="mt-1 text-sm leading-6 text-slate-600">{description}</div>
+          <div style={styles.actionCardTitle}>{title}</div>
+          <div style={styles.actionCardDescription}>{description}</div>
         </div>
         <ChevronRightIcon />
       </div>
-      {!enabled ? <div className="mt-3 text-xs font-medium text-slate-500">Menunggu setup lengkap</div> : null}
+      {!enabled ? <div style={styles.actionCardHint}>Menunggu setup lengkap</div> : null}
     </button>
   )
 }
 
-function ChecklistCard({ title, description, items }) {
+function SetupSummaryCard({ title, description, examNames, subjectNames, classItems, studentCount }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-      <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+    <div style={styles.card}>
+      <div style={styles.cardHeader}>
+        <h2 style={styles.cardTitle}>{title}</h2>
+      </div>
+      <p style={styles.helperText}>{description}</p>
 
-      <div className="mt-5 space-y-3">
-        {items.map((item) => (
-          <div
-            key={item.title}
-            className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-          >
-            <CheckIcon done={item.done} />
-            <div>
-              <div className="font-semibold text-slate-900">{item.title}</div>
-              <div className="mt-1 text-sm text-slate-600">{item.note}</div>
-            </div>
-          </div>
-        ))}
+      <div style={styles.summaryStack}>
+        <SummaryListBlock
+          title={`Peperiksaan (${examNames.length})`}
+          items={examNames}
+          emptyText="Tiada peperiksaan didaftarkan lagi."
+        />
+        <SummaryButtonGrid
+          title={`Subjek (${subjectNames.length})`}
+          items={subjectNames}
+          emptyText="Tiada subjek didaftarkan lagi."
+        />
+        <ClassButtonGrid
+          title={`Kelas (${classItems.length})`}
+          items={classItems}
+          emptyText="Tiada kelas aktif didaftarkan lagi."
+        />
+        <div style={styles.summaryBlock}>
+          <div style={styles.summaryBlockTitle}>Murid Berdaftar</div>
+          <div style={styles.summaryText}>Jumlah murid berdaftar: {studentCount}</div>
+        </div>
       </div>
     </div>
   )
+}
+
+function SummaryListBlock({ title, items, emptyText }) {
+  return (
+    <div style={styles.summaryBlock}>
+      <div style={styles.summaryBlockTitle}>{title}</div>
+      <div style={styles.summaryText}>
+        {items.length > 0 ? items.join(', ') : emptyText}
+      </div>
+    </div>
+  )
+}
+
+function SummaryButtonGrid({ title, items, emptyText }) {
+  return (
+    <div style={styles.summaryBlock}>
+      <div style={styles.summaryBlockTitle}>{title}</div>
+      {items.length > 0 ? (
+        <div style={styles.buttonGrid}>
+          {items.map((item) => (
+            <button
+              key={item}
+              type="button"
+              style={styles.summaryButton}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={styles.summaryText}>{emptyText}</div>
+      )}
+    </div>
+  )
+}
+
+function ClassButtonGrid({ title, items, emptyText }) {
+  return (
+    <div style={styles.summaryBlock}>
+      <div style={styles.summaryBlockTitle}>{title}</div>
+      {items.length > 0 ? (
+        <div style={styles.buttonGrid}>
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              style={styles.classButton}
+            >
+              <div style={styles.classButtonTitle}>{item.name}</div>
+              <div style={styles.classButtonMeta}>{item.studentCount} murid</div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={styles.summaryText}>{emptyText}</div>
+      )}
+    </div>
+  )
+}
+
+function StatCard({ title, value }) {
+  return (
+    <div style={styles.statCard}>
+      <div style={styles.statTitle}>{title}</div>
+      <div style={styles.statValue}>{value}</div>
+    </div>
+  )
+}
+
+const styles = {
+  page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
+  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
+  schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
+  nav: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
+  navButtonPrimary: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  navButton: { background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },
+  darkButton: { background: '#111827', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
+  hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
+  heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
+  heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
+  heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
+  statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
+  statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
+  statValue: { fontSize: '28px', fontWeight: 800 },
+  dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
+  card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
+  cardHeader: { marginBottom: '14px' },
+  cardTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
+  helperText: { color: '#64748b', lineHeight: 1.6, margin: 0 },
+  helperMetaText: { color: '#64748b', fontSize: '14px' },
+  sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
+  quickActionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' },
+  actionCard: { border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: '0.2s ease', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
+  actionToneBlue: { background: '#eff6ff', borderColor: '#bfdbfe', color: '#0f172a' },
+  actionToneEmerald: { background: '#ecfdf5', borderColor: '#a7f3d0', color: '#0f172a' },
+  actionToneAmber: { background: '#fffbeb', borderColor: '#fcd34d', color: '#0f172a' },
+  actionToneRose: { background: '#fff1f2', borderColor: '#fecdd3', color: '#0f172a' },
+  actionToneDisabled: { background: '#f1f5f9', borderColor: '#e2e8f0', color: '#94a3b8' },
+  actionCardDisabled: { cursor: 'not-allowed' },
+  actionCardInner: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' },
+  actionCardTitle: { fontWeight: 700, marginBottom: '6px' },
+  actionCardDescription: { color: '#475569', fontSize: '14px', lineHeight: 1.6 },
+  actionCardHint: { marginTop: '12px', fontSize: '12px', fontWeight: 600, color: '#64748b' },
+  summaryStack: { display: 'grid', gap: '12px' },
+  summaryBlock: { background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px' },
+  summaryBlockTitle: { fontWeight: 700, color: '#0f172a', marginBottom: '8px' },
+  summaryText: { color: '#475569', fontSize: '14px', lineHeight: 1.7 },
+  buttonGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' },
+  summaryButton: { minHeight: '48px', borderRadius: '12px', border: '1px solid #dbe4ee', background: '#ffffff', padding: '10px 12px', textAlign: 'left', fontSize: '14px', fontWeight: 600, color: '#334155', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)', cursor: 'default' },
+  classButton: { minHeight: '64px', borderRadius: '12px', border: '1px solid #dbe4ee', background: '#ffffff', padding: '10px 12px', textAlign: 'left', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)', cursor: 'default' },
+  classButtonTitle: { fontSize: '14px', fontWeight: 600, color: '#334155' },
+  classButtonMeta: { marginTop: '6px', fontSize: '12px', color: '#64748b' },
 }
 
 export default DashboardPage
