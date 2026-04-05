@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+const ChevronLeftIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+)
+
 const TINGKATAN_ORDER = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -356,10 +362,10 @@ export default function StudentSubjectTrendPage() {
               <h1 className="text-3xl font-bold text-slate-900">Trend Subjek Murid</h1>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => navigate('/analysis/class')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Kelas
               </button>
@@ -374,25 +380,26 @@ export default function StudentSubjectTrendPage() {
                     },
                   })
                 }
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Individu
               </button>
 
               <button
                 onClick={() => navigate('/dashboard')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
               >
-                Kembali Dashboard
+                <ChevronLeftIcon />
+                <span>Dashboard</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">Filter Trend</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Filter Trend</h2>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-4">
             <select
               value={selectedTingkatan}
               onChange={(e) => setSelectedTingkatan(e.target.value)}
@@ -448,24 +455,24 @@ export default function StudentSubjectTrendPage() {
         </div>
 
         {selectedStudent && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">Maklumat Murid</h2>
-            <div className="grid gap-4 text-sm text-slate-700 md:grid-cols-4">
-              <div>
-                <div className="text-slate-500">Nama</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.full_name}</div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Maklumat Murid</h2>
+          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 md:p-5">
+                <div className="text-sm text-blue-600 font-medium">Nama</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-blue-900">{selectedStudent.full_name}</div>
               </div>
-              <div>
-                <div className="text-slate-500">No IC</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.ic_number}</div>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 md:p-5">
+                <div className="text-sm text-emerald-600 font-medium">No IC</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-emerald-900">{selectedStudent.ic_number}</div>
               </div>
-              <div>
-                <div className="text-slate-500">Tingkatan</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.tingkatan}</div>
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-4 md:p-5">
+                <div className="text-sm text-purple-600 font-medium">Tingkatan</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-purple-900">{selectedStudent.tingkatan}</div>
               </div>
-              <div>
-                <div className="text-slate-500">Subjek</div>
-                <div className="font-semibold text-slate-900">{selectedSubject?.subject_name || '-'}</div>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 md:p-5 md:col-span-2">
+                <div className="text-sm text-amber-600 font-medium">Subjek</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">{selectedSubject?.subject_name || '-'}</div>
               </div>
             </div>
           </div>
@@ -473,9 +480,9 @@ export default function StudentSubjectTrendPage() {
 
         {selectedStudent && selectedSubjectId ? (
           <div className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-slate-900">Graf Prestasi Ikut Peperiksaan</h2>
+                <h2 className="text-lg md:text-xl font-semibold text-slate-900">Graf Prestasi</h2>
                 <div className="text-sm text-slate-500">
                   Jumlah peperiksaan: <strong>{trendRows.length}</strong>
                 </div>
@@ -484,31 +491,31 @@ export default function StudentSubjectTrendPage() {
               <TrendPerformanceChart rows={chartRows} />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-slate-900">Trend Prestasi Ikut Peperiksaan</h2>
+                <h2 className="text-lg md:text-xl font-semibold text-slate-900">Trend Prestasi</h2>
                 <div className="text-sm text-slate-500">
                   Jumlah peperiksaan: <strong>{trendRows.length}</strong>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+              <div className="overflow-x-auto -mx-4 md:mx-0">
+                <table className="min-w-full border-collapse text-xs md:text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                      <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">
                         Bil
                       </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                      <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">
                         Peperiksaan
                       </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                      <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">
                         Markah
                       </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                      <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">
                         Gred
                       </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                      <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">
                         GP
                       </th>
                     </tr>
@@ -516,11 +523,11 @@ export default function StudentSubjectTrendPage() {
                   <tbody>
                     {trendRows.map((row, index) => (
                       <tr key={row.examKey} className="border-b border-slate-100">
-                        <td className="px-4 py-3 text-sm">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-800">{row.examLabel}</td>
-                        <td className="px-4 py-3 text-sm">{row.mark ?? '-'}</td>
-                        <td className="px-4 py-3 text-sm">{row.grade_name ?? '-'}</td>
-                        <td className="px-4 py-3 text-sm">{row.grade_point ?? '-'}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{index + 1}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium text-slate-800">{row.examLabel}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.mark ?? '-'}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.grade_name ?? '-'}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.grade_point ?? '-'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -529,8 +536,8 @@ export default function StudentSubjectTrendPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-slate-500">
-            Sila pilih murid dan subjek untuk melihat trend peperiksaan.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 md:p-6 text-slate-500 text-sm">
+            Sila pilih murid dan subjek untuk melihat trend.
           </div>
         )}
       </div>
@@ -573,11 +580,11 @@ function TrendPerformanceChart({ rows }) {
     .join(' ')
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto">
+    <div className="space-y-4 w-full">
+      <div className="md:overflow-x-auto -mx-4 md:mx-0 scrollbar-hide">
         <svg
           viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          className="min-w-[720px]"
+          className="w-full h-auto md:min-w-[720px] md:w-auto md:max-h-96"
           role="img"
           aria-label="Graf prestasi murid ikut peperiksaan"
         >

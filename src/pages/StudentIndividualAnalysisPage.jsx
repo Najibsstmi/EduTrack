@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+const ChevronLeftIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+)
+
 const TINGKATAN_ORDER = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -39,6 +45,157 @@ const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
   return point === null || point === undefined || point === ''
     ? null
     : Number(point)
+}
+
+const getBarColors = (index, total) => {
+  const colors = [
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+    '#06b6d4', '#f97316', '#6366f1', '#84cc16', '#0891b2', '#d946ef',
+  ]
+  return colors[index % colors.length]
+}
+
+const BarChart = ({ rows, height = 300 }) => {
+  if (!rows.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
+        Tiada data untuk paparan graf.
+      </div>
+    )
+  }
+
+  const numericRows = rows
+    .map((row, index) => ({
+      ...row,
+      numericMark: Number(row.mark),
+      index,
+    }))
+    .filter((row) => row.numericMark !== null && !Number.isNaN(row.numericMark))
+
+  if (!numericRows.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-slate-500">
+        Tiada data markah untuk paparan graf.
+      </div>
+    )
+  }
+
+  const maxMark = Math.max(...numericRows.map((r) => r.numericMark), 100)
+  const chartWidth = Math.max(600, numericRows.length * 80)
+  const chartHeight = height
+  const padding = { top: 20, right: 20, bottom: 60, left: 60 }
+  const plotWidth = chartWidth - padding.left - padding.right
+  const plotHeight = chartHeight - padding.top - padding.bottom
+  const barWidth = plotWidth / numericRows.length * 0.7
+  const barSpacing = plotWidth / numericRows.length
+
+  return (
+    <div className="overflow-x-auto -mx-4 md:mx-0 mb-6">
+      <svg
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        className="w-full h-auto md:min-w-[720px]"
+        role="img"
+        aria-label="Carta bar prestasi subjek"
+      >
+        <rect
+          x="0"
+          y="0"
+          width={chartWidth}
+          height={chartHeight}
+          rx="20"
+          fill="#f8fafc"
+        />
+
+        {/* Y-axis */}
+        <line
+          x1={padding.left}
+          y1={padding.top}
+          x2={padding.left}
+          y2={chartHeight - padding.bottom}
+          stroke="#94a3b8"
+          strokeWidth="2"
+        />
+
+        {/* X-axis */}
+        <line
+          x1={padding.left}
+          y1={chartHeight - padding.bottom}
+          x2={chartWidth - padding.right}
+          y2={chartHeight - padding.bottom}
+          stroke="#94a3b8"
+          strokeWidth="2"
+        />
+
+        {/* Y-axis labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+          const value = Math.round(maxMark * ratio)
+          const y = chartHeight - padding.bottom - ratio * plotHeight
+
+          return (
+            <g key={`y-${value}`}>
+              <line
+                x1={padding.left - 5}
+                y1={y}
+                x2={padding.left}
+                y2={y}
+                stroke="#94a3b8"
+                strokeWidth="2"
+              />
+              <text
+                x={padding.left - 12}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="12"
+                fill="#64748b"
+              >
+                {value}
+              </text>
+            </g>
+          )
+        })}
+
+        {/* Bars */}
+        {numericRows.map((row) => {
+          const barX = padding.left + row.index * barSpacing + (barSpacing - barWidth) / 2
+          const barHeight = (row.numericMark / maxMark) * plotHeight
+          const barY = chartHeight - padding.bottom - barHeight
+          const color = getBarColors(row.index, numericRows.length)
+
+          return (
+            <g key={row.subject_id}>
+              <rect
+                x={barX}
+                y={barY}
+                width={barWidth}
+                height={barHeight}
+                fill={color}
+                rx="4"
+              />
+              <text
+                x={barX + barWidth / 2}
+                y={barY - 8}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="600"
+                fill="#1e293b"
+              >
+                {row.numericMark}
+              </text>
+              <text
+                x={barX + barWidth / 2}
+                y={chartHeight - padding.bottom + 20}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#475569"
+              >
+                {row.subject_name.substring(0, 15)}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
 }
 
 export default function StudentIndividualAnalysisPage() {
@@ -388,10 +545,10 @@ export default function StudentIndividualAnalysisPage() {
               </h1>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => navigate('/analysis/class')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Kelas
               </button>
@@ -406,25 +563,26 @@ export default function StudentIndividualAnalysisPage() {
                     },
                   })
                 }
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Trend
               </button>
 
               <button
                 onClick={() => navigate('/dashboard')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
               >
-                Kembali Dashboard
+                <ChevronLeftIcon />
+                <span>Dashboard</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">Filter Murid</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Filter Murid</h2>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-4">
             <select
               value={selectedTingkatan}
               onChange={(e) => setSelectedTingkatan(e.target.value)}
@@ -480,25 +638,25 @@ export default function StudentIndividualAnalysisPage() {
         </div>
 
         {selectedStudent && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">Maklumat Murid</h2>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+            <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Maklumat Murid</h2>
 
-            <div className="grid gap-4 md:grid-cols-4 text-sm text-slate-700">
-              <div>
-                <div className="text-slate-500">Nama</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.full_name}</div>
+            <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 md:p-5">
+                <div className="text-sm text-blue-600 font-medium">Nama</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-blue-900">{selectedStudent.full_name}</div>
               </div>
-              <div>
-                <div className="text-slate-500">No IC</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.ic_number}</div>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 md:p-5">
+                <div className="text-sm text-emerald-600 font-medium">No IC</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-emerald-900">{selectedStudent.ic_number}</div>
               </div>
-              <div>
-                <div className="text-slate-500">Tingkatan</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.tingkatan}</div>
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 md:p-5">
+                <div className="text-sm text-amber-600 font-medium">Tingkatan</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">{selectedStudent.tingkatan}</div>
               </div>
-              <div>
-                <div className="text-slate-500">Kelas</div>
-                <div className="font-semibold text-slate-900">{selectedStudent.class_name}</div>
+              <div className="rounded-lg bg-purple-50 border border-purple-200 p-4 md:p-5">
+                <div className="text-sm text-purple-600 font-medium">Kelas</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-purple-900">{selectedStudent.class_name}</div>
               </div>
             </div>
           </div>
@@ -525,8 +683,10 @@ export default function StudentIndividualAnalysisPage() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+              <BarChart rows={subjectAnalysisRows} height={320} />
+
+              <div className="overflow-x-auto -mx-4 md:mx-0">
+                <table className="min-w-full border-collapse text-xs md:text-sm">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
@@ -579,8 +739,8 @@ export default function StudentIndividualAnalysisPage() {
         )}
 
         {!selectedStudent || !selectedExamKey ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-slate-500">
-            Sila pilih murid dan peperiksaan untuk melihat analisis individu.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4 md:p-6 text-slate-500 text-sm">
+            Sila pilih murid dan peperiksaan untuk melihat analisis.
           </div>
         ) : null}
       </div>
@@ -589,10 +749,21 @@ export default function StudentIndividualAnalysisPage() {
 }
 
 function Card({ title, value }) {
+  const colorMap = {
+    'Bil Subjek': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600', value: 'text-blue-900' },
+    'Ada Markah': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', value: 'text-emerald-900' },
+    'Lulus': { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-600', value: 'text-green-900' },
+    'Gagal': { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', value: 'text-rose-900' },
+    'TH': { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600', value: 'text-amber-900' },
+    'GPMP Individu': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-600', value: 'text-purple-900' },
+  }
+
+  const colors = colorMap[title] || { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-600', value: 'text-slate-900' }
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-sm text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+    <div className={`rounded-lg border ${colors.bg} ${colors.border} p-4 md:p-5 shadow-sm`}>
+      <div className={`text-sm ${colors.text} font-medium`}>{title}</div>
+      <div className={`mt-2 text-2xl font-bold ${colors.value}`}>{value}</div>
     </div>
   )
 }

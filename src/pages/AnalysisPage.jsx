@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+const ChevronLeftIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+)
+
 const TINGKATAN_ORDER = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -484,37 +490,38 @@ export default function AnalysisPage() {
               <h1 className="text-3xl font-bold text-slate-900">Analisis Akademik</h1>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => navigate('/analysis/student')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Individu
               </button>
               <button
                 onClick={() => navigate('/analysis/student-subject')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 Analisis Trend
               </button>
               <button
                 onClick={() => navigate('/dashboard')}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
               >
-                Kembali Dashboard
+                <ChevronLeftIcon />
+                <span>Dashboard</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">Filter Analisis</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Filter Analisis</h2>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-3">
             <select
               value={selectedTingkatan}
               onChange={(e) => setSelectedTingkatan(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3"
+              className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
             >
               {availableTingkatan.map((item) => (
                 <option key={item} value={item}>
@@ -526,7 +533,7 @@ export default function AnalysisPage() {
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3"
+              className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
             >
               <option value="all">Semua Kelas</option>
               {availableClasses.map((item) => (
@@ -539,7 +546,7 @@ export default function AnalysisPage() {
             <select
               value={selectedSubjectId}
               onChange={(e) => setSelectedSubjectId(e.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3"
+              className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
             >
               <option value="">Pilih Subjek</option>
               {availableSubjects.map((item) => (
@@ -551,25 +558,25 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-5">
-          <Card title="Jumlah Murid" value={summaryStats.totalStudents} />
+        <div className="grid gap-3 md:gap-4 grid-cols-2 md:grid-cols-5">
+          <Card title="Murid" value={summaryStats.totalStudents} />
           <Card title="Ada Markah" value={summaryStats.totalWithScore} />
           <Card title="GPMP" value={summaryStats.gpmp ?? '-'} />
-          <Card title="Markah Tertinggi" value={summaryStats.highest ?? '-'} />
-          <Card title="Markah Purata" value={summaryStats.average ?? '-'} />
+          <Card title="Tertinggi" value={summaryStats.highest ?? '-'} />
+          <Card title="Purata" value={summaryStats.average ?? '-'} />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-            <h2 className="mb-4 text-xl font-semibold text-slate-900">Ringkasan</h2>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm lg:col-span-2">
+            <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Ringkasan</h2>
 
             {summaryTableRows.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
                 Tiada data ringkasan untuk paparan ini.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm">
+              <div className="overflow-x-auto -mx-4 md:mx-0">
+                <table className="min-w-full border-collapse text-xs md:text-sm">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b px-3 py-3 text-left font-semibold">Jenis Peperiksaan</th>
@@ -614,27 +621,27 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-slate-900">Jadual Analisis Murid</h2>
-            <div className="text-sm text-slate-500">
-              Jumlah rekod: <strong>{mergedRows.length}</strong>
+            <h2 className="text-lg md:text-xl font-semibold text-slate-900">Jadual Murid</h2>
+            <div className="text-xs md:text-sm text-slate-500">
+              Rekod: <strong>{mergedRows.length}</strong>
             </div>
           </div>
 
           {!selectedSubjectId ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-              Sila pilih subjek dan peperiksaan dahulu.
+            <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500 text-sm">
+              Sila pilih subjek dahulu.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+            <div className="overflow-x-auto -mx-4 md:mx-0">
+              <table className="min-w-full border-collapse text-xs md:text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">Bil</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">IC</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">Nama</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">Kelas</th>
+                    <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">Bil</th>
+                    <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">IC</th>
+                    <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">Nama</th>
+                    <th className="border-b border-slate-200 px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-semibold text-slate-700">Kelas</th>
                     {analysisColumns.map((exam) => (
                       <React.Fragment key={exam.key}>
                         <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">{exam.name || exam.key}</th>
@@ -646,18 +653,18 @@ export default function AnalysisPage() {
                 <tbody>
                   {mergedRows.map((row, index) => (
                     <tr key={row.enrollment_id} className="border-b border-slate-100">
-                      <td className="px-4 py-3 text-sm">{index + 1}</td>
-                      <td className="px-4 py-3 text-sm">{row.ic_number}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{row.full_name}</td>
-                      <td className="px-4 py-3 text-sm">{row.class_name}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{index + 1}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.ic_number}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium text-slate-800">{row.full_name}</td>
+                      <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.class_name}</td>
                       {analysisColumns.map((exam) => {
                         const key = String(exam.key || '').toUpperCase()
                         return (
                           <React.Fragment key={key}>
-                            <td className="px-4 py-3 text-sm">
+                            <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {row.analysis?.[key]?.mark ?? '-'}
                             </td>
-                            <td className="px-4 py-3 text-sm">
+                            <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">
                               {row.analysis?.[key]?.grade_name ?? '-'}
                             </td>
                           </React.Fragment>
@@ -676,10 +683,20 @@ export default function AnalysisPage() {
 }
 
 function Card({ title, value }) {
+  const colorMap = {
+    'Murid': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600', value: 'text-blue-900' },
+    'Ada Markah': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', value: 'text-emerald-900' },
+    'GPMP': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-600', value: 'text-purple-900' },
+    'Tertinggi': { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600', value: 'text-amber-900' },
+    'Purata': { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', value: 'text-rose-900' },
+  }
+
+  const colors = colorMap[title] || { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-600', value: 'text-slate-900' }
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-sm text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+    <div className={`rounded-lg border ${colors.bg} ${colors.border} p-4 md:p-5 shadow-sm`}>
+      <div className={`text-xs md:text-sm ${colors.text} font-medium`}>{title}</div>
+      <div className={`mt-2 text-xl md:text-2xl font-bold ${colors.value}`}>{value}</div>
     </div>
   )
 }
