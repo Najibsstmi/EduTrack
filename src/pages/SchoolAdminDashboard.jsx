@@ -33,6 +33,8 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
 
   useEffect(() => {
@@ -43,10 +45,24 @@ export default function SchoolAdminDashboard() {
     const handleClickOutside = (event) => {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
         setShowSettingsMenu(false)
+        setShowMobileMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => {
+      const nextIsMobile = window.innerWidth <= 768
+      setIsMobileView(nextIsMobile)
+      if (!nextIsMobile) {
+        setShowMobileMenu(false)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const checkAccessAndFetch = async () => {
@@ -407,43 +423,67 @@ export default function SchoolAdminDashboard() {
           </div>
         </div>
 
-        <nav style={styles.nav}>
-          <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
-            Input Markah
-          </button>
-          <button style={styles.navButton} onClick={() => navigate('/students')}>
-            Input Murid
-          </button>
-
-          <div style={styles.menuWrap} ref={settingsMenuRef}>
-            <button style={styles.navButton} onClick={() => setShowSettingsMenu((prev) => !prev)}>
-              Tetapan ▾
+        {isMobileView ? (
+          <div style={styles.mobileMenuWrap} ref={settingsMenuRef}>
+            <button
+              style={styles.navButton}
+              onClick={() => setShowMobileMenu((prev) => !prev)}
+            >
+              {showMobileMenu ? 'Tutup ✕' : 'Menu ☰'}
             </button>
-            {showSettingsMenu && (
-              <div style={styles.menuDropdown}>
-                <button style={styles.menuItem} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
-                <button style={styles.menuItem} onClick={() => navigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
-                <button style={styles.menuItem} onClick={() => navigate('/school-setup/grades')}>Tetapan Grade</button>
-                <button style={styles.menuItem} onClick={() => navigate('/school-setup/subjects')}>Tetapan Subjek</button>
-                <button style={styles.menuItem} onClick={() => navigate('/classes')}>Tetapan Kelas</button>
-                <button style={styles.menuItem} onClick={() => navigate('/students')}>Tetapan Murid</button>
+            {showMobileMenu && (
+              <div style={styles.mobileMenuPanel}>
+                <div style={styles.mobileMenuGrid}>
+                  <button style={styles.mobileMenuItem} onClick={() => navigate('/scores')}>Input Markah</button>
+                  <button style={styles.mobileMenuItem} onClick={() => navigate('/students')}>Input Murid</button>
+                  <button style={styles.mobileMenuItem} onClick={() => navigate('/analysis')}>Analisis</button>
+                  <button style={styles.mobileMenuItem} onClick={() => navigate('/school-setup')}>Tetapan</button>
+                  <button style={styles.mobileMenuItemDangerFull} onClick={handleLogout}>Logout</button>
+                </div>
               </div>
             )}
           </div>
+        ) : (
+          <>
+            <nav style={styles.nav}>
+              <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
+                Input Markah
+              </button>
+              <button style={styles.navButton} onClick={() => navigate('/students')}>
+                Input Murid
+              </button>
 
-          <button style={styles.navButton} onClick={() => navigate('/analysis')}>
-            Analisis
-          </button>
-        </nav>
+              <div style={styles.menuWrap} ref={settingsMenuRef}>
+                <button style={styles.navButton} onClick={() => setShowSettingsMenu((prev) => !prev)}>
+                  Tetapan ▾
+                </button>
+                {showSettingsMenu && (
+                  <div style={styles.menuDropdown}>
+                    <button style={styles.menuItem} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
+                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
+                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/grades')}>Tetapan Grade</button>
+                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/subjects')}>Tetapan Subjek</button>
+                    <button style={styles.menuItem} onClick={() => navigate('/classes')}>Tetapan Kelas</button>
+                    <button style={styles.menuItem} onClick={() => navigate('/students')}>Tetapan Murid</button>
+                  </div>
+                )}
+              </div>
 
-        <div style={styles.topbarRight}>
-          <button style={styles.ghostButton} onClick={refreshData}>
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-          <button style={styles.darkButton} onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
+              <button style={styles.navButton} onClick={() => navigate('/analysis')}>
+                Analisis
+              </button>
+            </nav>
+
+            <div style={styles.topbarRight}>
+              <button style={styles.ghostButton} onClick={refreshData}>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button style={styles.darkButton} onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
       <main style={styles.container}>
@@ -654,6 +694,12 @@ const styles = {
   menuWrap: { position: 'relative' },
   menuDropdown: { position: 'absolute', top: '48px', left: 0, width: '240px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', padding: '8px', display: 'grid', gap: '6px' },
   menuItem: { background: '#ffffff', color: '#0f172a', border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
+  mobileMenuWrap: { width: '100%', display: 'grid', gap: '10px' },
+  mobileMenuPanel: { width: '100%', background: '#ffffff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: '14px', padding: '10px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)' },
+  mobileMenuGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' },
+  mobileMenuItem: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 },
+  mobileMenuItemDanger: { background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
+  mobileMenuItemDangerFull: { gridColumn: '1 / -1', background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
   topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },
   ghostButton: { background: '#ffffff', color: '#0f172a', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
   darkButton: { background: '#111827', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
@@ -662,7 +708,7 @@ const styles = {
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
   heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
   heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' },
   statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
