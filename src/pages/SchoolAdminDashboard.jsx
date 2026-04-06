@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import {
   getExamStructureForGrade,
@@ -35,6 +35,7 @@ const extractGradeNumber = (value) => {
 
 export default function SchoolAdminDashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
   const settingsMenuRef = useRef(null)
 
   const [loading, setLoading] = useState(true)
@@ -50,8 +51,6 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
-  const [showMobileMenu, setShowMobileMenu] = useState(false)
-  const [showMobileSettingsMenu, setShowMobileSettingsMenu] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
   const [completionLoading, setCompletionLoading] = useState(false)
@@ -74,8 +73,6 @@ export default function SchoolAdminDashboard() {
     const handleClickOutside = (event) => {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
         setShowSettingsMenu(false)
-        setShowMobileMenu(false)
-        setShowMobileSettingsMenu(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -86,10 +83,6 @@ export default function SchoolAdminDashboard() {
     const handleResize = () => {
       const nextIsMobile = window.innerWidth <= 768
       setIsMobileView(nextIsMobile)
-      if (!nextIsMobile) {
-        setShowMobileMenu(false)
-        setShowMobileSettingsMenu(false)
-      }
     }
 
     window.addEventListener('resize', handleResize)
@@ -644,8 +637,6 @@ export default function SchoolAdminDashboard() {
   }
 
   const handleMobileNavigate = (path) => {
-    setShowMobileMenu(false)
-    setShowMobileSettingsMenu(false)
     navigate(path)
   }
 
@@ -725,6 +716,24 @@ export default function SchoolAdminDashboard() {
     }))
   }
 
+  const isMobileNavActive = (path) => {
+    if (path === '/school-setup') {
+      return location.pathname === '/school-setup'
+    }
+
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
+  }
+
+  const getMobileNavButtonStyle = (path, isLogout = false) => {
+    if (isLogout) {
+      return styles.mobileLogoutButton
+    }
+
+    return isMobileNavActive(path)
+      ? { ...styles.mobileMenuItem, ...styles.mobileMenuItemActive }
+      : styles.mobileMenuItem
+  }
+
   if (loading) {
     return (
       <div style={styles.loadingWrap}>
@@ -745,70 +754,39 @@ export default function SchoolAdminDashboard() {
         </div>
 
         {isMobileView ? (
-          <div style={styles.mobileMenuWrapper} ref={settingsMenuRef}>
-            <button
-              onClick={() => {
-                setShowMobileMenu((prev) => {
-                  const nextValue = !prev
-                  if (!nextValue) setShowMobileSettingsMenu(false)
-                  return nextValue
-                })
-              }}
-              style={styles.mobileMenuToggle}
-            >
-              {showMobileMenu ? '✕ Tutup' : '☰ Menu'}
-            </button>
-
-            {showMobileMenu && (
-              <div style={styles.mobileMenuPanel}>
-                <button onClick={() => handleMobileNavigate('/scores')} style={styles.mobileMenuItem}>
-                  Input Markah
-                </button>
-
-                <button onClick={() => handleMobileNavigate('/students')} style={styles.mobileMenuItem}>
-                  Input Murid
-                </button>
-
-                <button onClick={() => handleMobileNavigate('/analysis')} style={styles.mobileMenuItem}>
-                  Analisis
-                </button>
-
-                <button onClick={() => handleMobileNavigate('/targets')} style={styles.mobileMenuItem}>
-                  Sasaran Akademik
-                </button>
-
-                <button
-                  onClick={() => setShowMobileSettingsMenu((prev) => !prev)}
-                  style={styles.mobileMenuItem}
-                >
-                  {showMobileSettingsMenu ? 'Tutup Tetapan ▲' : 'Tetapan ▼'}
-                </button>
-
-                {showMobileSettingsMenu && (
-                  <div style={styles.mobileSubmenu}>
-                    <button onClick={() => handleMobileNavigate('/school-setup')} style={styles.mobileSubmenuItem}>
-                      Struktur Akademik
-                    </button>
-                    <button onClick={() => handleMobileNavigate('/school-setup/exams')} style={styles.mobileSubmenuItem}>
-                      Tetapan Peperiksaan
-                    </button>
-                    <button onClick={() => handleMobileNavigate('/school-setup/grades')} style={styles.mobileSubmenuItem}>
-                      Tetapan Grade
-                    </button>
-                    <button onClick={() => handleMobileNavigate('/school-setup/subjects')} style={styles.mobileSubmenuItem}>
-                      Tetapan Subjek
-                    </button>
-                    <button onClick={() => handleMobileNavigate('/classes')} style={styles.mobileSubmenuItem}>
-                      Tetapan Kelas
-                    </button>
-                  </div>
-                )}
-
-                <button onClick={handleLogout} style={styles.mobileLogoutButton}>
-                  Logout
-                </button>
-              </div>
-            )}
+          <div style={styles.mobileMenuWrapper}>
+            <div style={styles.mobileMenuPanel}>
+              <button onClick={() => handleMobileNavigate('/scores')} style={getMobileNavButtonStyle('/scores')}>
+                Input Markah
+              </button>
+              <button onClick={() => handleMobileNavigate('/students')} style={getMobileNavButtonStyle('/students')}>
+                Input Murid
+              </button>
+              <button onClick={() => handleMobileNavigate('/analysis')} style={getMobileNavButtonStyle('/analysis')}>
+                Analisis
+              </button>
+              <button onClick={() => handleMobileNavigate('/targets')} style={getMobileNavButtonStyle('/targets')}>
+                Sasaran Akademik
+              </button>
+              <button onClick={() => handleMobileNavigate('/school-setup')} style={getMobileNavButtonStyle('/school-setup')}>
+                Struktur Akademik
+              </button>
+              <button onClick={() => handleMobileNavigate('/school-setup/exams')} style={getMobileNavButtonStyle('/school-setup/exams')}>
+                Peperiksaan
+              </button>
+              <button onClick={() => handleMobileNavigate('/school-setup/grades')} style={getMobileNavButtonStyle('/school-setup/grades')}>
+                Grade
+              </button>
+              <button onClick={() => handleMobileNavigate('/school-setup/subjects')} style={getMobileNavButtonStyle('/school-setup/subjects')}>
+                Subjek
+              </button>
+              <button onClick={() => handleMobileNavigate('/classes')} style={getMobileNavButtonStyle('/classes')}>
+                Kelas
+              </button>
+              <button onClick={handleLogout} style={getMobileNavButtonStyle('', true)}>
+                Logout
+              </button>
+            </div>
           </div>
         ) : (
           <div style={styles.topActions}>
@@ -1265,66 +1243,47 @@ const styles = {
     color: '#0f172a',
   },
   mobileMenuWrapper: {
-    position: 'relative',
+    width: '100%',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
   },
-  mobileMenuToggle: {
-    padding: '12px 16px',
-    borderRadius: 12,
+  mobileMenuPanel: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 'max-content',
+    marginTop: 10,
+    paddingBottom: 4,
+  },
+  mobileMenuItem: {
+    whiteSpace: 'nowrap',
+    textAlign: 'center',
+    padding: '9px 12px',
+    borderRadius: 10,
     border: '1px solid rgba(255,255,255,0.15)',
     background: '#111827',
     color: '#fff',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontSize: 15,
-  },
-  mobileMenuPanel: {
-    marginTop: 10,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    background: '#fff',
-    padding: 12,
-    borderRadius: 16,
-    border: '1px solid #e5e7eb',
-  },
-  mobileMenuItem: {
-    width: '100%',
-    textAlign: 'left',
-    padding: '12px 14px',
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    background: '#fff',
     cursor: 'pointer',
     fontWeight: 700,
-    color: '#0f172a',
+    fontSize: 13,
   },
-  mobileSubmenu: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    paddingLeft: 8,
-  },
-  mobileSubmenuItem: {
-    width: '100%',
-    textAlign: 'left',
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: '1px solid #e5e7eb',
-    background: '#f8fafc',
-    cursor: 'pointer',
-    fontWeight: 600,
-    color: '#334155',
+  mobileMenuItemActive: {
+    background: '#2563eb',
+    border: '1px solid #60a5fa',
+    color: '#ffffff',
+    boxShadow: '0 8px 18px rgba(37, 99, 235, 0.28)',
   },
   mobileLogoutButton: {
-    width: '100%',
-    textAlign: 'left',
-    padding: '12px 14px',
-    borderRadius: 12,
-    border: '1px solid #fecaca',
-    background: '#fff',
-    color: '#b91c1c',
+    whiteSpace: 'nowrap',
+    textAlign: 'center',
+    padding: '9px 12px',
+    borderRadius: 10,
+    border: '1px solid rgba(248,113,113,0.45)',
+    background: '#7f1d1d',
+    color: '#fff',
     cursor: 'pointer',
     fontWeight: 700,
+    fontSize: 13,
   },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
