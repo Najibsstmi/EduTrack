@@ -7,6 +7,7 @@ import {
 } from '../lib/examConfig'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
+const MOBILE_BREAKPOINT = 960
 const COMPLETION_GRADE_GROUPS = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -51,7 +52,7 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
-  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
+  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= MOBILE_BREAKPOINT)
   const [actionDrafts, setActionDrafts] = useState({})
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
@@ -81,7 +82,7 @@ export default function SchoolAdminDashboard() {
 
   useEffect(() => {
     const handleResize = () => {
-      const nextIsMobile = window.innerWidth <= 768
+      const nextIsMobile = window.innerWidth <= MOBILE_BREAKPOINT
       setIsMobileView(nextIsMobile)
     }
 
@@ -744,8 +745,8 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.topbar}>
-        <div>
+      <header style={{ ...styles.topbar, ...(isMobileView ? styles.topbarMobile : {}) }}>
+        <div style={isMobileView ? styles.topbarBrandBlock : undefined}>
           <div style={styles.brand}>EduTrack</div>
           <div style={styles.schoolMeta}>
             {schoolInfo?.school_name || '-'}
@@ -754,7 +755,8 @@ export default function SchoolAdminDashboard() {
         </div>
 
         {isMobileView ? (
-          <div style={styles.mobileMenuWrapper}>
+          <div style={styles.mobileNavBleed}>
+            <div style={styles.mobileMenuWrapper}>
             <div style={styles.mobileMenuPanel}>
               <button onClick={() => handleMobileNavigate('/scores')} style={getMobileNavButtonStyle('/scores')}>
                 Input Markah
@@ -787,6 +789,7 @@ export default function SchoolAdminDashboard() {
                 Logout
               </button>
             </div>
+          </div>
           </div>
         ) : (
           <div style={styles.topActions}>
@@ -857,7 +860,7 @@ export default function SchoolAdminDashboard() {
         )}
       </header>
 
-      <main style={styles.container}>
+      <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
         <section style={styles.hero}>
           <h1 style={styles.heroTitle}>Dashboard Admin Sekolah</h1>
           <p style={styles.heroText}>
@@ -969,6 +972,7 @@ export default function SchoolAdminDashboard() {
                         rows.length === 0 ? (
                           <div style={styles.matrixGroupEmpty}>Tiada kelas untuk tingkatan ini.</div>
                         ) : (
+                          <div style={styles.matrixGroupTableWrap}>
                           <table style={styles.matrixTable}>
                             <thead>
                               <tr>
@@ -1027,6 +1031,7 @@ export default function SchoolAdminDashboard() {
                               ))}
                             </tbody>
                           </table>
+                          </div>
                         )
                       )}
                     </div>
@@ -1180,6 +1185,14 @@ const styles = {
   loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
   loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
   topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  topbarMobile: {
+    padding: '14px 16px 0 16px',
+    gap: '12px',
+    alignItems: 'stretch',
+  },
+  topbarBrandBlock: {
+    width: '100%',
+  },
   brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
   schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
   topActions: {
@@ -1246,26 +1259,35 @@ const styles = {
     width: '100%',
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none',
+  },
+  mobileNavBleed: {
+    width: 'calc(100% + 32px)',
+    marginLeft: '-16px',
+    marginRight: '-16px',
+    background: '#111827',
+    borderTop: '1px solid rgba(255,255,255,0.08)',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    padding: '0 16px',
   },
   mobileMenuPanel: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
     minWidth: 'max-content',
-    marginTop: 10,
-    paddingBottom: 4,
+    minHeight: 56,
   },
   mobileMenuItem: {
     whiteSpace: 'nowrap',
     textAlign: 'center',
-    padding: '9px 12px',
+    padding: '8px 10px',
     borderRadius: 10,
     border: '1px solid rgba(255,255,255,0.15)',
     background: '#111827',
     color: '#fff',
     cursor: 'pointer',
     fontWeight: 700,
-    fontSize: 13,
+    fontSize: 12,
   },
   mobileMenuItemActive: {
     background: '#2563eb',
@@ -1276,16 +1298,20 @@ const styles = {
   mobileLogoutButton: {
     whiteSpace: 'nowrap',
     textAlign: 'center',
-    padding: '9px 12px',
+    padding: '8px 10px',
     borderRadius: 10,
     border: '1px solid rgba(248,113,113,0.45)',
     background: '#7f1d1d',
     color: '#fff',
     cursor: 'pointer',
     fontWeight: 700,
-    fontSize: 13,
+    fontSize: 12,
   },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
+  containerMobile: {
+    padding: '14px 12px 20px 12px',
+    gap: '14px',
+  },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
   heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
@@ -1370,6 +1396,10 @@ const styles = {
     borderRadius: '16px',
     background: '#ffffff',
     overflow: 'hidden',
+  },
+  matrixGroupTableWrap: {
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch',
   },
   matrixGroupToggle: {
     width: '100%',
