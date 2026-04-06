@@ -7,6 +7,13 @@ import {
 } from '../lib/examConfig'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
+const COMPLETION_GRADE_GROUPS = [
+  'Tingkatan 1',
+  'Tingkatan 2',
+  'Tingkatan 3',
+  'Tingkatan 4',
+  'Tingkatan 5',
+]
 
 const DESIGNATION_OPTIONS = [
   'Pengetua',
@@ -52,6 +59,12 @@ export default function SchoolAdminDashboard() {
   const [completionSubjects, setCompletionSubjects] = useState([])
   const [selectedExamKey, setSelectedExamKey] = useState('TOV')
   const [examOptions, setExamOptions] = useState([])
+  const [expandedCompletionGrades, setExpandedCompletionGrades] = useState(() =>
+    COMPLETION_GRADE_GROUPS.reduce((acc, grade) => {
+      acc[grade] = grade === 'Tingkatan 1'
+      return acc
+    }, {})
+  )
 
   useEffect(() => {
     checkAccessAndFetch()
@@ -677,6 +690,41 @@ export default function SchoolAdminDashboard() {
     return options
   }
 
+  const groupedCompletionRows = useMemo(() => {
+    const groupedMap = new Map(
+      COMPLETION_GRADE_GROUPS.map((grade) => [grade, []])
+    )
+
+    completionRows.forEach((row) => {
+      const matchedGrade = COMPLETION_GRADE_GROUPS.find(
+        (grade) => normalizeText(grade) === normalizeText(row.tingkatan)
+      )
+
+      if (matchedGrade) {
+        groupedMap.get(matchedGrade).push(row)
+        return
+      }
+
+      if (!groupedMap.has(row.tingkatan)) {
+        groupedMap.set(row.tingkatan, [])
+      }
+
+      groupedMap.get(row.tingkatan).push(row)
+    })
+
+    return Array.from(groupedMap.entries()).map(([grade, rows]) => ({
+      grade,
+      rows,
+    }))
+  }, [completionRows])
+
+  const toggleCompletionGrade = (grade) => {
+    setExpandedCompletionGrades((prev) => ({
+      ...prev,
+      [grade]: !prev[grade],
+    }))
+  }
+
   if (loading) {
     return (
       <div style={styles.loadingWrap}>
@@ -921,64 +969,92 @@ export default function SchoolAdminDashboard() {
             </div>
           ) : (
             <div style={styles.matrixWrap}>
-              <table style={styles.matrixTable}>
-                <thead>
-                  <tr>
-                    <th style={{ ...styles.matrixTh, ...styles.matrixStickyCol }}>
-                      Tingkatan / Kelas
-                    </th>
-                    {completionSubjects.map((subjectName) => (
-                      <th key={subjectName} style={styles.matrixTh}>
-                        {subjectName}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {completionRows.map((row) => (
-                    <tr key={row.id}>
-                      <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
-                        {row.label}
-                      </td>
+              <div style={styles.matrixGroupList}>
+                {groupedCompletionRows.map(({ grade, rows }) => {
+                  const isExpanded = expandedCompletionGrades[grade] === true
 
-                      {completionSubjects.map((subjectName) => {
-                        const cell = row.cells?.[subjectName]
+                  return (
+                    <div key={grade} style={styles.matrixGroupCard}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCompletionGrade(grade)}
+                        style={styles.matrixGroupToggle}
+                      >
+                        <div>
+                          <div style={styles.matrixGroupTitle}>{grade}</div>
+                          <div style={styles.matrixGroupMeta}>{rows.length} kelas</div>
+                        </div>
+                        <span style={styles.matrixGroupChevron}>{isExpanded ? '▲' : '▼'}</span>
+                      </button>
 
-                        let buttonStyle = styles.matrixStatusButton
-                        if (cell?.status === 'complete') {
-                          buttonStyle = {
-                            ...styles.matrixStatusButton,
-                            ...styles.matrixStatusButtonComplete,
-                          }
-                        } else if (cell?.status === 'incomplete') {
-                          buttonStyle = {
-                            ...styles.matrixStatusButton,
-                            ...styles.matrixStatusButtonIncomplete,
-                          }
-                        } else {
-                          buttonStyle = {
-                            ...styles.matrixStatusButton,
-                            ...styles.matrixStatusButtonNA,
-                          }
-                        }
+                      {isExpanded && (
+                        rows.length === 0 ? (
+                          <div style={styles.matrixGroupEmpty}>Tiada kelas untuk tingkatan ini.</div>
+                        ) : (
+                          <table style={styles.matrixTable}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...styles.matrixTh, ...styles.matrixStickyCol }}>
+                                  Tingkatan / Kelas
+                                </th>
+                                {completionSubjects.map((subjectName) => (
+                                  <th key={`${grade}-${subjectName}`} style={styles.matrixTh}>
+                                    {subjectName}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((row) => (
+                                <tr key={row.id}>
+                                  <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
+                                    {row.label}
+                                  </td>
 
-                        return (
-                          <td key={`${row.id}-${subjectName}`} style={styles.matrixTd}>
-                            <button type="button" style={buttonStyle}>
-                              {cell?.label || '-'}
-                            </button>
-                            {cell?.status !== 'na' && (
-                              <div style={styles.matrixMeta}>
-                                {cell?.completedStudents || 0}/{cell?.totalStudents || 0} murid
-                              </div>
-                            )}
-                          </td>
+                                  {completionSubjects.map((subjectName) => {
+                                    const cell = row.cells?.[subjectName]
+
+                                    let buttonStyle = styles.matrixStatusButton
+                                    if (cell?.status === 'complete') {
+                                      buttonStyle = {
+                                        ...styles.matrixStatusButton,
+                                        ...styles.matrixStatusButtonComplete,
+                                      }
+                                    } else if (cell?.status === 'incomplete') {
+                                      buttonStyle = {
+                                        ...styles.matrixStatusButton,
+                                        ...styles.matrixStatusButtonIncomplete,
+                                      }
+                                    } else {
+                                      buttonStyle = {
+                                        ...styles.matrixStatusButton,
+                                        ...styles.matrixStatusButtonNA,
+                                      }
+                                    }
+
+                                    return (
+                                      <td key={`${row.id}-${subjectName}`} style={styles.matrixTd}>
+                                        <button type="button" style={buttonStyle}>
+                                          {cell?.label || '-'}
+                                        </button>
+                                        {cell?.status !== 'na' && (
+                                          <div style={styles.matrixMeta}>
+                                            {cell?.completedStudents || 0}/{cell?.totalStudents || 0} murid
+                                          </div>
+                                        )}
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </section>
@@ -1321,9 +1397,53 @@ const styles = {
   emptyState: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '24px', color: '#64748b' },
   matrixWrap: {
     overflowX: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+  },
+  matrixGroupList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+  },
+  matrixGroupCard: {
     border: '1px solid #e2e8f0',
     borderRadius: '16px',
     background: '#ffffff',
+    overflow: 'hidden',
+  },
+  matrixGroupToggle: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '16px 18px',
+    border: 'none',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    textAlign: 'left',
+    cursor: 'pointer',
+  },
+  matrixGroupTitle: {
+    fontSize: '18px',
+    fontWeight: 800,
+    color: '#0f172a',
+  },
+  matrixGroupMeta: {
+    marginTop: '4px',
+    fontSize: '13px',
+    color: '#64748b',
+  },
+  matrixGroupChevron: {
+    fontSize: '16px',
+    fontWeight: 800,
+    color: '#334155',
+  },
+  matrixGroupEmpty: {
+    padding: '16px 18px',
+    color: '#64748b',
+    fontSize: '14px',
   },
   matrixTable: {
     width: '100%',
