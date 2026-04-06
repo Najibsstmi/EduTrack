@@ -732,13 +732,13 @@ export default function StudentScoresPage() {
 
   const downloadTemplateCSV = () => {
     const sample = [
-      'nama_murid,no_ic,subjek,jenis_peperiksaan,markah',
-      'ALI BIN ABU,090123101234,Sains,TOV,45',
-      'ALI BIN ABU,090123101234,Sains,ETR,70',
-      'ALI BIN ABU,090123101234,Sains,AR1,58',
-      'SITI AISYAH,100201101111,Bahasa Melayu,TOV,60',
-      'SITI AISYAH,100201101111,Bahasa Melayu,ETR,80',
-      'SITI AISYAH,100201101111,Bahasa Melayu,AR1,72',
+      'no_ic,nama_murid,kelas,tingkatan,subjek,jenis_peperiksaan,markah',
+      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,TOV,45',
+      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,ETR,70',
+      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,AR1,58',
+      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,TOV,60',
+      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,ETR,80',
+      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,AR1,72',
     ].join('\n')
 
     const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' })
@@ -756,22 +756,28 @@ export default function StudentScoresPage() {
 
   const downloadBulkTemplate = () => {
     const headers = [
-      'tingkatan',
-      'kelas',
       'no_ic',
       'nama_murid',
+      'kelas',
+      'tingkatan',
       'subjek',
       'jenis_peperiksaan',
       'markah',
     ]
 
     const sampleRows = [
-      ['Tingkatan 3', 'BANGSAWAN', '090101011234', 'ALI BIN AHMAD', 'Sains', 'TOV', '54'],
-      ['Tingkatan 3', 'BONEKA', '090101011235', 'SITI BINTI ALI', 'Sains', 'TOV', '67'],
-      ['Tingkatan 2', 'INANG', '100202021111', 'ABU BIN BAKAR', 'Sains', 'TOV', '71'],
-      ['Tingkatan 1', 'JAZZ', '110303031234', 'AHMAD BIN SALIM', 'Matematik', 'AR1', '80'],
-      ['Tingkatan 5', 'SENIMAN', '080404041234', 'NURUL AIN', 'Sejarah', 'ETR', '76'],
+      ['090101011234', 'ALI BIN AHMAD', 'BANGSAWAN', 'Tingkatan 3', 'Sains', 'TOV', '54'],
+      ['090101011235', 'SITI BINTI ALI', 'BONEKA', 'Tingkatan 3', 'Sains', 'TOV', '67'],
+      ['100202021111', 'ABU BIN BAKAR', 'INANG', 'Tingkatan 2', 'Sains', 'TOV', '71'],
+      ['110303031234', 'AHMAD BIN SALIM', 'JAZZ', 'Tingkatan 1', 'Matematik', 'AR1', '80'],
+      ['080404041234', 'NURUL AIN', 'SENIMAN', 'Tingkatan 5', 'Sejarah', 'ETR', '76'],
     ]
+
+    sampleRows.sort((a, b) => {
+      if (a[3] !== b[3]) return a[3].localeCompare(b[3])
+      if (a[2] !== b[2]) return a[2].localeCompare(b[2])
+      return a[1].localeCompare(b[1])
+    })
 
     const csvContent = [headers, ...sampleRows]
       .map((row) => row.join(','))

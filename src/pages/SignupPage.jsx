@@ -162,18 +162,54 @@ function SignupPage() {
 
     const user = authData.user
 
-    const { error: profileError } = await supabase
+    const { data: existingProfile, error: existingProfileError } = await supabase
       .from('profiles')
-      .insert({
-        id: user.id,
-        full_name: trimmedFullName,
-        designation: trimmedDesignation,
-        email,
-        school_id: schoolId,
-        role: 'teacher',
-        is_school_admin: false,
-        approval_status: 'pending',
-      })
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (existingProfileError) {
+      alert(existingProfileError.message)
+      setLoading(false)
+      return
+    }
+
+    let profileError = null
+
+    if (existingProfile?.id) {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: trimmedFullName,
+          designation: trimmedDesignation,
+          email,
+          school_id: schoolId,
+          role: 'teacher',
+          is_school_admin: false,
+          approval_status: 'pending',
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+
+      profileError = error
+    } else {
+      const { error } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          full_name: trimmedFullName,
+          designation: trimmedDesignation,
+          email,
+          school_id: schoolId,
+          role: 'teacher',
+          is_school_admin: false,
+          approval_status: 'pending',
+          is_active: true,
+        })
+
+      profileError = error
+    }
 
     if (profileError) {
       alert(profileError.message)
