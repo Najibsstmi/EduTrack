@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
@@ -334,6 +334,8 @@ const generateOtrRows = ({
 
 export default function StudentScoresPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const firstIncompleteRef = useRef(null)
 
   const [profile, setProfile] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
@@ -367,6 +369,10 @@ export default function StudentScoresPage() {
   const dashboardPath = getDashboardPath(profile)
   const isSchoolAdmin =
     profile?.role === 'school_admin' || profile?.is_school_admin === true
+  const prefillClassId = searchParams.get('class_id') || ''
+  const prefillSubjectName = searchParams.get('subject_name') || ''
+  const prefillExamKey = searchParams.get('exam_key') || ''
+  const shouldScrollToIncomplete = searchParams.get('scroll_to') === 'incomplete'
 
   useEffect(() => {
     init()
@@ -482,6 +488,15 @@ export default function StudentScoresPage() {
   }, [setupConfig, selectedGradeLabel])
 
   useEffect(() => {
+    if (!prefillClassId || !classes.length) return
+
+    const hasClass = classes.some((item) => String(item.id) === String(prefillClassId))
+    if (hasClass && String(selectedClass) !== String(prefillClassId)) {
+      setSelectedClass(prefillClassId)
+    }
+  }, [prefillClassId, classes, selectedClass])
+
+  useEffect(() => {
     if (!selectedExam) return
 
     const examStillValid = uniqueExamOptions.some(
@@ -492,6 +507,19 @@ export default function StudentScoresPage() {
       setSelectedExam('')
     }
   }, [uniqueExamOptions, selectedExam])
+
+  useEffect(() => {
+    if (!prefillExamKey || !uniqueExamOptions.length) return
+
+    const normalizedPrefillExamKey = String(prefillExamKey).toUpperCase()
+    const exists = uniqueExamOptions.some(
+      (item) => String(item.key || '').toUpperCase() === normalizedPrefillExamKey
+    )
+
+    if (exists && String(selectedExam).toUpperCase() !== normalizedPrefillExamKey) {
+      setSelectedExam(normalizedPrefillExamKey)
+    }
+  }, [prefillExamKey, uniqueExamOptions, selectedExam])
 
   const sortedStudents = useMemo(() => {
     const genderRank = (gender) => {
@@ -545,6 +573,47 @@ export default function StudentScoresPage() {
       setSelectedSubject('')
     }
   }, [uniqueSubjects, selectedSubject])
+
+  useEffect(() => {
+    if (!prefillSubjectName || !selectedClassData || !subjects.length) return
+
+    const matchedSubject = subjects.find(
+      (item) =>
+        normalizeCompareText(item.subject_name) === normalizeCompareText(prefillSubjectName) &&
+        normalizeGradeLabel(item.tingkatan) === normalizeGradeLabel(selectedClassData.tingkatan)
+    )
+
+    if (matchedSubject && String(selectedSubject) !== String(matchedSubject.id)) {
+      setSelectedSubject(matchedSubject.id)
+    }
+  }, [prefillSubjectName, selectedClassData, subjects, selectedSubject])
+
+  const incompleteStudentIds = useMemo(() => {
+    if (!students.length || !selectedSubject || !selectedExam) return []
+
+    return students
+      .filter((student) => {
+        const foundScore = scores[student.student_id]
+        const mark = foundScore?.mark
+
+        return mark === '' || mark === null || mark === undefined
+      })
+      .map((student) => student.enrollment_id)
+  }, [students, scores, selectedSubject, selectedExam])
+
+  useEffect(() => {
+    if (!shouldScrollToIncomplete) return
+    if (!firstIncompleteRef.current) return
+
+    const timer = setTimeout(() => {
+      firstIncompleteRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [shouldScrollToIncomplete, incompleteStudentIds, students, scores])
 
   const init = async () => {
     const {
@@ -1928,10 +1997,36 @@ export default function StudentScoresPage() {
               </thead>
 
               <tbody>
-                {sortedStudents.map((student, index) => (
-                  <tr key={student.student_id} className="border-b">
+                {sortedStudents.map((student, index) => {
+                  const isIncomplete = incompleteStudentIds.includes(student.enrollment_id)
+
+                  return (
+                  <tr
+                    key={student.student_id}
+                    className="border-b"
+                    ref={
+                      shouldScrollToIncomplete &&
+                      incompleteStudentIds.length > 0 &&
+                      student.enrollment_id === incompleteStudentIds[0]
+                        ? firstIncompleteRef
+                        : null
+                    }
+                    style={{ background: isIncomplete ? '#fef2f2' : '#ffffff' }}
+                  >
                     <td className="px-3 py-3 text-slate-700">{index + 1}</td>
-                    <td className="px-3 py-3 text-slate-900">{student.full_name}</td>
+                    <td className="px-3 py-3 text-slate-900">
+                      <div className="flex items-center gap-2">
+                        <span>{student.full_name}</span>
+                        {isIncomplete && (
+                          <span
+                            title="Belum isi"
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700"
+                          >
+                            !
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
 
                     <td className="px-3 py-3">
@@ -1945,7 +2040,7 @@ export default function StudentScoresPage() {
                       />
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
