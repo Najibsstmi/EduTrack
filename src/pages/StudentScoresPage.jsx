@@ -58,6 +58,176 @@ const isAllowedExamKey = (value) => {
   return false
 }
 
+const normalizeGradeLabel = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+
+const extractGradeNumber = (value) => {
+  const match = String(value || '').match(/(\d+)/)
+  return match ? Number(match[1]) : null
+}
+
+const findMatchingConfigEntry = (source, gradeLabel) => {
+  const entries = Object.entries(source || {})
+  if (!entries.length) return null
+
+  const normalizedGradeLabel = normalizeGradeLabel(gradeLabel)
+  const gradeNumber = extractGradeNumber(gradeLabel)
+
+  const exactMatch = entries.find(
+    ([label]) => normalizeGradeLabel(label) === normalizedGradeLabel
+  )
+
+  if (exactMatch) return exactMatch
+
+  if (gradeNumber !== null) {
+    const numericMatch = entries.find(
+      ([label]) => extractGradeNumber(label) === gradeNumber
+    )
+
+    if (numericMatch) return numericMatch
+  }
+
+  return null
+}
+
+const buildManualExamOptions = (structuredExams = [], arCount = 0, otrCount = 0) => {
+  let highestArIndex = 0
+  let highestOtrIndex = 0
+
+  ;(structuredExams || []).forEach((exam) => {
+    const key = String(exam?.key || '').toUpperCase()
+
+    const arMatch = key.match(/^AR(\d+)$/)
+    if (arMatch) {
+      highestArIndex = Math.max(highestArIndex, Number(arMatch[1]))
+    }
+
+    const otrMatch = key.match(/^OTR(\d+)$/)
+    if (otrMatch) {
+      highestOtrIndex = Math.max(highestOtrIndex, Number(otrMatch[1]))
+    }
+  })
+
+  const normalizedArCount = Math.max(0, Number(arCount) || 0)
+  const normalizedOtrCount = Math.max(0, Number(otrCount) || 0)
+  const stageCount = Math.max(
+    normalizedArCount,
+    normalizedOtrCount,
+    highestArIndex,
+    highestOtrIndex
+  )
+
+  const manualOptions = [
+    { key: 'TOV', name: 'TOV' },
+  ]
+
+  for (let i = 1; i <= stageCount; i++) {
+    manualOptions.push({
+      key: `AR${i}`,
+      name: `AR${i}`,
+    })
+  }
+
+  manualOptions.push({
+    key: 'ETR',
+    name: 'ETR',
+  })
+
+  return manualOptions
+}
+
+const getExamOptionsForGrade = (setupConfig, gradeLabel) => {
+  const normalizedGradeLabel = normalizeGradeLabel(gradeLabel)
+  if (!normalizedGradeLabel) return []
+
+  const examStructure = setupConfig?.exam_structure || {}
+  const arCountByGrade = setupConfig?.ar_count_by_grade || {}
+  const otrCountByGrade = setupConfig?.otr_count_by_grade || {}
+  const matchedArCountEntry = findMatchingConfigEntry(arCountByGrade, gradeLabel)
+  const matchedOtrCountEntry = findMatchingConfigEntry(otrCountByGrade, gradeLabel)
+  const arCount = Number(matchedArCountEntry?.[1] || 0)
+  const otrCount = Number(matchedOtrCountEntry?.[1] || 0)
+  const directMatch = examStructure?.[gradeLabel]
+
+  if (Array.isArray(directMatch) && directMatch.length > 0) {
+    return buildManualExamOptions(directMatch, arCount, otrCount)
+  }
+
+  const matchedEntry = findMatchingConfigEntry(examStructure, gradeLabel)
+
+  if (matchedEntry && Array.isArray(matchedEntry[1]) && matchedEntry[1].length > 0) {
+    return buildManualExamOptions(matchedEntry[1], arCount, otrCount)
+  }
+
+  return buildManualExamOptions([], arCount, otrCount)
+}
+
+const buildGeneratedExamStructure = (setupConfig) => {
+  const activeGradeLabels = setupConfig?.active_grade_labels || []
+  const arCountByGrade = setupConfig?.ar_count_by_grade || {}
+  const otrCountByGrade = setupConfig?.otr_count_by_grade || {}
+
+  return activeGradeLabels.reduce((result, label) => {
+    const matchedArCountEntry = findMatchingConfigEntry(arCountByGrade, label)
+    const matchedOtrCountEntry = findMatchingConfigEntry(otrCountByGrade, label)
+    const arCount = Number(matchedArCountEntry?.[1] || 0)
+    const otrCount = Number(matchedOtrCountEntry?.[1] || 0)
+    const stageCount = Math.max(arCount, otrCount)
+    const exams = [{ key: 'TOV', name: 'TOV' }]
+
+    for (let i = 1; i <= stageCount; i++) {
+      if (i <= otrCount) {
+        exams.push({ key: `OTR${i}`, name: `OTR${i}` })
+      }
+
+      if (i <= arCount) {
+        exams.push({ key: `AR${i}`, name: `AR${i}` })
+      }
+    }
+
+    exams.push({ key: 'ETR', name: 'ETR' })
+    result[label] = exams
+    return result
+  }, {})
+}
+
+const normalizeSetupConfigForScores = (setupConfig) => {
+  if (!setupConfig) return null
+
+  const generatedStructure = buildGeneratedExamStructure(setupConfig)
+  const existingStructure = setupConfig.exam_structure || {}
+  const normalizedStructure = { ...generatedStructure }
+
+  Object.keys(generatedStructure).forEach((label) => {
+    const existingEntry = findMatchingConfigEntry(existingStructure, label)
+    const existingExams = Array.isArray(existingEntry?.[1]) ? existingEntry[1] : []
+    const existingExamByKey = new Map(
+      existingExams.map((exam) => [String(exam?.key || '').toUpperCase(), exam])
+    )
+
+    normalizedStructure[label] = generatedStructure[label].map((exam) => {
+      const existingExam = existingExamByKey.get(String(exam.key || '').toUpperCase())
+
+      if (!existingExam) {
+        return exam
+      }
+
+      return {
+        ...exam,
+        name: existingExam.name || exam.name,
+      }
+    })
+  })
+
+  return {
+    ...setupConfig,
+    exam_structure: normalizedStructure,
+  }
+}
+
 const parseCsvLine = (line) => {
   const result = []
   let current = ''
@@ -280,23 +450,36 @@ export default function StudentScoresPage() {
     return ''
   }
 
-  const selectedClassName = useMemo(() => {
-    const selectedClassData = classes.find((c) => c.id === selectedClass)
-    if (!selectedClassData) return ''
-    return `${selectedClassData.tingkatan || ''} ${selectedClassData.class_name || ''}`.trim()
+  const selectedGradeLabel = useMemo(() => {
+    const selectedClassData = classes.find((c) => String(c.id) === String(selectedClass))
+
+    if (selectedClassData?.tingkatan) {
+      return String(selectedClassData.tingkatan).trim()
+    }
+
+    const classLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
+    return getGradeLabelFromClassName(classLabel)
   }, [classes, selectedClass])
 
-  const selectedGradeLabel = useMemo(() => {
-    return getGradeLabelFromClassName(selectedClassName)
-  }, [selectedClassName])
-
   const uniqueExamOptions = useMemo(() => {
-    const examsForSelectedGrade = setupConfig?.exam_structure?.[selectedGradeLabel] || []
+    const examsForSelectedGrade = getExamOptionsForGrade(setupConfig, selectedGradeLabel)
 
     return examsForSelectedGrade.filter(
       (exam, index, arr) => index === arr.findIndex((item) => item.key === exam.key)
     )
   }, [setupConfig, selectedGradeLabel])
+
+  useEffect(() => {
+    if (!selectedExam) return
+
+    const examStillValid = uniqueExamOptions.some(
+      (exam) => String(exam.key) === String(selectedExam)
+    )
+
+    if (!examStillValid) {
+      setSelectedExam('')
+    }
+  }, [uniqueExamOptions, selectedExam])
 
   const sortedStudents = useMemo(() => {
     const genderRank = (gender) => {
@@ -375,11 +558,19 @@ export default function StudentScoresPage() {
 
     setProfile(profileData)
 
-    const { data: setupData } = await supabase
+    const { data: setupRows, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('current_academic_year, exam_structure, otr_generation_mode, otr_percentages_default, otr_percentages_by_grade, auto_recalculate_otr_on_etr_change')
+      .select('current_academic_year, exam_structure, active_grade_labels, ar_count_by_grade, otr_count_by_grade, otr_generation_mode, otr_percentages_default, otr_percentages_by_grade, auto_recalculate_otr_on_etr_change')
       .eq('school_id', profileData.school_id)
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (setupError) {
+      console.error(setupError)
+    }
+
+    const setupData = normalizeSetupConfigForScores(setupRows?.[0] || null)
 
     setSetupConfig(setupData || null)
 
