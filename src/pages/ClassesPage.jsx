@@ -193,6 +193,34 @@ export default function ClassesPage() {
     await loadClasses(profile.school_id)
   }
 
+  const handleCompleteSetup = async () => {
+    if (!profile?.school_id) {
+      alert('Maklumat sekolah tidak ditemui.')
+      return
+    }
+
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('school_setup_configs')
+      .update({
+        setup_step: 5,
+        is_setup_complete: true,
+        updated_by: profile.id,
+      })
+      .eq('school_id', profile.school_id)
+
+    if (error) {
+      console.error(error)
+      alert(`Gagal lengkapkan tetapan kelas: ${error.message}`)
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
+    navigate('/dashboard')
+  }
+
   const filteredClasses = useMemo(() => {
     return classes.filter((item) => {
       const matchTingkatan =
@@ -214,17 +242,42 @@ export default function ClassesPage() {
   }))
 
   if (loading) {
-    return <div className="p-6">Loading Class Module...</div>
+    return <div className="p-6">Loading Tetapan Kelas...</div>
   }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">EduTrack</p>
+              <p className="text-lg font-bold text-slate-900">Tetapan Akademik Sekolah</p>
+            </div>
+            <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/school-setup/subjects')}
+                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                ← Tetapan Subjek
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
-            Class Module
+            Tetapan Sekolah — Langkah 5
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">Urus Kelas</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Tetapan Kelas</h1>
           <p className="mt-2 text-slate-600">
             Tetapkan nama kelas bagi setiap tingkatan. Admin boleh tambah atau padam kelas pada bila-bila masa.
           </p>
@@ -355,10 +408,11 @@ export default function ClassesPage() {
           <div className="mt-6 flex gap-3">
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
+              onClick={handleCompleteSetup}
+              disabled={saving}
               className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
             >
-              Kembali
+              {saving ? 'Menyimpan...' : 'Selesai'}
             </button>
           </div>
         </div>

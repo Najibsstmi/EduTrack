@@ -292,7 +292,7 @@ export default function SchoolSetupGradesPage() {
       return
     }
 
-    alert('Step 3 berjaya disimpan.')
+    alert('Tetapan grade berjaya disimpan.')
     setSaving(false)
     navigate('/school-setup/subjects')
   }
@@ -323,14 +323,14 @@ export default function SchoolSetupGradesPage() {
                 onClick={() => navigate('/school-setup/exams')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Step 2
+                ← Tetapan Peperiksaan
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/school-setup/subjects')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Step 4
+                Tetapan Subjek →
               </button>
             </div>
           </div>
@@ -338,7 +338,7 @@ export default function SchoolSetupGradesPage() {
 
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
-            School Setup Wizard — Step 3
+            Tetapan Sekolah — Langkah 3
           </div>
           <h1 className="text-3xl font-bold text-slate-900">
             Julat Gred Sekolah
@@ -466,7 +466,7 @@ export default function SchoolSetupGradesPage() {
             onClick={() => navigate('/school-setup/exams')}
             className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
           >
-            Kembali
+            ← Tetapan Peperiksaan
           </button>
         </div>
       </div>

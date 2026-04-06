@@ -278,7 +278,7 @@ export default function SchoolSetupPage() {
       return
     }
 
-    alert('Step 1 berjaya disimpan.')
+    alert('Tetapan akademik sekolah berjaya disimpan.')
     setSaving(false)
     navigate('/school-setup/exams')
   }
@@ -309,7 +309,7 @@ export default function SchoolSetupPage() {
                 onClick={() => navigate('/school-setup/exams')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Step 2
+                Tetapan Peperiksaan →
               </button>
             </div>
           </div>
@@ -317,7 +317,7 @@ export default function SchoolSetupPage() {
 
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
-            School Setup Wizard — Step 1
+            Tetapan Sekolah — Langkah 1
           </div>
           <h1 className="text-3xl font-bold text-slate-900">
             Profil Akademik Sekolah
@@ -348,19 +348,19 @@ export default function SchoolSetupPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <h3 className="mb-2 font-semibold text-slate-800">Status Setup</h3>
+              <h3 className="mb-2 font-semibold text-slate-800">Status Tetapan</h3>
               <div className="space-y-1 text-sm text-slate-700">
-                <p>{setupStatus.exams ? '✅' : '⬜'} Setup peperiksaan</p>
-                <p>{setupStatus.grades ? '✅' : '⬜'} Setup grade</p>
-                <p>{setupStatus.subjects ? '✅' : '⬜'} Setup subjek</p>
+                <p>{setupStatus.exams ? '✅' : '⬜'} Tetapan peperiksaan</p>
+                <p>{setupStatus.grades ? '✅' : '⬜'} Tetapan grade</p>
+                <p>{setupStatus.subjects ? '✅' : '⬜'} Tetapan subjek</p>
               </div>
             </div>
 
             <div>
               <h3 className="mb-2 font-semibold text-slate-800">Status Data Akademik</h3>
               <div className="space-y-1 text-sm text-slate-700">
-                <p>{setupStatus.classes ? '✅' : '⬜'} Setup kelas</p>
-                <p>{setupStatus.students ? '✅' : '⬜'} Setup murid</p>
+                <p>{setupStatus.classes ? '✅' : '⬜'} Tetapan kelas</p>
+                <p>{setupStatus.students ? '✅' : '⬜'} Input murid</p>
               </div>
             </div>
           </div>

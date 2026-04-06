@@ -236,7 +236,7 @@ export default function SchoolSetupExamsPage() {
       return
     }
 
-    alert('Step 2 berjaya disimpan.')
+    alert('Tetapan peperiksaan berjaya disimpan.')
     setSaving(false)
     navigate('/school-setup/grades')
   }
@@ -267,21 +267,21 @@ export default function SchoolSetupExamsPage() {
                 onClick={() => navigate('/school-setup')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Step 1
+                ← Tetapan Akademik Sekolah
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/school-setup/grades')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Step 3
+                Tetapan Grade →
               </button>
             </div>
           </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">School Setup Wizard - Step 2</p>
+          <p className="text-sm text-slate-500">Tetapan Sekolah - Langkah 2</p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900">
             Struktur Peperiksaan & Sasaran
           </h1>
@@ -438,7 +438,7 @@ export default function SchoolSetupExamsPage() {
             onClick={() => navigate('/school-setup')}
             className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
           >
-            Kembali
+            ← Tetapan Akademik Sekolah
           </button>
         </div>
       </div>

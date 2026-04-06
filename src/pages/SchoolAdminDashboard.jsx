@@ -354,7 +354,7 @@ export default function SchoolAdminDashboard() {
   }), [users])
 
   const setupStep = setupConfig?.setup_step || 0
-  const setupComplete = setupConfig?.is_setup_complete || setupStep >= 4
+  const setupComplete = setupConfig?.is_setup_complete || setupStep >= 5
   const classesComplete = classCount > 0
   const studentsComplete = studentCount > 0
   const academicDataComplete = classesComplete && studentsComplete
@@ -364,6 +364,7 @@ export default function SchoolAdminDashboard() {
     else if (setupStep === 1) navigate('/school-setup/exams')
     else if (setupStep === 2) navigate('/school-setup/grades')
     else if (setupStep === 3) navigate('/school-setup/subjects')
+    else if (setupStep === 4) navigate('/classes')
   }
 
   const handleMobileNavigate = (path) => {
@@ -467,7 +468,6 @@ export default function SchoolAdminDashboard() {
                       <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/grades')}>Tetapan Grade</button>
                       <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/subjects')}>Tetapan Subjek</button>
                       <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/classes')}>Tetapan Kelas</button>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/students')}>Tetapan Murid</button>
                     </div>
                   )}
                   <button style={styles.mobileMenuItemDangerFull} onClick={handleLogout}>Logout</button>
@@ -496,7 +496,6 @@ export default function SchoolAdminDashboard() {
                     <button style={styles.menuItem} onClick={() => navigate('/school-setup/grades')}>Tetapan Grade</button>
                     <button style={styles.menuItem} onClick={() => navigate('/school-setup/subjects')}>Tetapan Subjek</button>
                     <button style={styles.menuItem} onClick={() => navigate('/classes')}>Tetapan Kelas</button>
-                    <button style={styles.menuItem} onClick={() => navigate('/students')}>Tetapan Murid</button>
                   </div>
                 )}
               </div>
@@ -546,13 +545,13 @@ export default function SchoolAdminDashboard() {
               <h2 style={styles.cardTitle}>Status Setup Sistem</h2>
             </div>
             <div style={styles.statusList}>
-              <StatusRow done={setupStep >= 1 || setupComplete} label="Setup struktur akademik" />
-              <StatusRow done={setupStep >= 2 || setupComplete} label="Setup peperiksaan" />
-              <StatusRow done={setupStep >= 3 || setupComplete} label="Setup grade" />
-              <StatusRow done={setupStep >= 4 || setupComplete} label="Setup subjek" />
+              <StatusRow done={setupStep >= 1 || setupComplete} label="Tetapan akademik sekolah" />
+              <StatusRow done={setupStep >= 2 || setupComplete} label="Tetapan peperiksaan" />
+              <StatusRow done={setupStep >= 3 || setupComplete} label="Tetapan grade" />
+              <StatusRow done={setupStep >= 4 || setupComplete} label="Tetapan subjek" />
             </div>
             <p style={styles.helperText}>
-              {setupComplete ? 'Semua step telah lengkap.' : 'Sila lengkapkan step setup yang belum selesai.'}
+              {setupComplete ? 'Semua tetapan telah lengkap.' : 'Sila lengkapkan tetapan yang belum selesai.'}
             </p>
             {!setupComplete && (
               <button style={styles.primaryButton} onClick={goToNextSetupStep}>Sambung Setup</button>

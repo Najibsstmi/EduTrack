@@ -115,7 +115,7 @@ function DashboardPage() {
     ])
 
     const setupStep = setupData?.setup_step || 0
-    const setupComplete = !!setupData?.is_setup_complete || setupStep >= 4
+    const setupComplete = !!setupData?.is_setup_complete || setupStep >= 5
     const examNames = [...new Set(
       Object.values(setupData?.exam_structure || {})
         .flat()
