@@ -134,92 +134,99 @@ function SignupPage() {
     e.preventDefault()
     setLoading(true)
 
-    const trimmedFullName = fullName.trim()
-    const trimmedDesignation = designation.trim()
+    try {
+      const trimmedFullName = fullName.trim()
+      const trimmedDesignation = designation.trim()
+      const normalizedEmail = String(email || '').trim().toLowerCase()
 
-    if (!trimmedFullName || !trimmedDesignation || !email || !password || !schoolId) {
-      alert('Sila lengkapkan semua maklumat termasuk sekolah dan designation.')
-      setLoading(false)
-      return
-    }
+      if (!trimmedFullName || !trimmedDesignation || !normalizedEmail || !password || !schoolId) {
+        alert('Sila lengkapkan semua maklumat termasuk sekolah dan designation.')
+        setLoading(false)
+        return
+      }
 
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password
-    })
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+      })
 
-    if (signUpError) {
-      alert(signUpError.message)
-      setLoading(false)
-      return
-    }
+      if (signUpError) {
+        alert(signUpError.message)
+        setLoading(false)
+        return
+      }
 
-    if (!authData?.user?.id) {
-      alert('Akaun berjaya didaftar, tetapi ID pengguna tidak ditemui.')
-      setLoading(false)
-      return
-    }
+      if (!authData?.user?.id) {
+        alert('Akaun berjaya didaftar, tetapi ID pengguna tidak ditemui.')
+        setLoading(false)
+        return
+      }
 
-    const user = authData.user
+      const user = authData.user
 
-    const { data: existingProfile, error: existingProfileError } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (existingProfileError) {
-      alert(existingProfileError.message)
-      setLoading(false)
-      return
-    }
-
-    let profileError = null
-
-    if (existingProfile?.id) {
-      const { error } = await supabase
+      const { data: existingProfile, error: existingProfileError } = await supabase
         .from('profiles')
-        .update({
-          full_name: trimmedFullName,
-          designation: trimmedDesignation,
-          email,
-          school_id: schoolId,
-          role: 'teacher',
-          is_school_admin: false,
-          approval_status: 'pending',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
+        .select('id')
         .eq('id', user.id)
+        .maybeSingle()
 
-      profileError = error
-    } else {
-      const { error } = await supabase
-        .from('profiles')
-        .insert({
-          id: user.id,
-          full_name: trimmedFullName,
-          designation: trimmedDesignation,
-          email,
-          school_id: schoolId,
-          role: 'teacher',
-          is_school_admin: false,
-          approval_status: 'pending',
-          is_active: true,
-        })
+      if (existingProfileError) {
+        alert(existingProfileError.message)
+        setLoading(false)
+        return
+      }
 
-      profileError = error
-    }
+      let profileError = null
 
-    if (profileError) {
-      alert(profileError.message)
+      if (existingProfile?.id) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: trimmedFullName,
+            designation: trimmedDesignation,
+            email: normalizedEmail,
+            school_id: schoolId,
+            role: 'teacher',
+            is_school_admin: false,
+            approval_status: 'pending',
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id)
+
+        profileError = error
+      } else {
+        const { error } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            full_name: trimmedFullName,
+            designation: trimmedDesignation,
+            email: normalizedEmail,
+            school_id: schoolId,
+            role: 'teacher',
+            is_school_admin: false,
+            approval_status: 'pending',
+            is_active: true,
+          })
+
+        profileError = error
+      }
+
+      if (profileError) {
+        alert(profileError.message)
+        setLoading(false)
+        return
+      }
+
+      alert('Pendaftaran berjaya. Akaun anda sedang menunggu kelulusan admin sekolah.')
+      navigate('/pending')
+    } catch (error) {
+      console.error('Signup error:', error)
+      alert(error?.message || 'Pendaftaran gagal. Sila cuba lagi.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    navigate('/pending')
-
-    setLoading(false)
   }
 
   return (
