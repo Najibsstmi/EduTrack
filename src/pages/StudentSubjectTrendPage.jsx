@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
+import {
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,19 +144,33 @@ export default function StudentSubjectTrendPage() {
 
     const schoolId = profileData.school_id
 
-    const { data: setupData, error: setupError } = await supabase
+    const { data: setupRows, error: setupError } = await supabase
       .from('school_setup_configs')
       .select('*')
       .eq('school_id', schoolId)
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
 
     if (setupError) {
       console.error(setupError)
     }
 
-    setSetupConfig(setupData || null)
+    const currentYear = setupRows?.[0]?.current_academic_year || new Date().getFullYear()
 
-    const currentYear = setupData?.current_academic_year || new Date().getFullYear()
+    const { data: examConfigRows, error: examConfigError } = await supabase
+      .from('exam_configs')
+      .select('grade_label, exam_key, exam_name, exam_order, is_active')
+      .eq('school_id', schoolId)
+      .eq('academic_year', currentYear)
+
+    if (examConfigError) {
+      console.error(examConfigError)
+    }
+
+    setSetupConfig(
+      normalizeSetupConfigWithExamConfigs(setupRows?.[0] || null, examConfigRows || [])
+    )
 
     const [
       { data: classesData, error: classesError },
@@ -293,7 +311,7 @@ export default function StudentSubjectTrendPage() {
   }, [availableSubjects, selectedSubjectId])
 
   const examOptions = useMemo(() => {
-    return setupConfig?.exam_structure?.[selectedTingkatan] || []
+    return getExamStructureForGrade(setupConfig, selectedTingkatan)
   }, [setupConfig, selectedTingkatan])
 
   const selectedStudent = useMemo(() => {

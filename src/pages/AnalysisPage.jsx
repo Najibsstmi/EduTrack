@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
+import {
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,7 +132,7 @@ export default function AnalysisPage() {
       { data: scoresData, error: scoresError },
       { data: targetsData, error: targetsError },
       { data: gradeScalesData, error: gradeScalesError },
-      { data: setupConfigData, error: setupConfigError },
+      { data: setupConfigRows, error: setupConfigError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -184,7 +188,9 @@ export default function AnalysisPage() {
         .from('school_setup_configs')
         .select('*')
         .eq('school_id', schoolId)
-        .single(),
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1),
     ])
 
     if (classesError) console.error(classesError)
@@ -194,6 +200,17 @@ export default function AnalysisPage() {
     if (targetsError) console.error(targetsError)
     if (gradeScalesError) console.error(gradeScalesError)
     if (setupConfigError) console.error(setupConfigError)
+
+    const currentAcademicYear =
+      setupConfigRows?.[0]?.current_academic_year || currentYear
+
+    const { data: examConfigRows, error: examConfigError } = await supabase
+      .from('exam_configs')
+      .select('grade_label, exam_key, exam_name, exam_order, is_active')
+      .eq('school_id', schoolId)
+      .eq('academic_year', currentAcademicYear)
+
+    if (examConfigError) console.error(examConfigError)
 
     const mappedStudents = (enrollmentsData || []).map((row) => ({
       enrollment_id: row.id,
@@ -212,7 +229,9 @@ export default function AnalysisPage() {
     setScores(scoresData || [])
     setTargets(targetsData || [])
     setGradeScales(gradeScalesData || [])
-    setSetupConfig(setupConfigData || null)
+    setSetupConfig(
+      normalizeSetupConfigWithExamConfigs(setupConfigRows?.[0] || null, examConfigRows || [])
+    )
 
     const availableTingkatan = [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))]
       .sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
@@ -289,7 +308,7 @@ export default function AnalysisPage() {
   }, [studentRows, selectedTingkatan, selectedClassId])
 
   const analysisColumns = useMemo(() => {
-    return setupConfig?.exam_structure?.[selectedTingkatan] || []
+    return getExamStructureForGrade(setupConfig, selectedTingkatan)
   }, [setupConfig, selectedTingkatan])
 
   const gradeColumns = useMemo(() => {

@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
+  findMatchingConfigEntry,
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
+import {
   generateOtrMarks,
   getOtrKeysForTingkatan,
   shouldAutoRecalculateOtrs,
@@ -58,41 +63,6 @@ const isAllowedExamKey = (value) => {
   return false
 }
 
-const normalizeGradeLabel = (value) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-
-const extractGradeNumber = (value) => {
-  const match = String(value || '').match(/(\d+)/)
-  return match ? Number(match[1]) : null
-}
-
-const findMatchingConfigEntry = (source, gradeLabel) => {
-  const entries = Object.entries(source || {})
-  if (!entries.length) return null
-
-  const normalizedGradeLabel = normalizeGradeLabel(gradeLabel)
-  const gradeNumber = extractGradeNumber(gradeLabel)
-
-  const exactMatch = entries.find(
-    ([label]) => normalizeGradeLabel(label) === normalizedGradeLabel
-  )
-
-  if (exactMatch) return exactMatch
-
-  if (gradeNumber !== null) {
-    const numericMatch = entries.find(
-      ([label]) => extractGradeNumber(label) === gradeNumber
-    )
-
-    if (numericMatch) return numericMatch
-  }
-
-  return null
-}
-
 const buildManualExamOptions = (structuredExams = [], arCount = 0, otrCount = 0) => {
   let highestArIndex = 0
   let highestOtrIndex = 0
@@ -140,92 +110,17 @@ const buildManualExamOptions = (structuredExams = [], arCount = 0, otrCount = 0)
 }
 
 const getExamOptionsForGrade = (setupConfig, gradeLabel) => {
-  const normalizedGradeLabel = normalizeGradeLabel(gradeLabel)
-  if (!normalizedGradeLabel) return []
+  if (!String(gradeLabel || '').trim()) return []
 
-  const examStructure = setupConfig?.exam_structure || {}
   const arCountByGrade = setupConfig?.ar_count_by_grade || {}
   const otrCountByGrade = setupConfig?.otr_count_by_grade || {}
   const matchedArCountEntry = findMatchingConfigEntry(arCountByGrade, gradeLabel)
   const matchedOtrCountEntry = findMatchingConfigEntry(otrCountByGrade, gradeLabel)
   const arCount = Number(matchedArCountEntry?.[1] || 0)
   const otrCount = Number(matchedOtrCountEntry?.[1] || 0)
-  const directMatch = examStructure?.[gradeLabel]
+  const structuredExams = getExamStructureForGrade(setupConfig, gradeLabel)
 
-  if (Array.isArray(directMatch) && directMatch.length > 0) {
-    return buildManualExamOptions(directMatch, arCount, otrCount)
-  }
-
-  const matchedEntry = findMatchingConfigEntry(examStructure, gradeLabel)
-
-  if (matchedEntry && Array.isArray(matchedEntry[1]) && matchedEntry[1].length > 0) {
-    return buildManualExamOptions(matchedEntry[1], arCount, otrCount)
-  }
-
-  return buildManualExamOptions([], arCount, otrCount)
-}
-
-const buildGeneratedExamStructure = (setupConfig) => {
-  const activeGradeLabels = setupConfig?.active_grade_labels || []
-  const arCountByGrade = setupConfig?.ar_count_by_grade || {}
-  const otrCountByGrade = setupConfig?.otr_count_by_grade || {}
-
-  return activeGradeLabels.reduce((result, label) => {
-    const matchedArCountEntry = findMatchingConfigEntry(arCountByGrade, label)
-    const matchedOtrCountEntry = findMatchingConfigEntry(otrCountByGrade, label)
-    const arCount = Number(matchedArCountEntry?.[1] || 0)
-    const otrCount = Number(matchedOtrCountEntry?.[1] || 0)
-    const stageCount = Math.max(arCount, otrCount)
-    const exams = [{ key: 'TOV', name: 'TOV' }]
-
-    for (let i = 1; i <= stageCount; i++) {
-      if (i <= otrCount) {
-        exams.push({ key: `OTR${i}`, name: `OTR${i}` })
-      }
-
-      if (i <= arCount) {
-        exams.push({ key: `AR${i}`, name: `AR${i}` })
-      }
-    }
-
-    exams.push({ key: 'ETR', name: 'ETR' })
-    result[label] = exams
-    return result
-  }, {})
-}
-
-const normalizeSetupConfigForScores = (setupConfig) => {
-  if (!setupConfig) return null
-
-  const generatedStructure = buildGeneratedExamStructure(setupConfig)
-  const existingStructure = setupConfig.exam_structure || {}
-  const normalizedStructure = { ...generatedStructure }
-
-  Object.keys(generatedStructure).forEach((label) => {
-    const existingEntry = findMatchingConfigEntry(existingStructure, label)
-    const existingExams = Array.isArray(existingEntry?.[1]) ? existingEntry[1] : []
-    const existingExamByKey = new Map(
-      existingExams.map((exam) => [String(exam?.key || '').toUpperCase(), exam])
-    )
-
-    normalizedStructure[label] = generatedStructure[label].map((exam) => {
-      const existingExam = existingExamByKey.get(String(exam.key || '').toUpperCase())
-
-      if (!existingExam) {
-        return exam
-      }
-
-      return {
-        ...exam,
-        name: existingExam.name || exam.name,
-      }
-    })
-  })
-
-  return {
-    ...setupConfig,
-    exam_structure: normalizedStructure,
-  }
+  return buildManualExamOptions(structuredExams, arCount, otrCount)
 }
 
 const parseCsvLine = (line) => {
@@ -570,7 +465,22 @@ export default function StudentScoresPage() {
       console.error(setupError)
     }
 
-    const setupData = normalizeSetupConfigForScores(setupRows?.[0] || null)
+    const currentYear = setupRows?.[0]?.current_academic_year || new Date().getFullYear()
+
+    const { data: examConfigRows, error: examConfigError } = await supabase
+      .from('exam_configs')
+      .select('grade_label, exam_key, exam_name, exam_order, is_active')
+      .eq('school_id', profileData.school_id)
+      .eq('academic_year', currentYear)
+
+    if (examConfigError) {
+      console.error(examConfigError)
+    }
+
+    const setupData = normalizeSetupConfigWithExamConfigs(
+      setupRows?.[0] || null,
+      examConfigRows || []
+    )
 
     setSetupConfig(setupData || null)
 
@@ -753,7 +663,8 @@ export default function StudentScoresPage() {
         { data: studentEnrollmentsData, error: studentEnrollmentsError },
         { data: subjectsData, error: subjectsError },
         { data: classesData, error: classesError },
-        { data: setupConfigData, error: setupConfigError },
+        { data: setupConfigRows, error: setupConfigError },
+        { data: examConfigData, error: examConfigError },
         { data: gradeScalesData, error: gradeScalesError },
       ] = await Promise.all([
         supabase
@@ -794,7 +705,15 @@ export default function StudentScoresPage() {
           .from('school_setup_configs')
           .select('*')
           .eq('school_id', schoolId)
-          .maybeSingle(),
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1),
+
+        supabase
+          .from('exam_configs')
+          .select('grade_label, exam_key, exam_name, exam_order, is_active')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentYear),
 
         supabase
           .from('grade_scales')
@@ -807,7 +726,13 @@ export default function StudentScoresPage() {
       if (subjectsError) throw subjectsError
       if (classesError) throw classesError
       if (setupConfigError) throw setupConfigError
+      if (examConfigError) throw examConfigError
       if (gradeScalesError) throw gradeScalesError
+
+      const normalizedSetupConfig = normalizeSetupConfigWithExamConfigs(
+        setupConfigRows?.[0] || null,
+        examConfigData || []
+      )
 
       const studentByIc = new Map()
       ;(studentProfilesData || []).forEach((student) => {
@@ -1052,7 +977,7 @@ export default function StudentScoresPage() {
             tingkatan: pair.tingkatan,
             tovMark: pair.tov_mark,
             etrMark: pair.etr_mark,
-            setupConfig: setupConfigData,
+            setupConfig: normalizedSetupConfig,
           })
 
           otrRows.push(...generated)
