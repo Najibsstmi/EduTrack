@@ -21,6 +21,16 @@ const REQUIRED_HEADERS = [
   'markah',
 ]
 
+const BULK_REQUIRED_HEADERS = [
+  'tingkatan',
+  'kelas',
+  'no_ic',
+  'nama_murid',
+  'subjek',
+  'jenis_peperiksaan',
+  'markah',
+]
+
 const normalizeText = (value) =>
   String(value || '').trim()
 
@@ -38,6 +48,9 @@ const normalizeGradeLabel = (value) =>
 
 const buildSubjectLookupKey = (subjectName, tingkatan) =>
   `${normalizeCompareText(subjectName)}__${normalizeGradeLabel(tingkatan)}`
+
+const buildClassLookupKey = (tingkatan, kelas) =>
+  `${normalizeCompareText(tingkatan)}__${normalizeCompareText(kelas)}`
 
 function normalizeIC(ic) {
   return String(ic || '')
@@ -61,6 +74,8 @@ const normalizeCsvHeader = (value) => {
   if (compact === 'subjek') return 'subjek'
   if (compact === 'jenispeperiksaan') return 'jenis_peperiksaan'
   if (compact === 'markah') return 'markah'
+  if (compact === 'tingkatan') return 'tingkatan'
+  if (compact === 'kelas' || compact === 'namakelas') return 'kelas'
 
   return normalized
 }
@@ -326,6 +341,7 @@ export default function StudentScoresPage() {
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
+  const [allEnrollments, setAllEnrollments] = useState([])
 
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
@@ -338,11 +354,19 @@ export default function StudentScoresPage() {
   const [csvRows, setCsvRows] = useState([])
   const [csvErrors, setCsvErrors] = useState([])
   const [csvFileName, setCsvFileName] = useState('')
-  const [importMode, setImportMode] = useState('partial')
+  const [importMode, setImportMode] = useState('normal')
+  const [csvImportPolicy, setCsvImportPolicy] = useState('partial')
   const [importingCsv, setImportingCsv] = useState(false)
   const [importSummary, setImportSummary] = useState(null)
+  const [bulkCsvFile, setBulkCsvFile] = useState(null)
+  const [bulkPreviewRows, setBulkPreviewRows] = useState([])
+  const [bulkImportErrors, setBulkImportErrors] = useState([])
+  const [bulkImportSummary, setBulkImportSummary] = useState(null)
+  const [bulkImportLoading, setBulkImportLoading] = useState(false)
 
   const dashboardPath = getDashboardPath(profile)
+  const isSchoolAdmin =
+    profile?.role === 'school_admin' || profile?.is_school_admin === true
 
   useEffect(() => {
     init()
@@ -392,6 +416,40 @@ export default function StudentScoresPage() {
     return lookup
   }, [subjects])
 
+  const classLookup = useMemo(() => {
+    const map = new Map()
+
+    ;(classes || []).forEach((item) => {
+      const key = buildClassLookupKey(item.tingkatan, item.class_name)
+      if (!map.has(key)) {
+        map.set(key, item)
+      }
+    })
+
+    return map
+  }, [classes])
+
+  const enrollmentLookupByClassAndIc = useMemo(() => {
+    const map = new Map()
+
+    ;(allEnrollments || []).forEach((row) => {
+      const ic = normalizeIC(row.student_profiles?.ic_number)
+      if (!ic) return
+
+      const key = `${row.class_id}__${ic}`
+
+      if (!map.has(key)) {
+        map.set(key, {
+          enrollment_id: row.id,
+          student_profile_id: row.student_profile_id,
+          full_name: row.student_profiles?.full_name || '',
+        })
+      }
+    })
+
+    return map
+  }, [allEnrollments])
+
   const resolveSubjectFromCsvRow = (csvSubjectName) => {
     const gradeLabel = selectedClassData?.tingkatan || ''
     const lookupKey = buildSubjectLookupKey(csvSubjectName, gradeLabel)
@@ -407,6 +465,13 @@ export default function StudentScoresPage() {
       (options || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
     )
   }, [setupConfig, selectedClassData])
+
+  const getAllowedExamSetForGrade = (gradeLabel) => {
+    const options = getExamOptionsForGrade(setupConfig, gradeLabel)
+    return new Set(
+      (options || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
+    )
+  }
 
   const uniqueExamOptions = useMemo(() => {
     const examsForSelectedGrade = getExamOptionsForGrade(setupConfig, selectedGradeLabel)
@@ -555,7 +620,7 @@ export default function StudentScoresPage() {
     const { data: classData } = await classQuery
     setClasses(classData || [])
 
-    const [{ data: subjectData }, { data: gradeScaleData }] = await Promise.all([
+    const [{ data: subjectData }, { data: gradeScaleData }, { data: enrollmentData }] = await Promise.all([
       supabase
         .from('subjects')
         .select('id, subject_name, subject_code, tingkatan')
@@ -565,10 +630,28 @@ export default function StudentScoresPage() {
         .from('grade_scales')
         .select('*')
         .eq('school_id', profileData.school_id),
+      supabase
+        .from('student_enrollments')
+        .select(`
+          id,
+          class_id,
+          student_profile_id,
+          academic_year,
+          is_active,
+          student_profiles (
+            id,
+            full_name,
+            ic_number
+          )
+        `)
+        .eq('school_id', profileData.school_id)
+        .eq('academic_year', setupData?.current_academic_year || new Date().getFullYear())
+        .eq('is_active', true),
     ])
 
     setSubjects(subjectData || [])
     setGradeScales(gradeScaleData || [])
+    setAllEnrollments(enrollmentData || [])
   }
 
   const loadStudentsAndScores = async () => {
@@ -671,6 +754,42 @@ export default function StudentScoresPage() {
     URL.revokeObjectURL(url)
   }
 
+  const downloadBulkTemplate = () => {
+    const headers = [
+      'tingkatan',
+      'kelas',
+      'no_ic',
+      'nama_murid',
+      'subjek',
+      'jenis_peperiksaan',
+      'markah',
+    ]
+
+    const sampleRows = [
+      ['Tingkatan 3', 'BANGSAWAN', '090101011234', 'ALI BIN AHMAD', 'Sains', 'TOV', '54'],
+      ['Tingkatan 3', 'BONEKA', '090101011235', 'SITI BINTI ALI', 'Sains', 'TOV', '67'],
+      ['Tingkatan 2', 'INANG', '100202021111', 'ABU BIN BAKAR', 'Sains', 'TOV', '71'],
+      ['Tingkatan 1', 'JAZZ', '110303031234', 'AHMAD BIN SALIM', 'Matematik', 'AR1', '80'],
+      ['Tingkatan 5', 'SENIMAN', '080404041234', 'NURUL AIN', 'Sejarah', 'ETR', '76'],
+    ]
+
+    const csvContent = [headers, ...sampleRows]
+      .map((row) => row.join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'template_import_pukal_admin.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  }
+
   const handleCsvUpload = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -684,6 +803,32 @@ export default function StudentScoresPage() {
     setCsvRows(rows)
     setCsvErrors(errors)
     setImportSummary(null)
+  }
+
+  const handleBulkCsvFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    setBulkCsvFile(file || null)
+    setBulkPreviewRows([])
+    setBulkImportErrors([])
+    setBulkImportSummary(null)
+
+    if (!file) return
+
+    const text = await file.text()
+    const { headers, rows } = parseCsvText(text)
+
+    const missingHeaders = BULK_REQUIRED_HEADERS.filter(
+      (header) => !headers.includes(header)
+    )
+
+    if (missingHeaders.length > 0) {
+      setBulkImportErrors([
+        `Header wajib tiada: ${missingHeaders.join(', ')}`,
+      ])
+      return
+    }
+
+    setBulkPreviewRows(rows)
   }
 
   const importCsvToSupabase = async () => {
@@ -702,7 +847,7 @@ export default function StudentScoresPage() {
       return
     }
 
-    if (importMode === 'strict' && csvErrors.length > 0) {
+    if (csvImportPolicy === 'strict' && csvErrors.length > 0) {
       alert('Sila betulkan ralat CSV dahulu sebelum import.')
       return
     }
@@ -894,7 +1039,7 @@ export default function StudentScoresPage() {
 
         if (!row.nama_murid || !ic || !examKey || row.markah === '') {
           const message = `Baris ${rowNumber}: data asas CSV tidak lengkap.`
-          if (importMode === 'strict') {
+          if (csvImportPolicy === 'strict') {
             importErrors.push(message)
           } else {
             skippedRows.push(message)
@@ -904,7 +1049,7 @@ export default function StudentScoresPage() {
 
         if (Number.isNaN(mark) || mark < 0 || mark > 100) {
           const message = `Baris ${rowNumber}: markah tidak sah.`
-          if (importMode === 'strict') {
+          if (csvImportPolicy === 'strict') {
             importErrors.push(message)
           } else {
             skippedRows.push(message)
@@ -914,7 +1059,7 @@ export default function StudentScoresPage() {
 
         if (!isAllowedExamKey(examKey)) {
           const message = `Baris ${rowNumber}: jenis peperiksaan '${examKey}' tidak sah.`
-          if (importMode === 'strict') {
+          if (csvImportPolicy === 'strict') {
             importErrors.push(message)
           } else {
             skippedRows.push(message)
@@ -1015,7 +1160,7 @@ export default function StudentScoresPage() {
         successRows.push(`Baris ${rowNumber}: berjaya diproses.`)
       }
 
-      if (importMode === 'strict' && importErrors.length > 0) {
+      if (csvImportPolicy === 'strict' && importErrors.length > 0) {
         setImportSummary({
           success: false,
           importedTargets: 0,
@@ -1089,15 +1234,15 @@ export default function StudentScoresPage() {
         generatedOtrs: otrRows.length,
         successCount: successRows.length,
         skippedCount: skippedRows.length,
-        failedCount: importMode === 'strict' ? importErrors.length : skippedRows.length,
-        errors: importMode === 'strict' ? importErrors : skippedRows,
+        failedCount: csvImportPolicy === 'strict' ? importErrors.length : skippedRows.length,
+        errors: csvImportPolicy === 'strict' ? importErrors : skippedRows,
       })
 
       if (selectedClass && selectedSubject && selectedExam) {
         await loadStudentsAndScores()
       }
 
-      if (importMode === 'partial') {
+      if (csvImportPolicy === 'partial') {
         alert(
           `Import selesai. ${successRows.length} baris berjaya diproses, ${skippedRows.length} baris diabaikan.`
         )
@@ -1118,6 +1263,179 @@ export default function StudentScoresPage() {
       })
     } finally {
       setImportingCsv(false)
+    }
+  }
+
+  const handleBulkAdminImport = async () => {
+    if (!isSchoolAdmin) {
+      alert('Hanya school admin dibenarkan menggunakan import pukal admin.')
+      return
+    }
+
+    if (!profile?.school_id) {
+      alert('Maklumat sekolah tidak ditemui.')
+      return
+    }
+
+    if (!bulkPreviewRows.length) {
+      alert('Tiada data CSV untuk diimport.')
+      return
+    }
+
+    setBulkImportLoading(true)
+    setBulkImportErrors([])
+    setBulkImportSummary(null)
+
+    try {
+      const currentAcademicYear =
+        setupConfig?.current_academic_year || new Date().getFullYear()
+
+      const errors = []
+      const validRows = []
+      const scoreRowsToUpsert = []
+
+      for (const row of bulkPreviewRows) {
+        const rowNumber = row.__rowNumber
+
+        const tingkatan = String(row.tingkatan || '').trim()
+        const kelas = String(row.kelas || '').trim()
+        const csvSubject = String(row.subjek || '').trim()
+        const examKey = normalizeExamKey(row.jenis_peperiksaan)
+        const mark = Number(row.markah)
+        const ic = normalizeIC(row.no_ic)
+
+        if (!tingkatan || !kelas) {
+          errors.push(`Baris ${rowNumber}: tingkatan atau kelas kosong`)
+          continue
+        }
+
+        const matchedClass = classLookup.get(buildClassLookupKey(tingkatan, kelas))
+
+        if (!matchedClass) {
+          errors.push(
+            `Baris ${rowNumber}: kelas '${kelas}' bagi '${tingkatan}' tidak dijumpai`
+          )
+          continue
+        }
+
+        const matchedSubject = subjectLookupByGrade.get(
+          buildSubjectLookupKey(csvSubject, matchedClass.tingkatan)
+        )
+
+        if (!matchedSubject) {
+          errors.push(
+            `Baris ${rowNumber}: subjek '${csvSubject}' tidak sepadan dengan ${matchedClass.tingkatan}`
+          )
+          continue
+        }
+
+        const allowedExamSet = getAllowedExamSetForGrade(matchedClass.tingkatan)
+
+        if (!allowedExamSet.has(examKey)) {
+          errors.push(
+            `Baris ${rowNumber}: peperiksaan '${examKey}' tidak sah untuk ${matchedClass.tingkatan}`
+          )
+          continue
+        }
+
+        if (Number.isNaN(mark) || mark < 0 || mark > 100) {
+          errors.push(
+            `Baris ${rowNumber}: markah '${row.markah}' mesti antara 0 hingga 100`
+          )
+          continue
+        }
+
+        const matchedEnrollment = enrollmentLookupByClassAndIc.get(
+          `${matchedClass.id}__${ic}`
+        )
+
+        if (!matchedEnrollment) {
+          errors.push(
+            `Baris ${rowNumber}: murid IC '${ic}' tidak dijumpai dalam kelas '${kelas}'`
+          )
+          continue
+        }
+
+        const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
+          const label =
+            grade.tingkatan ??
+            grade.grade_label ??
+            grade.form_level ??
+            grade.level ??
+            ''
+
+          return normalizeGradeLabel(label) === normalizeGradeLabel(matchedClass.tingkatan)
+        })
+
+        const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+
+        validRows.push({
+          ...row,
+          __matchedClass: matchedClass,
+          __matchedSubject: matchedSubject,
+          __matchedEnrollment: matchedEnrollment,
+        })
+
+        scoreRowsToUpsert.push({
+          school_id: profile.school_id,
+          academic_year: currentAcademicYear,
+          class_id: matchedClass.id,
+          student_enrollment_id: matchedEnrollment.enrollment_id,
+          student_profile_id: matchedEnrollment.student_profile_id,
+          subject_id: matchedSubject.id,
+          exam_config_id: null,
+          exam_key: examKey,
+          mark,
+          grade_name: gradeInfo.grade_name,
+          grade_point: gradeInfo.grade_point,
+          is_absent: false,
+          remarks: null,
+          entered_by: profile.id,
+          verified_by: null,
+          verified_at: null,
+          updated_at: new Date().toISOString(),
+        })
+      }
+
+      if (errors.length > 0) {
+        setBulkImportErrors(errors)
+        setBulkImportSummary({
+          totalRows: bulkPreviewRows.length,
+          validRows: validRows.length,
+          errorCount: errors.length,
+          successCount: 0,
+        })
+        return
+      }
+
+      if (!scoreRowsToUpsert.length) {
+        alert('Tiada data valid untuk disimpan.')
+        return
+      }
+
+      const { error: upsertError } = await supabase
+        .from('student_scores')
+        .upsert(scoreRowsToUpsert, {
+          onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
+        })
+
+      if (upsertError) {
+        throw upsertError
+      }
+
+      setBulkImportSummary({
+        totalRows: bulkPreviewRows.length,
+        validRows: validRows.length,
+        errorCount: 0,
+        successCount: scoreRowsToUpsert.length,
+      })
+
+      alert('Import pukal admin berjaya disimpan.')
+    } catch (error) {
+      console.error(error)
+      alert(`Import pukal admin gagal: ${error.message}`)
+    } finally {
+      setBulkImportLoading(false)
     }
   }
 
@@ -1271,6 +1589,36 @@ export default function StudentScoresPage() {
             </button>
           </div>
 
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setImportMode('normal')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                importMode === 'normal'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-300 bg-white text-slate-700'
+              }`}
+            >
+              Import Biasa
+            </button>
+
+            {isSchoolAdmin && (
+              <button
+                type="button"
+                onClick={() => setImportMode('bulk_admin')}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  importMode === 'bulk_admin'
+                    ? 'bg-slate-900 text-white'
+                    : 'border border-slate-300 bg-white text-slate-700'
+                }`}
+              >
+                Import Pukal Admin
+              </button>
+            )}
+          </div>
+
+          {importMode === 'normal' && (
+            <>
           <div className="mt-5">
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Upload Fail CSV
@@ -1378,10 +1726,10 @@ export default function StudentScoresPage() {
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="radio"
-                  name="importMode"
+                  name="csvImportPolicy"
                   value="strict"
-                  checked={importMode === 'strict'}
-                  onChange={(e) => setImportMode(e.target.value)}
+                  checked={csvImportPolicy === 'strict'}
+                  onChange={(e) => setCsvImportPolicy(e.target.value)}
                 />
                 Strict - hentikan import jika ada ralat
               </label>
@@ -1389,10 +1737,10 @@ export default function StudentScoresPage() {
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="radio"
-                  name="importMode"
+                  name="csvImportPolicy"
                   value="partial"
-                  checked={importMode === 'partial'}
-                  onChange={(e) => setImportMode(e.target.value)}
+                  checked={csvImportPolicy === 'partial'}
+                  onChange={(e) => setCsvImportPolicy(e.target.value)}
                 />
                 Partial - import data yang valid sahaja, abaikan baris ralat
               </label>
@@ -1446,6 +1794,112 @@ export default function StudentScoresPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+            </>
+          )}
+
+          {importMode === 'bulk_admin' && isSchoolAdmin && (
+            <div className="mt-5 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Import Pukal Admin
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Muat naik markah bagi banyak kelas dan tingkatan serentak.
+                Format CSV wajib: tingkatan, kelas, no_ic, nama_murid, subjek,
+                jenis_peperiksaan, markah
+              </p>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={downloadBulkTemplate}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Download Template CSV
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleBulkCsvFileChange}
+                  className="block w-full text-sm text-slate-700"
+                />
+                {bulkCsvFile && (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Fail dipilih: <strong>{bulkCsvFile.name}</strong>
+                  </p>
+                )}
+              </div>
+
+              {bulkImportErrors.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-semibold text-red-700">Ralat Import</p>
+                  <ul className="mt-2 list-disc pl-5 text-sm text-red-700">
+                    {bulkImportErrors.slice(0, 20).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                  {bulkImportErrors.length > 20 && (
+                    <p className="mt-2 text-xs text-red-600">
+                      Dan {bulkImportErrors.length - 20} ralat lagi...
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {bulkImportSummary && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                  <div>Jumlah baris CSV: {bulkImportSummary.totalRows}</div>
+                  <div>Baris valid: {bulkImportSummary.validRows}</div>
+                  <div>Baris berjaya simpan: {bulkImportSummary.successCount}</div>
+                  <div>Jumlah ralat: {bulkImportSummary.errorCount}</div>
+                </div>
+              )}
+
+              {bulkPreviewRows.length > 0 && (
+                <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Tingkatan</th>
+                        <th className="px-3 py-2 text-left">Kelas</th>
+                        <th className="px-3 py-2 text-left">No IC</th>
+                        <th className="px-3 py-2 text-left">Nama</th>
+                        <th className="px-3 py-2 text-left">Subjek</th>
+                        <th className="px-3 py-2 text-left">Peperiksaan</th>
+                        <th className="px-3 py-2 text-left">Markah</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkPreviewRows.slice(0, 20).map((row) => (
+                        <tr key={row.__rowNumber} className="border-t border-slate-100">
+                          <td className="px-3 py-2">{row.tingkatan}</td>
+                          <td className="px-3 py-2">{row.kelas}</td>
+                          <td className="px-3 py-2">{row.no_ic}</td>
+                          <td className="px-3 py-2">{row.nama_murid}</td>
+                          <td className="px-3 py-2">{row.subjek}</td>
+                          <td className="px-3 py-2">{row.jenis_peperiksaan}</td>
+                          <td className="px-3 py-2">{row.markah}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleBulkAdminImport}
+                  disabled={bulkImportLoading || !bulkPreviewRows.length}
+                  className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkImportLoading ? 'Sedang import...' : 'Simpan Import Pukal Admin'}
+                </button>
+              </div>
             </div>
           )}
         </div>
