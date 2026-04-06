@@ -24,6 +24,21 @@ const REQUIRED_HEADERS = [
 const normalizeText = (value) =>
   String(value || '').trim()
 
+const normalizeCompareText = (value) =>
+  String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+
+const normalizeGradeLabel = (value) =>
+  String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+
+const buildSubjectLookupKey = (subjectName, tingkatan) =>
+  `${normalizeCompareText(subjectName)}__${normalizeGradeLabel(tingkatan)}`
+
 function normalizeIC(ic) {
   return String(ic || '')
     .trim()
@@ -345,16 +360,53 @@ export default function StudentScoresPage() {
     return ''
   }
 
-  const selectedGradeLabel = useMemo(() => {
-    const selectedClassData = classes.find((c) => String(c.id) === String(selectedClass))
+  const selectedClassData = useMemo(
+    () => classes.find((c) => String(c.id) === String(selectedClass)) || null,
+    [classes, selectedClass]
+  )
 
+  const selectedGradeLabel = useMemo(() => {
     if (selectedClassData?.tingkatan) {
       return String(selectedClassData.tingkatan).trim()
     }
 
     const classLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
     return getGradeLabelFromClassName(classLabel)
-  }, [classes, selectedClass])
+  }, [selectedClassData])
+
+  const selectedSubjectData = useMemo(
+    () => subjects.find((item) => String(item.id) === String(selectedSubject)) || null,
+    [subjects, selectedSubject]
+  )
+
+  const subjectLookupByGrade = useMemo(() => {
+    const lookup = new Map()
+
+    ;(subjects || []).forEach((subject) => {
+      const key = buildSubjectLookupKey(subject.subject_name, subject.tingkatan)
+      if (!lookup.has(key)) {
+        lookup.set(key, subject)
+      }
+    })
+
+    return lookup
+  }, [subjects])
+
+  const resolveSubjectFromCsvRow = (csvSubjectName) => {
+    const gradeLabel = selectedClassData?.tingkatan || ''
+    const lookupKey = buildSubjectLookupKey(csvSubjectName, gradeLabel)
+
+    return subjectLookupByGrade.get(lookupKey) || null
+  }
+
+  const allowedExamKeysForSelectedGrade = useMemo(() => {
+    const gradeLabel = selectedClassData?.tingkatan || ''
+    const options = getExamOptionsForGrade(setupConfig, gradeLabel)
+
+    return new Set(
+      (options || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
+    )
+  }, [setupConfig, selectedClassData])
 
   const uniqueExamOptions = useMemo(() => {
     const examsForSelectedGrade = getExamOptionsForGrade(setupConfig, selectedGradeLabel)
@@ -397,12 +449,12 @@ export default function StudentScoresPage() {
   }, [students])
 
   const uniqueSubjects = useMemo(() => {
-    const normalizedSelectedGrade = selectedGradeLabel.trim().toLowerCase()
+    const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
 
     const filteredSubjects = normalizedSelectedGrade
       ? subjects.filter(
           (subject) =>
-            (subject.tingkatan || '').trim().toLowerCase() === normalizedSelectedGrade
+            normalizeGradeLabel(subject.tingkatan) === normalizedSelectedGrade
         )
       : subjects
 
@@ -411,8 +463,8 @@ export default function StudentScoresPage() {
         index ===
         arr.findIndex(
           (item) =>
-            (item.subject_name || '').trim().toLowerCase() ===
-            (subject.subject_name || '').trim().toLowerCase()
+            normalizeCompareText(item.subject_name) ===
+            normalizeCompareText(subject.subject_name)
         )
     )
   }, [subjects, selectedGradeLabel])
@@ -640,6 +692,11 @@ export default function StudentScoresPage() {
       return
     }
 
+    if (!selectedClassData?.id || !selectedClassData?.tingkatan) {
+      alert('Sila pilih kelas dahulu sebelum import CSV.')
+      return
+    }
+
     if (!csvRows.length) {
       alert('Tiada data CSV untuk diimport.')
       return
@@ -659,19 +716,11 @@ export default function StudentScoresPage() {
       const schoolId = profile.school_id
 
       const [
-        { data: studentProfilesData, error: studentProfilesError },
         { data: studentEnrollmentsData, error: studentEnrollmentsError },
-        { data: subjectsData, error: subjectsError },
-        { data: classesData, error: classesError },
         { data: setupConfigRows, error: setupConfigError },
         { data: examConfigData, error: examConfigError },
         { data: gradeScalesData, error: gradeScalesError },
       ] = await Promise.all([
-        supabase
-          .from('student_profiles')
-          .select('id, ic_number, full_name, gender')
-          .eq('school_id', schoolId),
-
         supabase
           .from('student_enrollments')
           .select(`
@@ -680,6 +729,12 @@ export default function StudentScoresPage() {
             class_id,
             academic_year,
             is_active,
+            student_profiles (
+              id,
+              ic_number,
+              full_name,
+              gender
+            ),
             classes (
               id,
               tingkatan,
@@ -687,19 +742,9 @@ export default function StudentScoresPage() {
             )
           `)
           .eq('school_id', schoolId)
+          .eq('class_id', selectedClassData.id)
           .eq('academic_year', currentYear)
           .eq('is_active', true),
-
-        supabase
-          .from('subjects')
-          .select('*')
-          .eq('school_id', schoolId),
-
-        supabase
-          .from('classes')
-          .select('*')
-          .eq('school_id', schoolId)
-          .eq('academic_year', currentYear),
 
         supabase
           .from('school_setup_configs')
@@ -721,10 +766,7 @@ export default function StudentScoresPage() {
           .eq('school_id', schoolId),
       ])
 
-      if (studentProfilesError) throw studentProfilesError
       if (studentEnrollmentsError) throw studentEnrollmentsError
-      if (subjectsError) throw subjectsError
-      if (classesError) throw classesError
       if (setupConfigError) throw setupConfigError
       if (examConfigError) throw examConfigError
       if (gradeScalesError) throw gradeScalesError
@@ -734,25 +776,16 @@ export default function StudentScoresPage() {
         examConfigData || []
       )
 
-      const studentByIc = new Map()
-      ;(studentProfilesData || []).forEach((student) => {
-        const normalizedStudentIc = normalizeIC(student.ic_number)
-        if (normalizedStudentIc) {
-          studentByIc.set(normalizedStudentIc, student)
-        }
-      })
-
-      const enrollmentByStudentId = new Map()
+      const matchedStudentsMap = new Map()
       ;(studentEnrollmentsData || []).forEach((enrollment) => {
-        enrollmentByStudentId.set(enrollment.student_profile_id, enrollment)
-      })
-
-      const subjectByName = new Map()
-      ;(subjectsData || []).forEach((subject) => {
-        subjectByName.set(
-          String(subject.subject_name || '').trim().toLowerCase(),
-          subject
-        )
+        const normalizedStudentIc = normalizeIC(enrollment.student_profiles?.ic_number)
+        if (normalizedStudentIc && !matchedStudentsMap.has(normalizedStudentIc)) {
+          matchedStudentsMap.set(normalizedStudentIc, {
+            enrollment_id: enrollment.id,
+            student_profile_id: enrollment.student_profile_id,
+            full_name: enrollment.student_profiles?.full_name || '',
+          })
+        }
       })
 
       const targetRows = []
@@ -761,16 +794,105 @@ export default function StudentScoresPage() {
       const skippedRows = []
       const successRows = []
 
+      const resolvedRows = []
+
+      csvRows.forEach((row) => {
+        const csvSubject = normalizeText(row.subjek)
+        const examKey = normalizeExamKey(row.jenis_peperiksaan)
+        const matchedSubject = resolveSubjectFromCsvRow(csvSubject)
+        const matchedStudent = matchedStudentsMap.get(normalizeIC(row.no_ic))
+
+        if (!matchedSubject) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: subjek '${csvSubject}' tidak sepadan dengan ${selectedClassData.tingkatan}`
+          )
+          return
+        }
+
+        if (!allowedExamKeysForSelectedGrade.has(examKey)) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: peperiksaan '${examKey}' tidak dibenarkan untuk ${selectedClassData.tingkatan}`
+          )
+          return
+        }
+
+        if (
+          selectedSubjectData &&
+          normalizeCompareText(csvSubject) !==
+            normalizeCompareText(selectedSubjectData.subject_name)
+        ) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: subjek CSV '${csvSubject}' tidak sama dengan subjek dipilih '${selectedSubjectData.subject_name}'`
+          )
+          return
+        }
+
+        if (!matchedStudent) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: no_ic ${normalizeText(row.no_ic)} tidak jumpa dalam kelas dipilih`
+          )
+          return
+        }
+
+        resolvedRows.push({
+          ...row,
+          __matchedStudent: matchedStudent,
+          __resolvedSubject: matchedSubject,
+          __resolvedExamKey: examKey,
+        })
+      })
+
+      if (importErrors.length > 0) {
+        setCsvErrors(importErrors)
+        setImportSummary({
+          success: false,
+          importedTargets: 0,
+          importedScores: 0,
+          generatedOtrs: 0,
+          successCount: 0,
+          skippedCount: 0,
+          failedCount: importErrors.length,
+          errors: importErrors,
+        })
+        alert('Import dihentikan kerana ada subjek, peperiksaan, atau murid yang tidak sepadan dengan kelas dipilih.')
+        return
+      }
+
+      const distinctResolvedSubjectIds = Array.from(
+        new Set(resolvedRows.map((row) => row.__resolvedSubject?.id).filter(Boolean))
+      )
+
+      if (distinctResolvedSubjectIds.length > 1) {
+        const subjectErrors = [
+          'CSV ini mengandungi lebih daripada satu subjek. Sila import satu subjek bagi satu masa.',
+        ]
+
+        setCsvErrors(subjectErrors)
+        setImportSummary({
+          success: false,
+          importedTargets: 0,
+          importedScores: 0,
+          generatedOtrs: 0,
+          successCount: 0,
+          skippedCount: 0,
+          failedCount: 1,
+          errors: subjectErrors,
+        })
+        alert(subjectErrors[0])
+        return
+      }
+
       const targetPairs = new Map()
 
-      for (const row of csvRows) {
+      for (const row of resolvedRows) {
         const rowNumber = row.__rowNumber
         const ic = normalizeIC(row.no_ic)
-        const subjectName = String(row.subjek || '').trim().toLowerCase()
-        const examKey = String(row.jenis_peperiksaan || '').trim().toUpperCase()
+        const examKey = row.__resolvedExamKey
         const mark = Number(row.markah)
+        const subject = row.__resolvedSubject
+        const matchedStudent = row.__matchedStudent
 
-        if (!row.nama_murid || !ic || !subjectName || !examKey || row.markah === '') {
+        if (!row.nama_murid || !ic || !examKey || row.markah === '') {
           const message = `Baris ${rowNumber}: data asas CSV tidak lengkap.`
           if (importMode === 'strict') {
             importErrors.push(message)
@@ -800,48 +922,14 @@ export default function StudentScoresPage() {
           continue
         }
 
-        const student = studentByIc.get(ic)
-
-        if (!student) {
-          const message = `Baris ${rowNumber}: No IC ${ic} tidak ditemui.`
-          if (importMode === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        const enrollment = enrollmentByStudentId.get(student.id)
-        if (!enrollment) {
-          const message = `Baris ${rowNumber}: Enrolment murid ${ic} untuk tahun semasa tidak ditemui.`
-          if (importMode === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        const subject = subjectByName.get(subjectName)
-        if (!subject) {
-          const message = `Baris ${rowNumber}: Subjek '${row.subjek}' tidak ditemui.`
-          if (importMode === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        const classId = enrollment.class_id
-        const tingkatan = enrollment.classes?.tingkatan || ''
+        const classId = selectedClassData.id
+        const tingkatan = selectedClassData.tingkatan || ''
 
         if (examKey === 'ETR') {
           targetRows.push({
             school_id: schoolId,
             academic_year: currentYear,
-            student_enrollment_id: enrollment.id,
+            student_enrollment_id: matchedStudent.enrollment_id,
             class_id: classId,
             subject_id: subject.id,
             target_key: examKey,
@@ -852,16 +940,16 @@ export default function StudentScoresPage() {
             manually_adjusted: false,
             remarks: null,
             entered_by: profile.id,
-            student_profile_id: student.id,
+            student_profile_id: matchedStudent.student_profile_id,
             updated_at: new Date().toISOString(),
           })
 
-          const pairKey = `${enrollment.id}__${subject.id}`
+          const pairKey = `${matchedStudent.enrollment_id}__${subject.id}`
           const existing = targetPairs.get(pairKey) || {
             school_id: schoolId,
             academic_year: currentYear,
-            student_enrollment_id: enrollment.id,
-            student_profile_id: student.id,
+            student_enrollment_id: matchedStudent.enrollment_id,
+            student_profile_id: matchedStudent.student_profile_id,
             class_id: classId,
             subject_id: subject.id,
             tingkatan,
@@ -888,7 +976,7 @@ export default function StudentScoresPage() {
           scoreRows.push({
             school_id: schoolId,
             academic_year: currentYear,
-            student_enrollment_id: enrollment.id,
+            student_enrollment_id: matchedStudent.enrollment_id,
             class_id: classId,
             subject_id: subject.id,
             exam_config_id: null,
@@ -901,17 +989,17 @@ export default function StudentScoresPage() {
             entered_by: profile.id,
             verified_by: null,
             verified_at: null,
-            student_profile_id: student.id,
+            student_profile_id: matchedStudent.student_profile_id,
             updated_at: new Date().toISOString(),
           })
 
           if (examKey === 'TOV') {
-            const pairKey = `${enrollment.id}__${subject.id}`
+            const pairKey = `${matchedStudent.enrollment_id}__${subject.id}`
             const existing = targetPairs.get(pairKey) || {
               school_id: schoolId,
               academic_year: currentYear,
-              student_enrollment_id: enrollment.id,
-              student_profile_id: student.id,
+              student_enrollment_id: matchedStudent.enrollment_id,
+              student_profile_id: matchedStudent.student_profile_id,
               class_id: classId,
               subject_id: subject.id,
               tingkatan,
