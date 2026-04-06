@@ -316,7 +316,7 @@ export default function StudentSubjectTrendPage() {
 
   const selectedStudent = useMemo(() => {
     return availableStudents.find(
-      (student) => String(student.student_profile_id) === String(selectedStudentId)
+      (student) => String(student.enrollment_id) === String(selectedStudentId)
     ) || null
   }, [availableStudents, selectedStudentId])
 
@@ -457,7 +457,7 @@ export default function StudentSubjectTrendPage() {
             >
               <option value="">Pilih Murid</option>
               {availableStudents.map((item) => (
-                <option key={item.student_profile_id} value={item.student_profile_id}>
+                <option key={item.enrollment_id} value={item.enrollment_id}>
                   {item.full_name}
                 </option>
               ))}

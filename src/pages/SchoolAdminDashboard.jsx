@@ -1,6 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import {
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 
@@ -15,12 +19,18 @@ const DESIGNATION_OPTIONS = [
 const getDisplayName = (user) =>
   user?.full_name || user?.email?.split('@')[0] || user?.email || '-'
 
+const normalizeText = (value) => String(value || '').trim().toLowerCase()
+
+const extractGradeNumber = (value) => {
+  const match = String(value || '').match(/(\d+)/)
+  return match ? Number(match[1]) : 999
+}
+
 export default function SchoolAdminDashboard() {
   const navigate = useNavigate()
   const settingsMenuRef = useRef(null)
 
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [savingId, setSavingId] = useState(null)
 
   const [adminProfile, setAdminProfile] = useState(null)
@@ -37,6 +47,11 @@ export default function SchoolAdminDashboard() {
   const [showMobileSettingsMenu, setShowMobileSettingsMenu] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
+  const [completionLoading, setCompletionLoading] = useState(false)
+  const [completionRows, setCompletionRows] = useState([])
+  const [completionSubjects, setCompletionSubjects] = useState([])
+  const [selectedExamKey, setSelectedExamKey] = useState('TOV')
+  const [examOptions, setExamOptions] = useState([])
 
   useEffect(() => {
     checkAccessAndFetch()
@@ -67,6 +82,12 @@ export default function SchoolAdminDashboard() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  useEffect(() => {
+    if (!adminProfile?.school_id || !setupConfig) return
+
+    fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig)
+  }, [selectedExamKey])
 
   const checkAccessAndFetch = async () => {
     setLoading(true)
@@ -114,7 +135,7 @@ export default function SchoolAdminDashboard() {
 
     const { data: setupData, error: setupError } = await supabase
       .from('school_setup_configs')
-      .select('id, setup_step, is_setup_complete, current_academic_year')
+      .select('*')
       .eq('school_id', profile.school_id)
       .maybeSingle()
 
@@ -152,13 +173,15 @@ export default function SchoolAdminDashboard() {
     setStudentCount(studentTotal || 0)
     setAdminProfile(profile)
 
-    await fetchSchoolData(profile.school_id)
+    await Promise.all([
+      fetchSchoolData(profile.school_id),
+      fetchScoreCompletionMatrix(profile.school_id, setupData),
+    ])
+
     setLoading(false)
   }
 
   const fetchSchoolData = async (schoolId) => {
-    setRefreshing(true)
-
     const [
       { data: school, error: schoolError },
       { data: profiles, error: profilesError },
@@ -180,12 +203,252 @@ export default function SchoolAdminDashboard() {
 
     setSchoolInfo(school || null)
     setUsers(profiles || [])
-    setRefreshing(false)
+  }
+
+  const fetchScoreCompletionMatrix = async (schoolId, rawSetupConfig) => {
+    if (!schoolId) {
+      setCompletionRows([])
+      setCompletionSubjects([])
+      return
+    }
+
+    setCompletionLoading(true)
+
+    const academicYear =
+      rawSetupConfig?.current_academic_year || new Date().getFullYear()
+
+    const [
+      { data: classRows, error: classError },
+      { data: subjectRows, error: subjectError },
+      { data: enrollmentRows, error: enrollmentError },
+      { data: scoreRows, error: scoreError },
+      { data: examConfigRows, error: examConfigError },
+    ] = await Promise.all([
+      supabase
+        .from('classes')
+        .select('id, class_name, tingkatan')
+        .eq('school_id', schoolId)
+        .order('tingkatan', { ascending: true })
+        .order('class_name', { ascending: true }),
+
+      supabase
+        .from('subjects')
+        .select('id, subject_name, tingkatan, is_active')
+        .eq('school_id', schoolId)
+        .eq('is_active', true)
+        .order('tingkatan', { ascending: true })
+        .order('subject_name', { ascending: true }),
+
+      supabase
+        .from('student_enrollments')
+        .select('id, class_id')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear)
+        .eq('is_active', true),
+
+      supabase
+        .from('student_scores')
+        .select('class_id, subject_id, student_enrollment_id, exam_key')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+
+      supabase
+        .from('exam_configs')
+        .select('grade_label, exam_key, exam_name, exam_order, is_active')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+    ])
+
+    if (classError) console.error('Class matrix error:', classError)
+    if (subjectError) console.error('Subject matrix error:', subjectError)
+    if (enrollmentError) console.error('Enrollment matrix error:', enrollmentError)
+    if (scoreError) console.error('Score matrix error:', scoreError)
+    if (examConfigError) console.error('Exam config matrix error:', examConfigError)
+
+    const normalizedSetupConfig = normalizeSetupConfigWithExamConfigs(
+      rawSetupConfig || {},
+      examConfigRows || []
+    )
+
+    const fallbackGradeLabel =
+      normalizedSetupConfig?.active_grade_labels?.[0] ||
+      Object.keys(normalizedSetupConfig?.exam_structure || {})[0] ||
+      'Tingkatan 1'
+
+    const allExamKeys = getExamStructureForGrade(
+      normalizedSetupConfig,
+      fallbackGradeLabel
+    )
+
+    const options = allExamKeys
+      .map((exam) => ({
+        value: String(exam?.key || '').toUpperCase(),
+        label: exam?.name || exam?.key,
+      }))
+      .filter((exam) => exam.value && !exam.value.startsWith('OTR'))
+
+    setExamOptions(options)
+
+    if (options.length > 0 && !options.some((exam) => exam.value === selectedExamKey)) {
+      setSelectedExamKey(options[0].value)
+    }
+
+    const activeSubjects = (subjectRows || []).filter(
+      (item) => item && item.is_active !== false
+    )
+
+    const subjectNames = Array.from(
+      new Set(
+        activeSubjects
+          .map((item) => String(item.subject_name || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) =>
+      a.localeCompare(b, 'ms', { sensitivity: 'base' })
+    )
+
+    const enrollmentsByClass = new Map()
+    ;(enrollmentRows || []).forEach((row) => {
+      if (!enrollmentsByClass.has(row.class_id)) {
+        enrollmentsByClass.set(row.class_id, [])
+      }
+      enrollmentsByClass.get(row.class_id).push(row.id)
+    })
+
+    const scoreMap = new Map()
+    ;(scoreRows || []).forEach((row) => {
+      const classId = row.class_id
+      const subjectId = row.subject_id
+      const enrollmentId = row.student_enrollment_id
+      const examKey = String(row.exam_key || '').trim().toUpperCase()
+
+      if (!classId || !subjectId || !enrollmentId || !examKey) return
+
+      const key = `${classId}__${subjectId}`
+
+      if (!scoreMap.has(key)) {
+        scoreMap.set(key, new Map())
+      }
+
+      const studentMap = scoreMap.get(key)
+
+      if (!studentMap.has(enrollmentId)) {
+        studentMap.set(enrollmentId, new Set())
+      }
+
+      studentMap.get(enrollmentId).add(examKey)
+    })
+
+    const selectedExam = String(selectedExamKey || '').toUpperCase()
+
+    const rows = (classRows || [])
+      .slice()
+      .sort((a, b) => {
+        const gradeDiff =
+          extractGradeNumber(a.tingkatan) - extractGradeNumber(b.tingkatan)
+
+        if (gradeDiff !== 0) return gradeDiff
+
+        return String(a.class_name || '').localeCompare(
+          String(b.class_name || ''),
+          'ms',
+          { sensitivity: 'base' }
+        )
+      })
+      .map((classItem) => {
+        const offeredSubjectsForClass = activeSubjects
+          .filter(
+            (subject) =>
+              normalizeText(subject.tingkatan) === normalizeText(classItem.tingkatan)
+          )
+          .filter(
+            (subject, index, arr) =>
+              index ===
+              arr.findIndex(
+                (item) =>
+                  normalizeText(item.subject_name) ===
+                  normalizeText(subject.subject_name)
+              )
+          )
+
+        const enrollmentIds = enrollmentsByClass.get(classItem.id) || []
+
+        const cells = {}
+
+        subjectNames.forEach((subjectName) => {
+          const subject = offeredSubjectsForClass.find(
+            (item) => normalizeText(item.subject_name) === normalizeText(subjectName)
+          )
+
+          if (!subject) {
+            cells[subjectName] = {
+              status: 'na',
+              label: '-',
+              completedStudents: 0,
+              totalStudents: 0,
+              expectedExamCount: 0,
+            }
+            return
+          }
+
+          if (!enrollmentIds.length || !selectedExam) {
+            cells[subjectName] = {
+              status: 'incomplete',
+              label: '0/0',
+              completedStudents: 0,
+              totalStudents: enrollmentIds.length,
+              expectedExamCount: selectedExam ? 1 : 0,
+            }
+            return
+          }
+
+          const studentExamMap =
+            scoreMap.get(`${classItem.id}__${subject.id}`) || new Map()
+
+          let completedStudents = 0
+
+          enrollmentIds.forEach((enrollmentId) => {
+            const examSet = studentExamMap.get(enrollmentId) || new Set()
+
+            if (examSet.has(selectedExam)) {
+              completedStudents += 1
+            }
+          })
+
+          const totalStudents = enrollmentIds.length
+          const isComplete =
+            totalStudents > 0 && completedStudents === totalStudents
+
+          cells[subjectName] = {
+            status: isComplete ? 'complete' : 'incomplete',
+            label: isComplete ? 'Lengkap' : `${completedStudents}/${totalStudents}`,
+            completedStudents,
+            totalStudents,
+            expectedExamCount: selectedExam ? 1 : 0,
+          }
+        })
+
+        return {
+          id: classItem.id,
+          tingkatan: classItem.tingkatan,
+          class_name: classItem.class_name,
+          label: `${classItem.tingkatan} ${classItem.class_name}`,
+          cells,
+        }
+      })
+
+    setCompletionSubjects(subjectNames)
+    setCompletionRows(rows)
+    setCompletionLoading(false)
   }
 
   const refreshData = async () => {
     if (!adminProfile?.school_id) return
-    await fetchSchoolData(adminProfile.school_id)
+
+    await Promise.all([
+      fetchSchoolData(adminProfile.school_id),
+      fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig),
+    ])
   }
 
   const updateUser = async (userId, payload, successMessage) => {
@@ -493,10 +756,6 @@ export default function SchoolAdminDashboard() {
                   </div>
                 )}
 
-                <button onClick={refreshData} style={styles.mobileMenuItem}>
-                  {refreshing ? 'Refreshing...' : 'Refresh'}
-                </button>
-
                 <button onClick={handleLogout} style={styles.mobileLogoutButton}>
                   Logout
                 </button>
@@ -560,13 +819,6 @@ export default function SchoolAdminDashboard() {
               style={styles.secondaryTopButton}
             >
               Sasaran Akademik
-            </button>
-
-            <button
-              onClick={refreshData}
-              style={styles.whiteTopButton}
-            >
-              {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
 
             <button
@@ -634,6 +886,101 @@ export default function SchoolAdminDashboard() {
                 : 'Lengkapkan kelas dahulu, kemudian masukkan murid.'}
             </p>
           </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={styles.cardHeaderColumn}>
+            <h2 style={styles.cardTitle}>Status Pengisian Markah ({selectedExamKey})</h2>
+            <p style={styles.helperText}>
+              Hijau = semua murid dalam kelas itu sudah lengkap markah untuk subjek tersebut.
+              Merah = masih ada murid yang belum lengkap. Paparan ini hanya kira peperiksaan
+              manual seperti TOV, AR1, AR2 dan ETR. OTR tidak dikira kerana dijana automatik.
+            </p>
+          </div>
+
+          <div style={styles.examFilterRow}>
+            <label style={styles.examFilterLabel}>Jenis Peperiksaan:</label>
+            <select
+              value={selectedExamKey}
+              onChange={(e) => setSelectedExamKey(e.target.value)}
+              style={styles.examFilterSelect}
+            >
+              {examOptions.map((exam) => (
+                <option key={exam.value} value={exam.value}>
+                  {exam.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {completionLoading ? (
+            <div style={styles.emptyState}>Loading status pengisian markah...</div>
+          ) : completionRows.length === 0 || completionSubjects.length === 0 ? (
+            <div style={styles.emptyState}>
+              Belum ada data kelas, subjek atau murid aktif untuk dipaparkan.
+            </div>
+          ) : (
+            <div style={styles.matrixWrap}>
+              <table style={styles.matrixTable}>
+                <thead>
+                  <tr>
+                    <th style={{ ...styles.matrixTh, ...styles.matrixStickyCol }}>
+                      Tingkatan / Kelas
+                    </th>
+                    {completionSubjects.map((subjectName) => (
+                      <th key={subjectName} style={styles.matrixTh}>
+                        {subjectName}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {completionRows.map((row) => (
+                    <tr key={row.id}>
+                      <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
+                        {row.label}
+                      </td>
+
+                      {completionSubjects.map((subjectName) => {
+                        const cell = row.cells?.[subjectName]
+
+                        let buttonStyle = styles.matrixStatusButton
+                        if (cell?.status === 'complete') {
+                          buttonStyle = {
+                            ...styles.matrixStatusButton,
+                            ...styles.matrixStatusButtonComplete,
+                          }
+                        } else if (cell?.status === 'incomplete') {
+                          buttonStyle = {
+                            ...styles.matrixStatusButton,
+                            ...styles.matrixStatusButtonIncomplete,
+                          }
+                        } else {
+                          buttonStyle = {
+                            ...styles.matrixStatusButton,
+                            ...styles.matrixStatusButtonNA,
+                          }
+                        }
+
+                        return (
+                          <td key={`${row.id}-${subjectName}`} style={styles.matrixTd}>
+                            <button type="button" style={buttonStyle}>
+                              {cell?.label || '-'}
+                            </button>
+                            {cell?.status !== 'na' && (
+                              <div style={styles.matrixMeta}>
+                                {cell?.completedStudents || 0}/{cell?.totalStudents || 0} murid
+                              </div>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <section style={styles.card}>
@@ -808,16 +1155,6 @@ const styles = {
     fontSize: 15,
     minWidth: 120,
   },
-  whiteTopButton: {
-    padding: '12px 18px',
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    background: '#fff',
-    color: '#111827',
-    fontWeight: 700,
-    cursor: 'pointer',
-    fontSize: 15,
-  },
   darkTopButton: {
     padding: '12px 18px',
     borderRadius: 12,
@@ -925,6 +1262,31 @@ const styles = {
   dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
   card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
   cardHeader: { marginBottom: '14px' },
+  cardHeaderColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    marginBottom: '14px',
+  },
+  examFilterRow: {
+    marginBottom: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  examFilterLabel: {
+    fontWeight: 600,
+    color: '#0f172a',
+  },
+  examFilterSelect: {
+    padding: '6px 10px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    outline: 'none',
+  },
   cardTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
   statusList: { display: 'grid', gap: '10px', marginBottom: '14px' },
   statusRow: { display: 'flex', alignItems: 'center', gap: '10px', color: '#334155' },
@@ -957,4 +1319,71 @@ const styles = {
   designationSelect: { width: '100%', minWidth: '220px', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '8px 10px', outline: 'none', fontSize: '13px', background: '#ffffff' },
   actionSelect: { width: '100%', minWidth: '190px', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '8px 10px', outline: 'none', fontSize: '13px', background: '#ffffff' },
   emptyState: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '24px', color: '#64748b' },
+  matrixWrap: {
+    overflowX: 'auto',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    background: '#ffffff',
+  },
+  matrixTable: {
+    width: '100%',
+    minWidth: '980px',
+    borderCollapse: 'separate',
+    borderSpacing: 0,
+  },
+  matrixTh: {
+    padding: '12px 14px',
+    fontSize: '13px',
+    fontWeight: 700,
+    textAlign: 'center',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#0f172a',
+    whiteSpace: 'nowrap',
+  },
+  matrixTd: {
+    padding: '12px 10px',
+    textAlign: 'center',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#ffffff',
+    verticalAlign: 'middle',
+  },
+  matrixStickyCol: {
+    position: 'sticky',
+    left: 0,
+    zIndex: 1,
+    background: '#ffffff',
+    textAlign: 'left',
+  },
+  matrixClassCell: {
+    minWidth: '220px',
+    fontWeight: 600,
+    color: '#0f172a',
+  },
+  matrixStatusButton: {
+    minWidth: '96px',
+    border: 'none',
+    borderRadius: '999px',
+    padding: '10px 14px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'default',
+  },
+  matrixStatusButtonComplete: {
+    background: '#dcfce7',
+    color: '#166534',
+  },
+  matrixStatusButtonIncomplete: {
+    background: '#fee2e2',
+    color: '#991b1b',
+  },
+  matrixStatusButtonNA: {
+    background: '#e2e8f0',
+    color: '#475569',
+  },
+  matrixMeta: {
+    marginTop: '6px',
+    fontSize: '11px',
+    color: '#64748b',
+  },
 }
