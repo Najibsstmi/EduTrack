@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import {
+  buildDefaultOtrPercentagesByGrade,
+  getOtrSettings,
+} from '../lib/otrGeneration'
 
 export default function SchoolSetupPage() {
   const navigate = useNavigate()
@@ -10,6 +14,7 @@ export default function SchoolSetupPage() {
 
   const [profile, setProfile] = useState(null)
   const [school, setSchool] = useState(null)
+  const [existingSetupConfig, setExistingSetupConfig] = useState(null)
 
   const [activeGradeLabels, setActiveGradeLabels] = useState([])
   const [classCountByGrade, setClassCountByGrade] = useState({})
@@ -43,6 +48,52 @@ export default function SchoolSetupPage() {
   useEffect(() => {
     initPage()
   }, [])
+
+  const ensureOtrConfigDefaults = async (schoolId, setupData) => {
+    if (!setupData?.id) return setupData
+
+    const normalizedSettings = getOtrSettings(
+      setupData,
+      setupData.active_grade_labels || []
+    )
+
+    const needsBackfill =
+      !setupData.otr_generation_mode ||
+      !setupData.otr_percentages_default ||
+      !setupData.otr_percentages_by_grade ||
+      setupData.auto_recalculate_otr_on_etr_change === null ||
+      setupData.auto_recalculate_otr_on_etr_change === undefined
+
+    if (!needsBackfill) {
+      return {
+        ...setupData,
+        ...normalizedSettings,
+      }
+    }
+
+    const nextSetupData = {
+      ...setupData,
+      ...normalizedSettings,
+    }
+
+    const { error } = await supabase
+      .from('school_setup_configs')
+      .update({
+        otr_generation_mode: nextSetupData.otr_generation_mode,
+        otr_percentages_default: nextSetupData.otr_percentages_default,
+        otr_percentages_by_grade: nextSetupData.otr_percentages_by_grade,
+        auto_recalculate_otr_on_etr_change:
+          nextSetupData.auto_recalculate_otr_on_etr_change,
+      })
+      .eq('school_id', schoolId)
+
+    if (error) {
+      console.error(error)
+      return nextSetupData
+    }
+
+    return nextSetupData
+  }
 
   const initPage = async () => {
     setLoading(true)
@@ -108,6 +159,10 @@ export default function SchoolSetupPage() {
         class_count_by_grade,
         ar_count_by_grade,
         otr_count_by_grade,
+        otr_generation_mode,
+        otr_percentages_default,
+        otr_percentages_by_grade,
+        auto_recalculate_otr_on_etr_change,
         setup_step
       `)
       .eq('school_id', profileData.school_id)
@@ -120,14 +175,18 @@ export default function SchoolSetupPage() {
       return
     }
 
+    let normalizedSetupData = setupData
+
     if (setupData) {
-      setActiveGradeLabels(setupData.active_grade_labels || [])
-      setClassCountByGrade(setupData.class_count_by_grade || {})
-      setArCountByGrade(setupData.ar_count_by_grade || {})
-      setOtrCountByGrade(setupData.otr_count_by_grade || {})
+      normalizedSetupData = await ensureOtrConfigDefaults(profileData.school_id, setupData)
+      setExistingSetupConfig(normalizedSetupData)
+      setActiveGradeLabels(normalizedSetupData.active_grade_labels || [])
+      setClassCountByGrade(normalizedSetupData.class_count_by_grade || {})
+      setArCountByGrade(normalizedSetupData.ar_count_by_grade || {})
+      setOtrCountByGrade(normalizedSetupData.otr_count_by_grade || {})
     }
 
-    await loadSetupStatus(profileData.school_id, setupData)
+    await loadSetupStatus(profileData.school_id, normalizedSetupData)
 
     setLoading(false)
   }
@@ -255,6 +314,8 @@ export default function SchoolSetupPage() {
 
     setSaving(true)
 
+    const otrSettings = getOtrSettings(existingSetupConfig, activeGradeLabels)
+
     const payload = {
       school_id: profile.school_id,
       current_academic_year: new Date().getFullYear(),
@@ -262,6 +323,15 @@ export default function SchoolSetupPage() {
       class_count_by_grade: classCountByGrade,
       ar_count_by_grade: arCountByGrade,
       otr_count_by_grade: otrCountByGrade,
+      otr_generation_mode: otrSettings.otr_generation_mode,
+      otr_percentages_default: otrSettings.otr_percentages_default,
+      otr_percentages_by_grade: buildDefaultOtrPercentagesByGrade(
+        activeGradeLabels,
+        otrSettings.otr_percentages_by_grade,
+        otrSettings.otr_percentages_default
+      ),
+      auto_recalculate_otr_on_etr_change:
+        otrSettings.auto_recalculate_otr_on_etr_change,
       setup_step: 1,
       updated_by: profile.id,
       created_by: profile.id,

@@ -2,6 +2,118 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
+const DEFAULT_OTR1_PERCENTAGE = 0.4
+const DEFAULT_OTR2_PERCENTAGE = 0.75
+
+function clampMark(value) {
+  const num = Number(value)
+  if (Number.isNaN(num)) return ''
+  if (num < 0) return 0
+  if (num > 100) return 100
+  return num
+}
+
+function calculatePercent(tov, etr) {
+  const start = Number(tov)
+  const end = Number(etr)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) return ''
+  if (start <= 0) return ''
+  return Number((((end - start) / start) * 100).toFixed(1))
+}
+
+function getAcademicYear(setupConfig) {
+  return Number(setupConfig?.current_academic_year || new Date().getFullYear())
+}
+
+function getOtrSettings(setupConfig) {
+  return {
+    mode: setupConfig?.otr_calculation_method || 'linear',
+    otr1Percentage: Number(
+      setupConfig?.otr1_percentage ?? DEFAULT_OTR1_PERCENTAGE
+    ),
+    otr2Percentage: Number(
+      setupConfig?.otr2_percentage ?? DEFAULT_OTR2_PERCENTAGE
+    ),
+    autoRecalculate:
+      setupConfig?.auto_recalculate_otr_on_etr_change !== false,
+  }
+}
+
+function calculateOTRMarks({ tov, etr, otrKeys, setupConfig }) {
+  const start = Number(tov)
+  const end = Number(etr)
+
+  if (Number.isNaN(start) || Number.isNaN(end)) return {}
+
+  const safeKeys = Array.isArray(otrKeys) ? otrKeys : []
+  if (!safeKeys.length) return {}
+
+  const {
+    mode,
+    otr1Percentage,
+    otr2Percentage,
+  } = getOtrSettings(setupConfig)
+
+  if (mode === 'percentage_to_etr') {
+    const result = {}
+
+    safeKeys.forEach((key, index) => {
+      let percentage
+
+      if (key === 'OTR1') percentage = otr1Percentage
+      else if (key === 'OTR2') percentage = otr2Percentage
+      else percentage = (index + 1) / (safeKeys.length + 1)
+
+      const value = start + (end - start) * percentage
+      result[key] = Math.round(value)
+    })
+
+    return result
+  }
+
+  // fallback linear
+  const gap = end - start
+  const result = {}
+
+  safeKeys.forEach((key, index) => {
+    const step = index + 1
+    const value = start + (gap * step) / (safeKeys.length + 1)
+    result[key] = Math.round(value)
+  })
+
+  return result
+}
+
+function findGradeFromMark(mark, gradeScales) {
+  const numericMark = Number(mark)
+
+  if (Number.isNaN(numericMark)) {
+    return {
+      grade_name: null,
+      grade_point: null,
+    }
+  }
+
+  const matched = (gradeScales || []).find((grade) => {
+    const min = Number(grade.min_mark ?? grade.min_score ?? 0)
+    const max = Number(grade.max_mark ?? grade.max_score ?? 100)
+    return numericMark >= min && numericMark <= max
+  })
+
+  if (!matched) {
+    return {
+      grade_name: null,
+      grade_point: null,
+    }
+  }
+
+  return {
+    grade_name: matched.grade_name ?? null,
+    grade_point: matched.grade_point ?? null,
+  }
+}
+
 export default function TargetsPage() {
   const navigate = useNavigate()
 
@@ -13,28 +125,40 @@ export default function TargetsPage() {
   const [subjects, setSubjects] = useState([])
   const [students, setStudents] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
+  const [gradeScales, setGradeScales] = useState([])
 
   const [selectedClassId, setSelectedClassId] = useState('')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
 
+  // map sasaran sedia ada
   const [targetMap, setTargetMap] = useState({})
+  // map TOV sebenar dari student_scores
+  const [tovMap, setTovMap] = useState({})
 
   useEffect(() => {
     loadInitialData()
   }, [])
 
   useEffect(() => {
-    if (selectedClassId) {
+    if (selectedClassId && selectedSubjectId) {
       loadStudentsByClass(selectedClassId)
+      loadTovScores(selectedClassId, selectedSubjectId)
       loadExistingTargets(selectedClassId, selectedSubjectId)
+    } else if (selectedClassId) {
+      loadStudentsByClass(selectedClassId)
+      setTovMap({})
+      setTargetMap({})
     } else {
       setStudents([])
+      setTovMap({})
       setTargetMap({})
     }
   }, [selectedClassId, selectedSubjectId])
 
   useEffect(() => {
     setSelectedSubjectId('')
+    setTovMap({})
+    setTargetMap({})
   }, [selectedClassId])
 
   const loadInitialData = async () => {
@@ -70,6 +194,7 @@ export default function TargetsPage() {
       { data: classData, error: classError },
       { data: subjectData, error: subjectError },
       { data: setupData, error: setupError },
+      { data: gradeData, error: gradeError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -81,6 +206,7 @@ export default function TargetsPage() {
         .from('subjects')
         .select('*')
         .eq('school_id', schoolId)
+        .eq('is_active', true)
         .order('subject_name', { ascending: true }),
 
       supabase
@@ -88,6 +214,11 @@ export default function TargetsPage() {
         .select('*')
         .eq('school_id', schoolId)
         .maybeSingle(),
+
+      supabase
+        .from('grade_scales')
+        .select('*')
+        .eq('school_id', schoolId),
     ])
 
     if (classError) {
@@ -105,9 +236,15 @@ export default function TargetsPage() {
       alert('Gagal ambil konfigurasi setup sekolah')
     }
 
+    if (gradeError) {
+      console.error(gradeError)
+      alert('Gagal ambil skala gred sekolah')
+    }
+
     setClasses(classData || [])
     setSubjects(subjectData || [])
     setSetupConfig(setupData || null)
+    setGradeScales(gradeData || [])
     setLoading(false)
   }
 
@@ -145,13 +282,44 @@ export default function TargetsPage() {
     setStudents(mapped)
   }
 
+  const loadTovScores = async (classId, subjectId) => {
+    if (!profile?.school_id || !classId || !subjectId) {
+      setTovMap({})
+      return
+    }
+
+    const academicYear = getAcademicYear(setupConfig)
+
+    const { data, error } = await supabase
+      .from('student_scores')
+      .select('student_enrollment_id, mark')
+      .eq('school_id', profile.school_id)
+      .eq('class_id', classId)
+      .eq('subject_id', subjectId)
+      .eq('academic_year', academicYear)
+      .eq('exam_key', 'TOV')
+
+    if (error) {
+      console.error(error)
+      alert('Gagal ambil TOV sedia ada.')
+      return
+    }
+
+    const map = {}
+    ;(data || []).forEach((row) => {
+      map[row.student_enrollment_id] = row.mark ?? ''
+    })
+
+    setTovMap(map)
+  }
+
   const loadExistingTargets = async (classId, subjectId) => {
     if (!profile?.school_id || !classId || !subjectId) {
       setTargetMap({})
       return
     }
 
-    const currentYear = new Date().getFullYear()
+    const academicYear = getAcademicYear(setupConfig)
 
     const { data, error } = await supabase
       .from('student_targets')
@@ -159,7 +327,7 @@ export default function TargetsPage() {
       .eq('school_id', profile.school_id)
       .eq('class_id', classId)
       .eq('subject_id', subjectId)
-      .eq('academic_year', currentYear)
+      .eq('academic_year', academicYear)
 
     if (error) {
       console.error(error)
@@ -171,19 +339,23 @@ export default function TargetsPage() {
 
     ;(data || []).forEach((row) => {
       const key = row.student_enrollment_id
+
       if (!map[key]) {
         map[key] = {
-          TOV: '',
           ETR: '',
+          OTR1: '',
+          OTR2: '',
+          manualFlags: {},
         }
-      }
-
-      if (row.target_key === 'TOV') {
-        map[key].TOV = row.target_mark ?? ''
       }
 
       if (row.target_key === 'ETR') {
         map[key].ETR = row.target_mark ?? ''
+      }
+
+      if (row.target_key === 'OTR1' || row.target_key === 'OTR2') {
+        map[key][row.target_key] = row.target_mark ?? ''
+        map[key].manualFlags[row.target_key] = !!row.manually_adjusted
       }
     })
 
@@ -197,41 +369,20 @@ export default function TargetsPage() {
 
   const selectedGradeLabel = selectedClass?.tingkatan || ''
 
-  const examStructureForGrade =
-    setupConfig?.exam_structure?.[selectedGradeLabel] || []
+  const examStructureForGrade = setupConfig?.exam_structure?.[selectedGradeLabel] || []
 
   const otrKeys = useMemo(() => {
-    return examStructureForGrade
-      .filter((item) => String(item.key).startsWith('OTR'))
+    const keys = examStructureForGrade
+      .filter((item) => String(item.key || '').startsWith('OTR'))
       .map((item) => item.key)
+
+    if (keys.length > 0) return keys
+
+    return ['OTR1', 'OTR2']
   }, [examStructureForGrade])
-
-  const sortedStudents = useMemo(() => {
-    return [...students].sort((a, b) => {
-      const normalizeGender = (value) => String(value || '').trim().toUpperCase()
-
-      const rank = (gender) => {
-        if (gender === 'LELAKI') return 1
-        if (gender === 'PEREMPUAN') return 2
-        return 3
-      }
-
-      const genderCompare =
-        rank(normalizeGender(a.gender)) - rank(normalizeGender(b.gender))
-
-      if (genderCompare !== 0) return genderCompare
-
-      return String(a.full_name || '').localeCompare(
-        String(b.full_name || ''),
-        'ms',
-        { sensitivity: 'base' }
-      )
-    })
-  }, [students])
 
   const filteredSubjectsByGrade = useMemo(() => {
     if (!selectedGradeLabel) return []
-
     return subjects.filter(
       (subject) => String(subject.tingkatan || '') === String(selectedGradeLabel)
     )
@@ -249,50 +400,51 @@ export default function TargetsPage() {
     )
   }, [filteredSubjectsByGrade])
 
-  const clampMark = (value) => {
-    const num = Number(value)
-    if (Number.isNaN(num)) return ''
-    if (num < 0) return 0
-    if (num > 100) return 100
-    return num
-  }
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      const normalizeGender = (value) => String(value || '').trim().toUpperCase()
 
-  const calculatePercent = (tov, etr) => {
-    const start = Number(tov)
-    const end = Number(etr)
+      const rank = (gender) => {
+        if (gender === 'LELAKI') return 1
+        if (gender === 'PEREMPUAN') return 2
+        return 3
+      }
 
-    if (Number.isNaN(start) || Number.isNaN(end)) return ''
-    if (start <= 0) return ''
+      const genderCompare =
+        rank(normalizeGender(a.gender)) - rank(normalizeGender(b.gender))
 
-    return Number((((end - start) / start) * 100).toFixed(1))
-  }
+      if (genderCompare !== 0) return genderCompare
 
-  const calculateOTRs = (tov, etr, keys) => {
-    const start = Number(tov)
-    const end = Number(etr)
-
-    if (Number.isNaN(start) || Number.isNaN(end)) return {}
-
-    const count = keys.length
-    if (!count) return {}
-
-    const gap = end - start
-    const result = {}
-
-    keys.forEach((key, index) => {
-      const i = index + 1
-      const value = start + (gap * i) / (count + 1)
-      result[key] = Number(clampMark(Number(value.toFixed(1))))
+      return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ms', {
+        sensitivity: 'base',
+      })
     })
+  }, [students])
 
-    return result
+  const getGradeScalesForTingkatan = (tingkatan) => {
+    return (gradeScales || []).filter((grade) => {
+      const label = grade.tingkatan ?? grade.form_level ?? grade.level ?? ''
+      return (
+        String(label).trim().toLowerCase() === String(tingkatan).trim().toLowerCase()
+      )
+    })
+  }
+
+  const getGradeInfo = (mark) => {
+    const gradeSet = getGradeScalesForTingkatan(selectedGradeLabel)
+    return findGradeFromMark(mark, gradeSet)
   }
 
   const updateTargetValue = (studentEnrollmentId, field, value) => {
     setTargetMap((prev) => ({
       ...prev,
       [studentEnrollmentId]: {
-        ...(prev[studentEnrollmentId] || {}),
+        ...(prev[studentEnrollmentId] || {
+          ETR: '',
+          OTR1: '',
+          OTR2: '',
+          manualFlags: {},
+        }),
         [field]: value,
       },
     }))
@@ -309,73 +461,86 @@ export default function TargetsPage() {
       return
     }
 
-    const currentYear = new Date().getFullYear()
+    const academicYear = getAcademicYear(setupConfig)
+    const settings = getOtrSettings(setupConfig)
     const rowsToUpsert = []
 
-    sortedStudents.forEach((student) => {
+    for (const student of sortedStudents) {
       const values = targetMap[student.enrollment_id] || {}
-      const tov = values.TOV
-      const etr = values.ETR
+      const tovRaw = tovMap[student.enrollment_id]
+      const etrRaw = values.ETR
 
-      if (tov === '' && etr === '') return
+      const hasTov = tovRaw !== '' && tovRaw !== null && tovRaw !== undefined
+      const hasEtr = etrRaw !== '' && etrRaw !== null && etrRaw !== undefined
 
-      const safeTov = tov === '' ? null : clampMark(tov)
-      const safeEtr = etr === '' ? null : clampMark(etr)
-      const percent =
-        safeTov !== null && safeEtr !== null
-          ? calculatePercent(safeTov, safeEtr)
-          : null
-
-      if (safeTov !== null) {
-        rowsToUpsert.push({
-          school_id: profile.school_id,
-          academic_year: currentYear,
-          student_enrollment_id: student.enrollment_id,
-          student_profile_id: student.student_profile_id,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          target_key: 'TOV',
-          target_mark: safeTov,
-          generated_by_system: false,
-          manually_adjusted: false,
-          remarks: null,
-          entered_by: profile.id,
-          updated_at: new Date().toISOString(),
-        })
+      if (!hasTov && !hasEtr) {
+        continue
       }
 
-      if (safeEtr !== null) {
-        rowsToUpsert.push({
-          school_id: profile.school_id,
-          academic_year: currentYear,
-          student_enrollment_id: student.enrollment_id,
-          student_profile_id: student.student_profile_id,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          target_key: 'ETR',
-          target_mark: safeEtr,
-          generated_by_system: false,
-          manually_adjusted: false,
-          remarks:
-            percent !== null && percent !== '' ? `Kenaikan sasaran: ${percent}%` : null,
-          entered_by: profile.id,
-          updated_at: new Date().toISOString(),
-        })
+      if (!hasTov && hasEtr) {
+        alert(`TOV belum ada untuk ${student.full_name}. Masukkan TOV dahulu di Input Markah.`)
+        return
       }
 
-      if (safeTov !== null && safeEtr !== null) {
-        const otrs = calculateOTRs(safeTov, safeEtr, otrKeys)
+      if (!hasEtr) {
+        continue
+      }
 
-        Object.entries(otrs).forEach(([key, mark]) => {
+      const safeTov = clampMark(tovRaw)
+      const safeEtr = clampMark(etrRaw)
+
+      const etrGradeInfo = getGradeInfo(safeEtr)
+      const percent = calculatePercent(safeTov, safeEtr)
+
+      rowsToUpsert.push({
+        school_id: profile.school_id,
+        academic_year: academicYear,
+        student_enrollment_id: student.enrollment_id,
+        student_profile_id: student.student_profile_id,
+        class_id: selectedClassId,
+        subject_id: selectedSubjectId,
+        target_key: 'ETR',
+        target_mark: safeEtr,
+        grade_name: etrGradeInfo.grade_name,
+        grade_point: etrGradeInfo.grade_point,
+        generated_by_system: false,
+        manually_adjusted: false,
+        remarks:
+          percent !== null && percent !== ''
+            ? `Kenaikan sasaran: ${percent}%`
+            : null,
+        entered_by: profile.id,
+        updated_at: new Date().toISOString(),
+      })
+
+      if (settings.autoRecalculate) {
+        const generatedOtrs = calculateOTRMarks({
+          tov: safeTov,
+          etr: safeEtr,
+          otrKeys,
+          setupConfig,
+        })
+
+        otrKeys.forEach((key) => {
+          const targetMark = generatedOtrs[key]
+          if (targetMark === null || targetMark === undefined || targetMark === '') return
+
+          const existingManualFlag = values?.manualFlags?.[key] === true
+          if (existingManualFlag) return
+
+          const gradeInfo = getGradeInfo(targetMark)
+
           rowsToUpsert.push({
             school_id: profile.school_id,
-            academic_year: currentYear,
+            academic_year: academicYear,
             student_enrollment_id: student.enrollment_id,
             student_profile_id: student.student_profile_id,
             class_id: selectedClassId,
             subject_id: selectedSubjectId,
             target_key: key,
-            target_mark: mark,
+            target_mark: targetMark,
+            grade_name: gradeInfo.grade_name,
+            grade_point: gradeInfo.grade_point,
             generated_by_system: true,
             manually_adjusted: false,
             remarks: 'Dijana automatik oleh sistem',
@@ -384,7 +549,7 @@ export default function TargetsPage() {
           })
         })
       }
-    })
+    }
 
     if (!rowsToUpsert.length) {
       alert('Tiada data untuk disimpan.')
@@ -407,27 +572,36 @@ export default function TargetsPage() {
     }
 
     setSaving(false)
+    await loadExistingTargets(selectedClassId, selectedSubjectId)
     alert('Sasaran berjaya disimpan.')
   }
 
   if (loading) {
-    return <div className="p-6">Loading Sasaran Akademik...</div>
+    return (
+      <div className="p-6 text-slate-600">Loading Sasaran Akademik...</div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <div className="min-h-screen bg-slate-100 px-4 py-6 md:px-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                 EduTrack
               </p>
-              <h1 className="text-3xl font-bold text-slate-900">Sasaran Akademik Murid</h1>
+              <h1 className="mt-2 text-3xl font-bold text-slate-900">
+                Sasaran Akademik Murid
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">
+                TOV diambil automatik daripada Input Markah. Masukkan ETR dan sistem
+                akan jana OTR secara automatik ikut tetapan sekolah.
+              </p>
             </div>
 
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/home')}
               className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
             >
               Kembali Dashboard
@@ -435,10 +609,10 @@ export default function TargetsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold text-slate-900">Penapis Sasaran</h2>
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">Penapis Sasaran</h2>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
@@ -467,107 +641,99 @@ export default function TargetsPage() {
           </div>
 
           {selectedGradeLabel && (
-            <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Tingkatan dikesan: <strong>{selectedGradeLabel}</strong>
+            <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Tingkatan dikesan: <span className="font-semibold">{selectedGradeLabel}</span>
               {' · '}
-              Jumlah OTR: <strong>{otrKeys.length}</strong>
-              {otrKeys.length > 0 && (
-                <>
-                  {' · '}
-                  OTR dikesan: <strong>{otrKeys.join(', ')}</strong>
-                </>
-              )}
+              Tahun akademik: <span className="font-semibold">{getAcademicYear(setupConfig)}</span>
+              {' · '}
+              Mode OTR: <span className="font-semibold">{setupConfig?.otr_calculation_method || 'linear'}</span>
+              {' · '}
+              OTR1: <span className="font-semibold">{Number(setupConfig?.otr1_percentage ?? DEFAULT_OTR1_PERCENTAGE) * 100}%</span>
+              {' · '}
+              OTR2: <span className="font-semibold">{Number(setupConfig?.otr2_percentage ?? DEFAULT_OTR2_PERCENTAGE) * 100}%</span>
+              {' · '}
+              OTR dikesan: <span className="font-semibold">{otrKeys.join(', ')}</span>
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-slate-900">Senarai Murid & Sasaran</h2>
-            <div className="text-sm text-slate-500">
-              Jumlah murid: <strong>{sortedStudents.length}</strong>
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Senarai Murid & Sasaran
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Jumlah murid: {sortedStudents.length}
+              </p>
             </div>
           </div>
 
           {!selectedClassId || !selectedSubjectId ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-slate-500">
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
               Sila pilih kelas dan subjek dahulu.
             </div>
           ) : sortedStudents.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-slate-500">
+            <div className="rounded-2xl border border-dashed border-slate-300 px-6 py-10 text-center text-sm text-slate-500">
               Tiada murid dijumpai untuk kelas ini.
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Bil
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Nama
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        No IC
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        TOV
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        ETR
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        % Kenaikan
-                      </th>
-
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left text-slate-700">
+                      <th className="px-4 py-3 font-semibold">Bil</th>
+                      <th className="px-4 py-3 font-semibold">Nama</th>
+                      <th className="px-4 py-3 font-semibold">No IC</th>
+                      <th className="px-4 py-3 font-semibold">TOV</th>
+                      <th className="px-4 py-3 font-semibold">ETR</th>
+                      <th className="px-4 py-3 font-semibold">% Kenaikan</th>
                       {otrKeys.map((key) => (
-                        <th
-                          key={key}
-                          className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700"
-                        >
+                        <th key={key} className="px-4 py-3 font-semibold">
                           {key}
                         </th>
                       ))}
                     </tr>
                   </thead>
-
                   <tbody>
                     {sortedStudents.map((student, index) => {
                       const values = targetMap[student.enrollment_id] || {}
-                      const tov = values.TOV
+                      const tov = tovMap[student.enrollment_id]
                       const etr = values.ETR
+
+                      const hasTov = tov !== '' && tov !== null && tov !== undefined
+                      const hasEtr = etr !== '' && etr !== null && etr !== undefined
+
                       const percent =
-                        tov !== '' && etr !== ''
+                        hasTov && hasEtr
                           ? calculatePercent(clampMark(tov), clampMark(etr))
                           : ''
-                      const otrs =
-                        tov !== '' && etr !== ''
-                          ? calculateOTRs(clampMark(tov), clampMark(etr), otrKeys)
+
+                      const generatedOtrs =
+                        hasTov && hasEtr
+                          ? calculateOTRMarks({
+                              tov: clampMark(tov),
+                              etr: clampMark(etr),
+                              otrKeys,
+                              setupConfig,
+                            })
                           : {}
 
                       return (
-                        <tr key={student.enrollment_id} className="border-b border-slate-100">
-                          <td className="px-4 py-3 text-sm">{index + 1}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-slate-800">
+                        <tr key={student.enrollment_id} className="border-b last:border-b-0">
+                          <td className="px-4 py-3">{index + 1}</td>
+                          <td className="px-4 py-3 font-medium text-slate-900">
                             {student.full_name}
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-600">
+                          <td className="px-4 py-3 text-slate-600">
                             {student.ic_number}
                           </td>
 
                           <td className="px-4 py-3">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              value={tov ?? ''}
-                              onChange={(e) =>
-                                updateTargetValue(student.enrollment_id, 'TOV', e.target.value)
-                              }
-                              className="w-24 rounded-lg border border-slate-300 px-3 py-2"
-                            />
+                            <div className="w-24 rounded-lg bg-slate-100 px-3 py-2 text-center font-medium text-slate-700">
+                              {hasTov ? clampMark(tov) : '-'}
+                            </div>
                           </td>
 
                           <td className="px-4 py-3">
@@ -580,16 +746,17 @@ export default function TargetsPage() {
                                 updateTargetValue(student.enrollment_id, 'ETR', e.target.value)
                               }
                               className="w-24 rounded-lg border border-slate-300 px-3 py-2"
+                              disabled={!hasTov}
                             />
                           </td>
 
-                          <td className="px-4 py-3 text-sm font-medium text-slate-700">
+                          <td className="px-4 py-3">
                             {percent === '' || percent === null ? '-' : `${percent}%`}
                           </td>
 
                           {otrKeys.map((key) => (
-                            <td key={key} className="px-4 py-3 text-sm text-slate-700">
-                              {otrs[key] ?? '-'}
+                            <td key={key} className="px-4 py-3">
+                              {generatedOtrs[key] ?? values[key] ?? '-'}
                             </td>
                           ))}
                         </tr>
@@ -599,11 +766,11 @@ export default function TargetsPage() {
                 </table>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-6 flex justify-end">
                 <button
                   onClick={saveTargets}
                   disabled={saving}
-                  className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? 'Menyimpan...' : 'Simpan Sasaran'}
                 </button>

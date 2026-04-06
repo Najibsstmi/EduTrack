@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
+import {
+  generateOtrMarks,
+  getOtrKeysForTingkatan,
+  shouldAutoRecalculateOtrs,
+} from '../lib/otrGeneration'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -186,13 +191,6 @@ const findGradeFromMark = (mark, gradeScales = []) => {
   }
 }
 
-const getOtrKeysForTingkatan = (tingkatan, setupConfig) => {
-  const exams = setupConfig?.exam_structure?.[tingkatan] || []
-  return exams
-    .filter((item) => String(item.key || '').toUpperCase().startsWith('OTR'))
-    .map((item) => String(item.key).toUpperCase())
-}
-
 const generateOtrRows = ({
   schoolId,
   academicYear,
@@ -209,16 +207,15 @@ const generateOtrRows = ({
   const otrKeys = getOtrKeysForTingkatan(tingkatan, setupConfig)
   if (!otrKeys.length) return []
 
-  const start = Number(tovMark)
-  const end = Number(etrMark)
+  const generatedMarks = generateOtrMarks({
+    tingkatan,
+    tovMark,
+    etrMark,
+    setupConfig,
+    otrKeys,
+  })
 
-  if (Number.isNaN(start) || Number.isNaN(end)) return []
-
-  const gap = end - start
-
-  return otrKeys.map((key, index) => {
-    const i = index + 1
-    const value = Number((start + (gap * i) / (otrKeys.length + 1)).toFixed(1))
+  return Object.entries(generatedMarks).map(([key, value]) => {
 
     return {
       school_id: schoolId,
@@ -379,7 +376,7 @@ export default function StudentScoresPage() {
 
     const { data: setupData } = await supabase
       .from('school_setup_configs')
-      .select('current_academic_year, exam_structure')
+      .select('current_academic_year, exam_structure, otr_generation_mode, otr_percentages_default, otr_percentages_by_grade, auto_recalculate_otr_on_etr_change')
       .eq('school_id', profileData.school_id)
       .maybeSingle()
 
@@ -817,7 +814,11 @@ export default function StudentScoresPage() {
       const otrRows = []
 
       for (const [, pair] of targetPairs.entries()) {
-        if (pair.tov_mark !== null && pair.etr_mark !== null) {
+        if (
+          pair.tov_mark !== null &&
+          pair.etr_mark !== null &&
+          shouldAutoRecalculateOtrs(setupConfigData)
+        ) {
           const generated = generateOtrRows({
             schoolId: pair.school_id,
             academicYear: pair.academic_year,
