@@ -434,86 +434,148 @@ export default function SchoolAdminDashboard() {
         </div>
 
         {isMobileView ? (
-          <div style={styles.mobileMenuWrap} ref={settingsMenuRef}>
+          <div style={styles.mobileMenuWrapper} ref={settingsMenuRef}>
             <button
-              style={styles.mobileToggleButton}
               onClick={() => {
                 setShowMobileMenu((prev) => {
                   const nextValue = !prev
-                  if (!nextValue) {
-                    setShowMobileSettingsMenu(false)
-                  }
+                  if (!nextValue) setShowMobileSettingsMenu(false)
                   return nextValue
                 })
               }}
+              style={styles.mobileMenuToggle}
             >
               {showMobileMenu ? '✕ Tutup' : '☰ Menu'}
             </button>
+
             {showMobileMenu && (
               <div style={styles.mobileMenuPanel}>
-                <div style={styles.mobileMenuGrid}>
-                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/scores')}>Input Markah</button>
-                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/students')}>Input Murid</button>
-                  <button style={styles.mobileMenuItem} onClick={() => handleMobileNavigate('/analysis')}>Analisis</button>
-                  <button
-                    style={styles.mobileMenuItemWide}
-                    onClick={() => setShowMobileSettingsMenu((prev) => !prev)}
-                  >
-                    {showMobileSettingsMenu ? 'Tutup Tetapan ▲' : 'Tetapan ▼'}
-                  </button>
-                  {showMobileSettingsMenu && (
-                    <div style={styles.mobileSubmenuPanel}>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup')}>Struktur Akademik</button>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/grades')}>Tetapan Grade</button>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/school-setup/subjects')}>Tetapan Subjek</button>
-                      <button style={styles.mobileSubmenuItem} onClick={() => handleMobileNavigate('/classes')}>Tetapan Kelas</button>
-                    </div>
-                  )}
-                  <button style={styles.mobileMenuItemDangerFull} onClick={handleLogout}>Logout</button>
-                </div>
+                <button onClick={() => handleMobileNavigate('/scores')} style={styles.mobileMenuItem}>
+                  Input Markah
+                </button>
+
+                <button onClick={() => handleMobileNavigate('/students')} style={styles.mobileMenuItem}>
+                  Input Murid
+                </button>
+
+                <button onClick={() => handleMobileNavigate('/analysis')} style={styles.mobileMenuItem}>
+                  Analisis
+                </button>
+
+                <button onClick={() => handleMobileNavigate('/targets')} style={styles.mobileMenuItem}>
+                  Sasaran Akademik
+                </button>
+
+                <button
+                  onClick={() => setShowMobileSettingsMenu((prev) => !prev)}
+                  style={styles.mobileMenuItem}
+                >
+                  {showMobileSettingsMenu ? 'Tutup Tetapan ▲' : 'Tetapan ▼'}
+                </button>
+
+                {showMobileSettingsMenu && (
+                  <div style={styles.mobileSubmenu}>
+                    <button onClick={() => handleMobileNavigate('/school-setup')} style={styles.mobileSubmenuItem}>
+                      Struktur Akademik
+                    </button>
+                    <button onClick={() => handleMobileNavigate('/school-setup/exams')} style={styles.mobileSubmenuItem}>
+                      Tetapan Peperiksaan
+                    </button>
+                    <button onClick={() => handleMobileNavigate('/school-setup/grades')} style={styles.mobileSubmenuItem}>
+                      Tetapan Grade
+                    </button>
+                    <button onClick={() => handleMobileNavigate('/school-setup/subjects')} style={styles.mobileSubmenuItem}>
+                      Tetapan Subjek
+                    </button>
+                    <button onClick={() => handleMobileNavigate('/classes')} style={styles.mobileSubmenuItem}>
+                      Tetapan Kelas
+                    </button>
+                  </div>
+                )}
+
+                <button onClick={refreshData} style={styles.mobileMenuItem}>
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </button>
+
+                <button onClick={handleLogout} style={styles.mobileLogoutButton}>
+                  Logout
+                </button>
               </div>
             )}
           </div>
         ) : (
-          <>
-            <nav style={styles.nav}>
-              <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
-                Input Markah
-              </button>
-              <button style={styles.navButton} onClick={() => navigate('/students')}>
-                Input Murid
+          <div style={styles.topActions}>
+            <button
+              onClick={() => navigate('/scores')}
+              style={styles.primaryTopButton}
+            >
+              Input Markah
+            </button>
+
+            <button
+              onClick={() => navigate('/students')}
+              style={styles.secondaryTopButton}
+            >
+              Input Murid
+            </button>
+
+            <div style={{ position: 'relative' }} ref={settingsMenuRef}>
+              <button
+                onClick={() => setShowSettingsMenu((prev) => !prev)}
+                style={styles.secondaryTopButton}
+              >
+                Tetapan ▾
               </button>
 
-              <div style={styles.menuWrap} ref={settingsMenuRef}>
-                <button style={styles.navButton} onClick={() => setShowSettingsMenu((prev) => !prev)}>
-                  Tetapan ▾
-                </button>
-                {showSettingsMenu && (
-                  <div style={styles.menuDropdown}>
-                    <button style={styles.menuItem} onClick={() => navigate('/school-setup')}>Struktur Akademik</button>
-                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/exams')}>Tetapan Peperiksaan</button>
-                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/grades')}>Tetapan Grade</button>
-                    <button style={styles.menuItem} onClick={() => navigate('/school-setup/subjects')}>Tetapan Subjek</button>
-                    <button style={styles.menuItem} onClick={() => navigate('/classes')}>Tetapan Kelas</button>
-                  </div>
-                )}
-              </div>
-
-              <button style={styles.navButton} onClick={() => navigate('/analysis')}>
-                Analisis
-              </button>
-            </nav>
-
-            <div style={styles.topbarRight}>
-              <button style={styles.ghostButton} onClick={refreshData}>
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
-              <button style={styles.darkButton} onClick={handleLogout}>
-                Logout
-              </button>
+              {showSettingsMenu && (
+                <div style={styles.settingsDropdown}>
+                  <button onClick={() => navigate('/school-setup')} style={styles.dropdownItem}>
+                    Struktur Akademik
+                  </button>
+                  <button onClick={() => navigate('/school-setup/exams')} style={styles.dropdownItem}>
+                    Tetapan Peperiksaan
+                  </button>
+                  <button onClick={() => navigate('/school-setup/grades')} style={styles.dropdownItem}>
+                    Tetapan Grade
+                  </button>
+                  <button onClick={() => navigate('/school-setup/subjects')} style={styles.dropdownItem}>
+                    Tetapan Subjek
+                  </button>
+                  <button onClick={() => navigate('/classes')} style={styles.dropdownItem}>
+                    Tetapan Kelas
+                  </button>
+                </div>
+              )}
             </div>
-          </>
+
+            <button
+              onClick={() => navigate('/analysis')}
+              style={styles.secondaryTopButton}
+            >
+              Analisis
+            </button>
+
+            <button
+              onClick={() => navigate('/targets')}
+              style={styles.secondaryTopButton}
+            >
+              Sasaran Akademik
+            </button>
+
+            <button
+              onClick={refreshData}
+              style={styles.whiteTopButton}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+
+            <button
+              onClick={handleLogout}
+              style={styles.darkTopButton}
+            >
+              Logout
+            </button>
+          </div>
         )}
       </header>
 
@@ -719,25 +781,138 @@ const styles = {
   topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
   brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
   schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
-  nav: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
-  navButtonPrimary: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
-  navButton: { background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
-  menuWrap: { position: 'relative' },
-  menuDropdown: { position: 'absolute', top: '48px', left: 0, width: '240px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)', padding: '8px', display: 'grid', gap: '6px' },
-  menuItem: { background: '#ffffff', color: '#0f172a', border: 'none', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
-  mobileMenuWrap: { width: '100%', display: 'grid', gap: '10px', justifyItems: 'start' },
-  mobileToggleButton: { width: '100%', background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px', textAlign: 'left' },
-  mobileMenuPanel: { width: '100%', background: '#ffffff', border: '1px solid rgba(255,255,255,0.14)', borderRadius: '14px', padding: '10px', boxShadow: '0 20px 40px rgba(15, 23, 42, 0.18)' },
-  mobileMenuGrid: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '8px' },
-  mobileMenuItem: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 600 },
-  mobileMenuItemWide: { gridColumn: '1 / -1', background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
-  mobileSubmenuPanel: { gridColumn: '1 / -1', display: 'grid', gap: '8px', padding: '10px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' },
-  mobileSubmenuItem: { background: '#ffffff', color: '#0f172a', border: '1px solid #e2e8f0', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 500 },
-  mobileMenuItemDanger: { background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
-  mobileMenuItemDangerFull: { gridColumn: '1 / -1', background: '#fff1f2', color: '#b91c1c', border: '1px solid #fecdd3', textAlign: 'left', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 },
-  topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },
-  ghostButton: { background: '#ffffff', color: '#0f172a', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
-  darkButton: { background: '#111827', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  topActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  primaryTopButton: {
+    padding: '12px 18px',
+    borderRadius: 12,
+    border: '1px solid #2563eb',
+    background: '#2563eb',
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontSize: 15,
+  },
+  secondaryTopButton: {
+    padding: '12px 18px',
+    borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.15)',
+    background: '#111827',
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontSize: 15,
+    minWidth: 120,
+  },
+  whiteTopButton: {
+    padding: '12px 18px',
+    borderRadius: 12,
+    border: '1px solid #e5e7eb',
+    background: '#fff',
+    color: '#111827',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontSize: 15,
+  },
+  darkTopButton: {
+    padding: '12px 18px',
+    borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.15)',
+    background: '#0f172a',
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontSize: 15,
+  },
+  settingsDropdown: {
+    position: 'absolute',
+    top: 'calc(100% + 8px)',
+    left: 0,
+    minWidth: 220,
+    background: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 14,
+    boxShadow: '0 10px 30px rgba(15,23,42,0.12)',
+    padding: 8,
+    zIndex: 20,
+  },
+  dropdownItem: {
+    width: '100%',
+    textAlign: 'left',
+    padding: '10px 12px',
+    border: 'none',
+    background: '#fff',
+    borderRadius: 10,
+    cursor: 'pointer',
+    fontWeight: 600,
+    color: '#0f172a',
+  },
+  mobileMenuWrapper: {
+    position: 'relative',
+  },
+  mobileMenuToggle: {
+    padding: '12px 16px',
+    borderRadius: 12,
+    border: '1px solid rgba(255,255,255,0.15)',
+    background: '#111827',
+    color: '#fff',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontSize: 15,
+  },
+  mobileMenuPanel: {
+    marginTop: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    background: '#fff',
+    padding: 12,
+    borderRadius: 16,
+    border: '1px solid #e5e7eb',
+  },
+  mobileMenuItem: {
+    width: '100%',
+    textAlign: 'left',
+    padding: '12px 14px',
+    borderRadius: 12,
+    border: '1px solid #e5e7eb',
+    background: '#fff',
+    cursor: 'pointer',
+    fontWeight: 700,
+    color: '#0f172a',
+  },
+  mobileSubmenu: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    paddingLeft: 8,
+  },
+  mobileSubmenuItem: {
+    width: '100%',
+    textAlign: 'left',
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: '1px solid #e5e7eb',
+    background: '#f8fafc',
+    cursor: 'pointer',
+    fontWeight: 600,
+    color: '#334155',
+  },
+  mobileLogoutButton: {
+    width: '100%',
+    textAlign: 'left',
+    padding: '12px 14px',
+    borderRadius: 12,
+    border: '1px solid #fecaca',
+    background: '#fff',
+    color: '#b91c1c',
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },

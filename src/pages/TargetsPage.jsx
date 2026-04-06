@@ -263,6 +263,7 @@ export default function TargetsPage() {
         )
       `)
       .eq('class_id', classId)
+      .eq('is_active', true)
 
     if (error) {
       console.error(error)
