@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import {
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase()
+
+const extractGradeNumber = (value) => {
+  const match = String(value || '').match(/(\d+)/)
+  return match ? Number(match[1]) : 999
+}
 
 const ChevronRightIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -13,6 +24,12 @@ function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [setupConfig, setSetupConfig] = useState(null)
+  const [completionLoading, setCompletionLoading] = useState(false)
+  const [completionRows, setCompletionRows] = useState([])
+  const [completionSubjects, setCompletionSubjects] = useState([])
+  const [selectedExamKey, setSelectedExamKey] = useState('TOV')
+  const [examOptions, setExamOptions] = useState([])
 
   const [setupStatus, setSetupStatus] = useState({
     exams: false,
@@ -29,6 +46,12 @@ function DashboardPage() {
   useEffect(() => {
     loadProfile()
   }, [navigate])
+
+  useEffect(() => {
+    if (!profile?.school_id || !setupConfig) return
+
+    fetchScoreCompletionMatrix(profile.school_id, setupConfig)
+  }, [selectedExamKey, profile?.school_id, setupConfig])
 
   const loadProfile = async () => {
     setLoading(true)
@@ -71,12 +94,13 @@ function DashboardPage() {
     }
 
     setProfile(data)
-    await loadSetupStatus(data.school_id)
+    const loadedSetupConfig = await loadSetupStatus(data.school_id)
+    setSetupConfig(loadedSetupConfig || null)
     setLoading(false)
   }
 
   const loadSetupStatus = async (schoolId) => {
-    if (!schoolId) return
+    if (!schoolId) return null
 
     const { data: setupData } = await supabase
       .from('school_setup_configs')
@@ -154,6 +178,243 @@ function DashboardPage() {
       classItems,
       studentCount: studentTotal || 0,
     })
+
+    return setupData || null
+  }
+
+  const fetchScoreCompletionMatrix = async (schoolId, rawSetupConfig) => {
+    if (!schoolId) {
+      setCompletionRows([])
+      setCompletionSubjects([])
+      setExamOptions([])
+      return
+    }
+
+    setCompletionLoading(true)
+
+    const academicYear =
+      rawSetupConfig?.current_academic_year || new Date().getFullYear()
+
+    const [
+      { data: classRows, error: classError },
+      { data: subjectRows, error: subjectError },
+      { data: enrollmentRows, error: enrollmentError },
+      { data: scoreRows, error: scoreError },
+      { data: examConfigRows, error: examConfigError },
+    ] = await Promise.all([
+      supabase
+        .from('classes')
+        .select('id, class_name, tingkatan')
+        .eq('school_id', schoolId)
+        .order('tingkatan', { ascending: true })
+        .order('class_name', { ascending: true }),
+
+      supabase
+        .from('subjects')
+        .select('id, subject_name, tingkatan, is_active')
+        .eq('school_id', schoolId)
+        .eq('is_active', true)
+        .order('tingkatan', { ascending: true })
+        .order('subject_name', { ascending: true }),
+
+      supabase
+        .from('student_enrollments')
+        .select('id, class_id')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear)
+        .eq('is_active', true),
+
+      supabase
+        .from('student_scores')
+        .select('class_id, subject_id, student_enrollment_id, exam_key')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+
+      supabase
+        .from('exam_configs')
+        .select('grade_label, exam_key, exam_name, exam_order, is_active')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear),
+    ])
+
+    if (classError) console.error('Class matrix error:', classError)
+    if (subjectError) console.error('Subject matrix error:', subjectError)
+    if (enrollmentError) console.error('Enrollment matrix error:', enrollmentError)
+    if (scoreError) console.error('Score matrix error:', scoreError)
+    if (examConfigError) console.error('Exam config matrix error:', examConfigError)
+
+    const normalizedSetupConfig = normalizeSetupConfigWithExamConfigs(
+      rawSetupConfig || {},
+      examConfigRows || []
+    )
+
+    const fallbackGradeLabel =
+      normalizedSetupConfig?.active_grade_labels?.[0] ||
+      Object.keys(normalizedSetupConfig?.exam_structure || {})[0] ||
+      'Tingkatan 1'
+
+    const allExamKeys = getExamStructureForGrade(
+      normalizedSetupConfig,
+      fallbackGradeLabel
+    )
+
+    const options = allExamKeys
+      .map((exam) => ({
+        value: String(exam?.key || '').toUpperCase(),
+        label: exam?.name || exam?.key,
+      }))
+      .filter((exam) => exam.value && !exam.value.startsWith('OTR'))
+
+    setExamOptions(options)
+
+    const effectiveExamKey = options.some((exam) => exam.value === selectedExamKey)
+      ? selectedExamKey
+      : options[0]?.value || ''
+
+    if (effectiveExamKey && effectiveExamKey !== selectedExamKey) {
+      setSelectedExamKey(effectiveExamKey)
+    }
+
+    const activeSubjects = (subjectRows || []).filter(
+      (item) => item && item.is_active !== false
+    )
+
+    const subjectNames = Array.from(
+      new Set(
+        activeSubjects
+          .map((item) => String(item.subject_name || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'ms', { sensitivity: 'base' }))
+
+    const enrollmentsByClass = new Map()
+    ;(enrollmentRows || []).forEach((row) => {
+      if (!enrollmentsByClass.has(row.class_id)) {
+        enrollmentsByClass.set(row.class_id, [])
+      }
+      enrollmentsByClass.get(row.class_id).push(row.id)
+    })
+
+    const scoreMap = new Map()
+    ;(scoreRows || []).forEach((row) => {
+      const classId = row.class_id
+      const subjectId = row.subject_id
+      const enrollmentId = row.student_enrollment_id
+      const examKey = String(row.exam_key || '').trim().toUpperCase()
+
+      if (!classId || !subjectId || !enrollmentId || !examKey) return
+
+      const key = `${classId}__${subjectId}`
+
+      if (!scoreMap.has(key)) {
+        scoreMap.set(key, new Map())
+      }
+
+      const studentMap = scoreMap.get(key)
+
+      if (!studentMap.has(enrollmentId)) {
+        studentMap.set(enrollmentId, new Set())
+      }
+
+      studentMap.get(enrollmentId).add(examKey)
+    })
+
+    const selectedExam = String(effectiveExamKey || '').toUpperCase()
+
+    const rows = (classRows || [])
+      .slice()
+      .sort((a, b) => {
+        const gradeDiff =
+          extractGradeNumber(a.tingkatan) - extractGradeNumber(b.tingkatan)
+
+        if (gradeDiff !== 0) return gradeDiff
+
+        return String(a.class_name || '').localeCompare(
+          String(b.class_name || ''),
+          'ms',
+          { sensitivity: 'base' }
+        )
+      })
+      .map((classItem) => {
+        const offeredSubjectsForClass = activeSubjects
+          .filter(
+            (subject) =>
+              normalizeText(subject.tingkatan) === normalizeText(classItem.tingkatan)
+          )
+          .filter(
+            (subject, index, arr) =>
+              index ===
+              arr.findIndex(
+                (item) =>
+                  normalizeText(item.subject_name) ===
+                  normalizeText(subject.subject_name)
+              )
+          )
+
+        const enrollmentIds = enrollmentsByClass.get(classItem.id) || []
+        const cells = {}
+
+        subjectNames.forEach((subjectName) => {
+          const subject = offeredSubjectsForClass.find(
+            (item) => normalizeText(item.subject_name) === normalizeText(subjectName)
+          )
+
+          if (!subject) {
+            cells[subjectName] = {
+              status: 'na',
+              label: '-',
+              completedStudents: 0,
+              totalStudents: 0,
+            }
+            return
+          }
+
+          if (!enrollmentIds.length || !selectedExam) {
+            cells[subjectName] = {
+              status: 'incomplete',
+              label: '0/0',
+              completedStudents: 0,
+              totalStudents: enrollmentIds.length,
+            }
+            return
+          }
+
+          const studentExamMap =
+            scoreMap.get(`${classItem.id}__${subject.id}`) || new Map()
+
+          let completedStudents = 0
+
+          enrollmentIds.forEach((enrollmentId) => {
+            const examSet = studentExamMap.get(enrollmentId) || new Set()
+
+            if (examSet.has(selectedExam)) {
+              completedStudents += 1
+            }
+          })
+
+          const totalStudents = enrollmentIds.length
+          const isComplete = totalStudents > 0 && completedStudents === totalStudents
+
+          cells[subjectName] = {
+            status: isComplete ? 'complete' : 'incomplete',
+            label: isComplete ? 'Lengkap' : `${completedStudents}/${totalStudents}`,
+            completedStudents,
+            totalStudents,
+          }
+        })
+
+        return {
+          id: classItem.id,
+          tingkatan: classItem.tingkatan,
+          class_name: classItem.class_name,
+          label: `${classItem.tingkatan} ${classItem.class_name}`,
+          cells,
+        }
+      })
+
+    setCompletionSubjects(subjectNames)
+    setCompletionRows(rows)
+    setCompletionLoading(false)
   }
 
   const handleLogout = async () => {
@@ -194,6 +455,9 @@ function DashboardPage() {
     profile?.email?.split('@')[0] ||
     profile?.email ||
     '-'
+
+  const hasCompletionMatrix = completionRows.length > 0 && completionSubjects.length > 0
+  const matrixColumns = completionSubjects
 
   return (
     <div style={styles.page}>
@@ -240,39 +504,153 @@ function DashboardPage() {
           <StatCard title="Murid" value={setupStatus.studentCount} />
         </section>
 
-        <section style={styles.dualGrid}>
-          <div style={styles.card}>
-            <div style={styles.sectionHeaderResponsive}>
-              <div>
-                <h2 style={styles.cardTitle}>Akses Pantas</h2>
-                <p style={styles.helperText}>
-                  Modul paling kerap digunakan untuk kerja harian guru.
-                </p>
-              </div>
-              <div style={styles.helperMetaText}>
-                {isAcademicSetupComplete
-                  ? 'Semua modul utama sedia digunakan.'
-                  : 'Sesetengah modul akan dihadkan sehingga setup lengkap.'}
-              </div>
+        <section style={styles.card}>
+          <div style={styles.sectionHeaderResponsive}>
+            <div>
+              <h2 style={styles.cardTitle}>Akses Pantas</h2>
+              <p style={styles.helperText}>
+                Modul paling kerap digunakan untuk kerja harian guru.
+              </p>
             </div>
-
-            <div style={styles.quickActionGrid}>
-              {quickActions.map((item) => (
-                <ActionCard key={item.title} {...item} />
-              ))}
+            <div style={styles.helperMetaText}>
+              {isAcademicSetupComplete
+                ? 'Semua modul utama sedia digunakan.'
+                : 'Sesetengah modul akan dihadkan sehingga setup lengkap.'}
             </div>
           </div>
 
-          <SetupSummaryCard
-            title="Status Setup Sistem"
-            description={isAcademicSetupComplete
-              ? 'Komponen asas sekolah telah lengkap dan anda boleh teruskan kerja harian.'
-              : 'Masih ada komponen yang belum lengkap. Selesaikan setup untuk buka semua modul utama.'}
-            examNames={setupStatus.examNames}
-            subjectNames={setupStatus.subjectNames}
-            classItems={setupStatus.classItems}
-            studentCount={setupStatus.studentCount}
-          />
+          <div style={styles.quickActionGrid}>
+            {quickActions.map((item) => (
+              <ActionCard key={item.title} {...item} />
+            ))}
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={styles.cardHeaderColumn}>
+            <h2 style={styles.cardTitle}>Status Pengisian Markah ({selectedExamKey || '-'})</h2>
+            <p style={styles.helperText}>
+              Hijau = semua murid dalam kelas itu sudah lengkap markah untuk subjek tersebut.
+              Merah = masih ada murid yang belum lengkap. Paparan ini hanya kira peperiksaan
+              manual seperti TOV, AR1, AR2 dan ETR. OTR tidak dikira kerana dijana automatik.
+            </p>
+          </div>
+
+          <div style={styles.examFilterRow}>
+            <label htmlFor="teacher-dashboard-exam" style={styles.examFilterLabel}>Jenis Peperiksaan:</label>
+            <select
+              id="teacher-dashboard-exam"
+              value={selectedExamKey}
+              onChange={(e) => setSelectedExamKey(e.target.value)}
+              style={styles.examFilterSelect}
+              disabled={examOptions.length === 0}
+            >
+              {examOptions.length === 0 ? (
+                <option value="">Tiada peperiksaan</option>
+              ) : (
+                examOptions.map((exam) => (
+                  <option key={exam.value} value={exam.value}>
+                    {exam.label}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          {completionLoading ? (
+            <div style={styles.emptyState}>Loading status pengisian markah...</div>
+          ) : !hasCompletionMatrix ? (
+            <div style={styles.emptyState}>
+              Belum ada data kelas, subjek atau murid aktif untuk dipaparkan.
+            </div>
+          ) : (
+            <div style={{ width: '100%', overflow: 'hidden' }}>
+              <div style={styles.matrixWrap}>
+                <table style={styles.matrixTable}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...styles.matrixTh, ...styles.matrixStickyCol }}>
+                        Tingkatan / Kelas
+                      </th>
+                      {matrixColumns.map((subjectName) => (
+                        <th key={subjectName} style={styles.matrixTh}>
+                          {subjectName}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completionRows.map((row) => (
+                      <tr key={row.id}>
+                        <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
+                          {row.label}
+                        </td>
+
+                        {matrixColumns.map((subjectName) => {
+                          const cell = row.cells?.[subjectName]
+                          const isClickable =
+                            cell?.status === 'complete' || cell?.status === 'incomplete'
+
+                          let buttonStyle = styles.matrixStatusButton
+                          if (cell?.status === 'complete') {
+                            buttonStyle = {
+                              ...styles.matrixStatusButton,
+                              ...styles.matrixStatusButtonComplete,
+                            }
+                          } else if (cell?.status === 'incomplete') {
+                            buttonStyle = {
+                              ...styles.matrixStatusButton,
+                              ...styles.matrixStatusButtonIncomplete,
+                            }
+                          } else {
+                            buttonStyle = {
+                              ...styles.matrixStatusButton,
+                              ...styles.matrixStatusButtonNA,
+                            }
+                          }
+
+                          return (
+                            <td key={`${row.id}-${subjectName}`} style={styles.matrixTd}>
+                              <button
+                                type="button"
+                                style={{
+                                  ...buttonStyle,
+                                  cursor: isClickable ? 'pointer' : 'default',
+                                }}
+                                onClick={() => {
+                                  if (!isClickable) return
+
+                                  const params = new URLSearchParams({
+                                    class_id: row.id,
+                                    subject_name: subjectName,
+                                    exam_key: selectedExamKey,
+                                  })
+
+                                  if (cell?.status === 'incomplete') {
+                                    params.set('scroll_to', 'incomplete')
+                                  }
+
+                                  navigate(`/scores?${params.toString()}`)
+                                }}
+                              >
+                                {cell?.label || '-'}
+                              </button>
+
+                              {cell?.status !== 'na' && (
+                                <div style={styles.matrixMeta}>
+                                  {cell?.completedStudents || 0}/{cell?.totalStudents || 0} murid
+                                </div>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -310,97 +688,6 @@ function ActionCard({ title, description, onClick, enabled, tone }) {
   )
 }
 
-function SetupSummaryCard({ title, description, examNames, subjectNames, classItems, studentCount }) {
-  return (
-    <div style={styles.card}>
-      <div style={styles.cardHeader}>
-        <h2 style={styles.cardTitle}>{title}</h2>
-      </div>
-      <p style={styles.helperText}>{description}</p>
-
-      <div style={styles.summaryStack}>
-        <SummaryListBlock
-          title={`Peperiksaan (${examNames.length})`}
-          items={examNames}
-          emptyText="Tiada peperiksaan didaftarkan lagi."
-        />
-        <SummaryButtonGrid
-          title={`Subjek (${subjectNames.length})`}
-          items={subjectNames}
-          emptyText="Tiada subjek didaftarkan lagi."
-        />
-        <ClassButtonGrid
-          title={`Kelas (${classItems.length})`}
-          items={classItems}
-          emptyText="Tiada kelas aktif didaftarkan lagi."
-        />
-        <div style={styles.summaryBlock}>
-          <div style={styles.summaryBlockTitle}>Murid Berdaftar</div>
-          <div style={styles.summaryText}>Jumlah murid berdaftar: {studentCount}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SummaryListBlock({ title, items, emptyText }) {
-  return (
-    <div style={styles.summaryBlock}>
-      <div style={styles.summaryBlockTitle}>{title}</div>
-      <div style={styles.summaryText}>
-        {items.length > 0 ? items.join(', ') : emptyText}
-      </div>
-    </div>
-  )
-}
-
-function SummaryButtonGrid({ title, items, emptyText }) {
-  return (
-    <div style={styles.summaryBlock}>
-      <div style={styles.summaryBlockTitle}>{title}</div>
-      {items.length > 0 ? (
-        <div style={styles.buttonGrid}>
-          {items.map((item) => (
-            <button
-              key={item}
-              type="button"
-              style={styles.summaryButton}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div style={styles.summaryText}>{emptyText}</div>
-      )}
-    </div>
-  )
-}
-
-function ClassButtonGrid({ title, items, emptyText }) {
-  return (
-    <div style={styles.summaryBlock}>
-      <div style={styles.summaryBlockTitle}>{title}</div>
-      {items.length > 0 ? (
-        <div style={styles.buttonGrid}>
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              style={styles.classButton}
-            >
-              <div style={styles.classButtonTitle}>{item.name}</div>
-              <div style={styles.classButtonMeta}>{item.studentCount} murid</div>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div style={styles.summaryText}>{emptyText}</div>
-      )}
-    </div>
-  )
-}
-
 function StatCard({ title, value }) {
   return (
     <div style={styles.statCard}>
@@ -429,12 +716,14 @@ const styles = {
   statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
-  dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
   card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
-  cardHeader: { marginBottom: '14px' },
+  cardHeaderColumn: { display: 'grid', gap: '8px', marginBottom: '16px' },
   cardTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
   helperText: { color: '#64748b', lineHeight: 1.6, margin: 0 },
   helperMetaText: { color: '#64748b', fontSize: '14px' },
+  examFilterRow: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' },
+  examFilterLabel: { fontSize: '14px', fontWeight: 700, color: '#334155' },
+  examFilterSelect: { minWidth: '220px', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '10px 12px', outline: 'none', background: '#ffffff', color: '#0f172a', fontWeight: 600 },
   sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
   quickActionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' },
   actionCard: { border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: '0.2s ease', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
@@ -448,15 +737,87 @@ const styles = {
   actionCardTitle: { fontWeight: 700, marginBottom: '6px' },
   actionCardDescription: { color: '#475569', fontSize: '14px', lineHeight: 1.6 },
   actionCardHint: { marginTop: '12px', fontSize: '12px', fontWeight: 600, color: '#64748b' },
-  summaryStack: { display: 'grid', gap: '12px' },
-  summaryBlock: { background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '16px' },
-  summaryBlockTitle: { fontWeight: 700, color: '#0f172a', marginBottom: '8px' },
-  summaryText: { color: '#475569', fontSize: '14px', lineHeight: 1.7 },
-  buttonGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' },
-  summaryButton: { minHeight: '48px', borderRadius: '12px', border: '1px solid #dbe4ee', background: '#ffffff', padding: '10px 12px', textAlign: 'left', fontSize: '14px', fontWeight: 600, color: '#334155', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)', cursor: 'default' },
-  classButton: { minHeight: '64px', borderRadius: '12px', border: '1px solid #dbe4ee', background: '#ffffff', padding: '10px 12px', textAlign: 'left', boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)', cursor: 'default' },
-  classButtonTitle: { fontSize: '14px', fontWeight: 600, color: '#334155' },
-  classButtonMeta: { marginTop: '6px', fontSize: '12px', color: '#64748b' },
+  emptyState: { background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '16px', padding: '24px', color: '#64748b' },
+  matrixWrap: {
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    maxWidth: '100%',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    background: '#ffffff',
+    boxShadow: 'inset 0 0 0 1px #e2e8f0',
+  },
+  matrixTable: {
+    width: 'max-content',
+    minWidth: '900px',
+    borderCollapse: 'separate',
+    borderSpacing: 0,
+  },
+  matrixTh: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 2,
+    padding: '12px 14px',
+    fontSize: '13px',
+    fontWeight: 700,
+    textAlign: 'center',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    color: '#0f172a',
+    whiteSpace: 'nowrap',
+  },
+  matrixTd: {
+    padding: '12px 10px',
+    textAlign: 'center',
+    borderBottom: '1px solid #e2e8f0',
+    background: '#ffffff',
+    minWidth: '140px',
+    verticalAlign: 'middle',
+  },
+  matrixStickyCol: {
+    position: 'sticky',
+    left: 0,
+    zIndex: 3,
+    background: '#ffffff',
+  },
+  matrixClassCell: {
+    minWidth: '190px',
+    textAlign: 'left',
+    fontWeight: 700,
+    color: '#0f172a',
+    boxShadow: '1px 0 0 #e2e8f0',
+  },
+  matrixStatusButton: {
+    width: '100%',
+    minHeight: '42px',
+    borderRadius: '12px',
+    border: '1px solid transparent',
+    fontWeight: 700,
+    fontSize: '13px',
+    padding: '10px 12px',
+    background: '#f8fafc',
+    color: '#334155',
+  },
+  matrixStatusButtonComplete: {
+    background: '#dcfce7',
+    borderColor: '#86efac',
+    color: '#166534',
+  },
+  matrixStatusButtonIncomplete: {
+    background: '#fee2e2',
+    borderColor: '#fca5a5',
+    color: '#991b1b',
+  },
+  matrixStatusButtonNA: {
+    background: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    color: '#94a3b8',
+  },
+  matrixMeta: {
+    marginTop: '6px',
+    fontSize: '12px',
+    color: '#64748b',
+  },
 }
 
 export default DashboardPage
