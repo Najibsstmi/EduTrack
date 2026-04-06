@@ -7,7 +7,6 @@ import {
 } from '../lib/examConfig'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
-const MOBILE_BREAKPOINT = 960
 const COMPLETION_GRADE_GROUPS = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -52,7 +51,8 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
-  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= MOBILE_BREAKPOINT)
+  const [showMobileSettings, setShowMobileSettings] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
@@ -74,6 +74,7 @@ export default function SchoolAdminDashboard() {
     const handleClickOutside = (event) => {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
         setShowSettingsMenu(false)
+        setShowMobileSettings(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -82,8 +83,11 @@ export default function SchoolAdminDashboard() {
 
   useEffect(() => {
     const handleResize = () => {
-      const nextIsMobile = window.innerWidth <= MOBILE_BREAKPOINT
+      const nextIsMobile = window.innerWidth <= 768
       setIsMobileView(nextIsMobile)
+      if (!nextIsMobile) {
+        setShowMobileSettings(false)
+      }
     }
 
     window.addEventListener('resize', handleResize)
@@ -638,7 +642,24 @@ export default function SchoolAdminDashboard() {
   }
 
   const handleMobileNavigate = (path) => {
+    setShowMobileSettings(false)
     navigate(path)
+  }
+
+  const isMobileNavActive = (path) => {
+    if (!path) return false
+
+    if (path === '/school-setup') {
+      return location.pathname === '/school-setup'
+    }
+
+    return location.pathname === path || location.pathname.startsWith(`${path}/`)
+  }
+
+  const getMobileNavButtonStyle = (path) => {
+    return isMobileNavActive(path)
+      ? { ...styles.mobilePrimaryButton, ...styles.mobilePrimaryButtonActive }
+      : styles.mobilePrimaryButton
   }
 
   const getStatusText = (status) => {
@@ -717,24 +738,6 @@ export default function SchoolAdminDashboard() {
     }))
   }
 
-  const isMobileNavActive = (path) => {
-    if (path === '/school-setup') {
-      return location.pathname === '/school-setup'
-    }
-
-    return location.pathname === path || location.pathname.startsWith(`${path}/`)
-  }
-
-  const getMobileNavButtonStyle = (path, isLogout = false) => {
-    if (isLogout) {
-      return styles.mobileLogoutButton
-    }
-
-    return isMobileNavActive(path)
-      ? { ...styles.mobileMenuItem, ...styles.mobileMenuItemActive }
-      : styles.mobileMenuItem
-  }
-
   if (loading) {
     return (
       <div style={styles.loadingWrap}>
@@ -745,8 +748,8 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <header style={{ ...styles.topbar, ...(isMobileView ? styles.topbarMobile : {}) }}>
-        <div style={isMobileView ? styles.topbarBrandBlock : undefined}>
+      <header style={styles.topbar}>
+        <div>
           <div style={styles.brand}>EduTrack</div>
           <div style={styles.schoolMeta}>
             {schoolInfo?.school_name || '-'}
@@ -755,41 +758,103 @@ export default function SchoolAdminDashboard() {
         </div>
 
         {isMobileView ? (
-          <div style={styles.mobileNavBleed}>
-            <div style={styles.mobileMenuWrapper}>
-            <div style={styles.mobileMenuPanel}>
-              <button onClick={() => handleMobileNavigate('/scores')} style={getMobileNavButtonStyle('/scores')}>
+          <div style={styles.mobileTopNavWrap} ref={settingsMenuRef}>
+            <div style={styles.mobileTopNavRow}>
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/scores')}
+                style={getMobileNavButtonStyle('/scores')}
+              >
                 Input Markah
               </button>
-              <button onClick={() => handleMobileNavigate('/students')} style={getMobileNavButtonStyle('/students')}>
+
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/students')}
+                style={getMobileNavButtonStyle('/students')}
+              >
                 Input Murid
               </button>
-              <button onClick={() => handleMobileNavigate('/analysis')} style={getMobileNavButtonStyle('/analysis')}>
+
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/analysis')}
+                style={getMobileNavButtonStyle('/analysis')}
+              >
                 Analisis
               </button>
-              <button onClick={() => handleMobileNavigate('/targets')} style={getMobileNavButtonStyle('/targets')}>
-                Sasaran Akademik
+
+              <button
+                type="button"
+                onClick={() => setShowMobileSettings((prev) => !prev)}
+                style={{
+                  ...styles.mobilePrimaryButton,
+                  ...(showMobileSettings ? styles.mobilePrimaryButtonActive : {}),
+                }}
+              >
+                Tetapan {showMobileSettings ? '▴' : '▾'}
               </button>
-              <button onClick={() => handleMobileNavigate('/school-setup')} style={getMobileNavButtonStyle('/school-setup')}>
-                Struktur Akademik
-              </button>
-              <button onClick={() => handleMobileNavigate('/school-setup/exams')} style={getMobileNavButtonStyle('/school-setup/exams')}>
-                Peperiksaan
-              </button>
-              <button onClick={() => handleMobileNavigate('/school-setup/grades')} style={getMobileNavButtonStyle('/school-setup/grades')}>
-                Grade
-              </button>
-              <button onClick={() => handleMobileNavigate('/school-setup/subjects')} style={getMobileNavButtonStyle('/school-setup/subjects')}>
-                Subjek
-              </button>
-              <button onClick={() => handleMobileNavigate('/classes')} style={getMobileNavButtonStyle('/classes')}>
-                Kelas
-              </button>
-              <button onClick={handleLogout} style={getMobileNavButtonStyle('', true)}>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={styles.mobileLogoutButton}
+              >
                 Logout
               </button>
             </div>
-          </div>
+
+            {showMobileSettings && (
+              <div style={styles.mobileSettingsDropdown}>
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/school-setup')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Struktur Akademik
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/school-setup/exams')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Peperiksaan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/school-setup/grades')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Grade
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/school-setup/subjects')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Subjek
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/classes')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Kelas
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNavigate('/targets')}
+                  style={styles.mobileSettingsItem}
+                >
+                  Sasaran Akademik
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div style={styles.topActions}>
@@ -874,12 +939,12 @@ export default function SchoolAdminDashboard() {
         </section>
 
         <section style={styles.statsGrid}>
-          <StatCard title="Jumlah Pengguna" value={stats.total} />
-          <StatCard title="Pending" value={stats.pending} />
-          <StatCard title="Approved" value={stats.approved} />
-          <StatCard title="Rejected" value={stats.rejected} />
-          <StatCard title="Admin Sekolah" value={stats.admins} />
-          <StatCard title="Jumlah Murid" value={studentCount} />
+          <StatCard title="Jumlah Pengguna" value={stats.total} isMobileView={isMobileView} />
+          <StatCard title="Pending" value={stats.pending} isMobileView={isMobileView} />
+          <StatCard title="Approved" value={stats.approved} isMobileView={isMobileView} />
+          <StatCard title="Rejected" value={stats.rejected} isMobileView={isMobileView} />
+          <StatCard title="Admin Sekolah" value={stats.admins} isMobileView={isMobileView} />
+          <StatCard title="Jumlah Murid" value={studentCount} isMobileView={isMobileView} />
         </section>
 
         <section style={styles.dualGrid}>
@@ -972,7 +1037,6 @@ export default function SchoolAdminDashboard() {
                         rows.length === 0 ? (
                           <div style={styles.matrixGroupEmpty}>Tiada kelas untuk tingkatan ini.</div>
                         ) : (
-                          <div style={styles.matrixGroupTableWrap}>
                           <table style={styles.matrixTable}>
                             <thead>
                               <tr>
@@ -996,20 +1060,26 @@ export default function SchoolAdminDashboard() {
                                   {completionSubjects.map((subjectName) => {
                                     const cell = row.cells?.[subjectName]
 
-                                    let buttonStyle = styles.matrixStatusButton
+                                    let buttonStyle = {
+                                      ...styles.matrixStatusButton,
+                                      ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
+                                    }
                                     if (cell?.status === 'complete') {
                                       buttonStyle = {
                                         ...styles.matrixStatusButton,
+                                        ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
                                         ...styles.matrixStatusButtonComplete,
                                       }
                                     } else if (cell?.status === 'incomplete') {
                                       buttonStyle = {
                                         ...styles.matrixStatusButton,
+                                        ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
                                         ...styles.matrixStatusButtonIncomplete,
                                       }
                                     } else {
                                       buttonStyle = {
                                         ...styles.matrixStatusButton,
+                                        ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
                                         ...styles.matrixStatusButtonNA,
                                       }
                                     }
@@ -1031,7 +1101,6 @@ export default function SchoolAdminDashboard() {
                               ))}
                             </tbody>
                           </table>
-                          </div>
                         )
                       )}
                     </div>
@@ -1171,11 +1240,11 @@ function StatusRow({ done, label }) {
   )
 }
 
-function StatCard({ title, value }) {
+function StatCard({ title, value, isMobileView }) {
   return (
-    <div style={styles.statCard}>
-      <div style={styles.statTitle}>{title}</div>
-      <div style={styles.statValue}>{value}</div>
+    <div style={{ ...styles.statCard, ...(isMobileView ? styles.summaryCardMobile : {}) }}>
+      <div style={{ ...styles.statTitle, ...(isMobileView ? styles.summaryLabelMobile : {}) }}>{title}</div>
+      <div style={{ ...styles.statValue, ...(isMobileView ? styles.summaryValueMobile : {}) }}>{value}</div>
     </div>
   )
 }
@@ -1185,14 +1254,6 @@ const styles = {
   loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
   loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
   topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
-  topbarMobile: {
-    padding: '14px 16px 0 16px',
-    gap: '12px',
-    alignItems: 'stretch',
-  },
-  topbarBrandBlock: {
-    width: '100%',
-  },
   brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
   schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
   topActions: {
@@ -1255,63 +1316,67 @@ const styles = {
     fontWeight: 600,
     color: '#0f172a',
   },
-  mobileMenuWrapper: {
-    width: '100%',
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    scrollbarWidth: 'none',
-  },
-  mobileNavBleed: {
-    width: 'calc(100% + 32px)',
-    marginLeft: '-16px',
-    marginRight: '-16px',
-    background: '#111827',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-    padding: '0 16px',
-  },
-  mobileMenuPanel: {
+  mobileTopNavWrap: {
     display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 'max-content',
-    minHeight: 56,
+    flexDirection: 'column',
+    gap: '10px',
+    marginTop: '12px',
   },
-  mobileMenuItem: {
-    whiteSpace: 'nowrap',
-    textAlign: 'center',
-    padding: '8px 10px',
-    borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.15)',
-    background: '#111827',
-    color: '#fff',
-    cursor: 'pointer',
+  mobileTopNavRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '10px',
+  },
+  mobilePrimaryButton: {
+    minHeight: '46px',
+    borderRadius: 12,
+    border: '1px solid #cbd5e1',
+    background: '#fff',
+    color: '#0f172a',
+    fontSize: '14px',
     fontWeight: 700,
-    fontSize: 12,
+    padding: '12px 14px',
+    cursor: 'pointer',
   },
-  mobileMenuItemActive: {
-    background: '#2563eb',
-    border: '1px solid #60a5fa',
+  mobilePrimaryButtonActive: {
+    background: '#0f172a',
     color: '#ffffff',
-    boxShadow: '0 8px 18px rgba(37, 99, 235, 0.28)',
+    border: '1px solid #0f172a',
   },
   mobileLogoutButton: {
-    whiteSpace: 'nowrap',
-    textAlign: 'center',
-    padding: '8px 10px',
-    borderRadius: 10,
-    border: '1px solid rgba(248,113,113,0.45)',
-    background: '#7f1d1d',
-    color: '#fff',
-    cursor: 'pointer',
+    minHeight: '46px',
+    borderRadius: '12px',
+    border: '1px solid #fecaca',
+    background: '#fff1f2',
+    color: '#b91c1c',
+    fontSize: '14px',
     fontWeight: 700,
-    fontSize: 12,
+    padding: '12px 14px',
+    cursor: 'pointer',
+  },
+  mobileSettingsDropdown: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '8px',
+    padding: '10px',
+    borderRadius: '14px',
+    background: '#f8fafc',
+    border: '1px solid #e2e8f0',
+  },
+  mobileSettingsItem: {
+    minHeight: '44px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    fontSize: '14px',
+    fontWeight: 600,
+    padding: '10px 12px',
+    textAlign: 'left',
+    cursor: 'pointer',
   },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
-  containerMobile: {
-    padding: '14px 12px 20px 12px',
-    gap: '14px',
-  },
+  containerMobile: { padding: '18px 14px', gap: '16px' },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
   heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
@@ -1320,6 +1385,9 @@ const styles = {
   statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
+  summaryCardMobile: { padding: '16px', borderRadius: '16px' },
+  summaryValueMobile: { fontSize: '28px', fontWeight: 800 },
+  summaryLabelMobile: { fontSize: '14px', fontWeight: 600 },
   dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
   card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
   cardHeader: { marginBottom: '14px' },
@@ -1397,10 +1465,6 @@ const styles = {
     background: '#ffffff',
     overflow: 'hidden',
   },
-  matrixGroupTableWrap: {
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-  },
   matrixGroupToggle: {
     width: '100%',
     display: 'flex',
@@ -1477,6 +1541,13 @@ const styles = {
     fontSize: '12px',
     fontWeight: 700,
     cursor: 'default',
+  },
+  matrixStatusButtonMobile: {
+    minWidth: '88px',
+    minHeight: '40px',
+    fontSize: '13px',
+    fontWeight: 700,
+    borderRadius: '999px',
   },
   matrixStatusButtonComplete: {
     background: '#dcfce7',
