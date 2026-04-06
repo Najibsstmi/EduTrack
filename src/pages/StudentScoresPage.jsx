@@ -258,6 +258,7 @@ export default function StudentScoresPage() {
   const [csvRows, setCsvRows] = useState([])
   const [csvErrors, setCsvErrors] = useState([])
   const [csvFileName, setCsvFileName] = useState('')
+  const [importMode, setImportMode] = useState('partial')
   const [importingCsv, setImportingCsv] = useState(false)
   const [importSummary, setImportSummary] = useState(null)
 
@@ -529,6 +530,7 @@ export default function StudentScoresPage() {
 
     setCsvRows(rows)
     setCsvErrors(errors)
+    setImportSummary(null)
   }
 
   const importCsvToSupabase = async () => {
@@ -542,7 +544,7 @@ export default function StudentScoresPage() {
       return
     }
 
-    if (csvErrors.length > 0) {
+    if (importMode === 'strict' && csvErrors.length > 0) {
       alert('Sila betulkan ralat CSV dahulu sebelum import.')
       return
     }
@@ -551,10 +553,10 @@ export default function StudentScoresPage() {
     setImportSummary(null)
 
     try {
-      const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+      const currentYear =
+        setupConfig?.current_academic_year || new Date().getFullYear()
       const schoolId = profile.school_id
 
-      // 1. Ambil semua data rujukan sekali
       const [
         { data: studentProfilesData, error: studentProfilesError },
         { data: studentEnrollmentsData, error: studentEnrollmentsError },
@@ -575,6 +577,7 @@ export default function StudentScoresPage() {
             student_profile_id,
             class_id,
             academic_year,
+            is_active,
             classes (
               id,
               tingkatan,
@@ -582,7 +585,8 @@ export default function StudentScoresPage() {
             )
           `)
           .eq('school_id', schoolId)
-          .eq('academic_year', currentYear),
+          .eq('academic_year', currentYear)
+          .eq('is_active', true),
 
         supabase
           .from('subjects')
@@ -638,8 +642,9 @@ export default function StudentScoresPage() {
       const targetRows = []
       const scoreRows = []
       const importErrors = []
+      const skippedRows = []
+      const successRows = []
 
-      // untuk auto jana OTR selepas import
       const targetPairs = new Map()
 
       for (const row of csvRows) {
@@ -649,37 +654,67 @@ export default function StudentScoresPage() {
         const examKey = String(row.jenis_peperiksaan || '').trim().toUpperCase()
         const mark = Number(row.markah)
 
-        let student = studentByIc.get(ic)
-        if (!student) {
-          const { data: studentData, error: studentLookupError } = await supabase
-            .from('student_profiles')
-            .select('id, ic_number, full_name, gender')
-            .eq('school_id', profile.school_id)
-            .eq('ic_number', ic)
-            .maybeSingle()
-
-          if (studentLookupError) throw studentLookupError
-
-          if (studentData) {
-            student = studentData
-            studentByIc.set(ic, studentData)
+        if (!row.nama_murid || !ic || !subjectName || !examKey || row.markah === '') {
+          const message = `Baris ${rowNumber}: data asas CSV tidak lengkap.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
           }
+          continue
         }
 
+        if (Number.isNaN(mark) || mark < 0 || mark > 100) {
+          const message = `Baris ${rowNumber}: markah tidak sah.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
+          continue
+        }
+
+        if (!isAllowedExamKey(examKey)) {
+          const message = `Baris ${rowNumber}: jenis peperiksaan '${examKey}' tidak sah.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
+          continue
+        }
+
+        const student = studentByIc.get(ic)
+
         if (!student) {
-          importErrors.push(`Baris ${rowNumber}: No IC ${ic} tidak ditemui.`)
+          const message = `Baris ${rowNumber}: No IC ${ic} tidak ditemui.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
           continue
         }
 
         const enrollment = enrollmentByStudentId.get(student.id)
         if (!enrollment) {
-          importErrors.push(`Baris ${rowNumber}: Enrolment murid ${ic} untuk tahun semasa tidak ditemui.`)
+          const message = `Baris ${rowNumber}: Enrolment murid ${ic} untuk tahun semasa tidak ditemui.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
           continue
         }
 
         const subject = subjectByName.get(subjectName)
         if (!subject) {
-          importErrors.push(`Baris ${rowNumber}: Subjek '${row.subjek}' tidak ditemui.`)
+          const message = `Baris ${rowNumber}: Subjek '${row.subjek}' tidak ditemui.`
+          if (importMode === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
           continue
         }
 
@@ -771,24 +806,26 @@ export default function StudentScoresPage() {
             existing.tov_mark = mark
             targetPairs.set(pairKey, existing)
           }
-        } else {
-          importErrors.push(`Baris ${rowNumber}: Jenis peperiksaan '${examKey}' tidak sah.`)
         }
+
+        successRows.push(`Baris ${rowNumber}: berjaya diproses.`)
       }
 
-      if (importErrors.length > 0) {
+      if (importMode === 'strict' && importErrors.length > 0) {
         setImportSummary({
           success: false,
           importedTargets: 0,
           importedScores: 0,
           generatedOtrs: 0,
+          successCount: 0,
+          skippedCount: 0,
+          failedCount: importErrors.length,
           errors: importErrors,
         })
         setImportingCsv(false)
         return
       }
 
-      // 2. Simpan TOV & ETR
       if (targetRows.length > 0) {
         const { error: targetError } = await supabase
           .from('student_targets')
@@ -799,7 +836,6 @@ export default function StudentScoresPage() {
         if (targetError) throw targetError
       }
 
-      // 3. Simpan AR actual score
       if (scoreRows.length > 0) {
         const { error: scoreError } = await supabase
           .from('student_scores')
@@ -810,15 +846,10 @@ export default function StudentScoresPage() {
         if (scoreError) throw scoreError
       }
 
-      // 4. Jana OTR automatik
       const otrRows = []
 
       for (const [, pair] of targetPairs.entries()) {
-        if (
-          pair.tov_mark !== null &&
-          pair.etr_mark !== null &&
-          shouldAutoRecalculateOtrs(setupConfigData)
-        ) {
+        if (pair.tov_mark !== null && pair.etr_mark !== null) {
           const generated = generateOtrRows({
             schoolId: pair.school_id,
             academicYear: pair.academic_year,
@@ -852,10 +883,23 @@ export default function StudentScoresPage() {
         importedTargets: targetRows.length,
         importedScores: scoreRows.length,
         generatedOtrs: otrRows.length,
-        errors: [],
+        successCount: successRows.length,
+        skippedCount: skippedRows.length,
+        failedCount: importMode === 'strict' ? importErrors.length : skippedRows.length,
+        errors: importMode === 'strict' ? importErrors : skippedRows,
       })
 
-      alert('Import CSV berjaya disimpan.')
+      if (selectedClass && selectedSubject && selectedExam) {
+        await loadStudentsAndScores()
+      }
+
+      if (importMode === 'partial') {
+        alert(
+          `Import selesai. ${successRows.length} baris berjaya diproses, ${skippedRows.length} baris diabaikan.`
+        )
+      } else {
+        alert('Import CSV berjaya disimpan.')
+      }
     } catch (error) {
       console.error(error)
       setImportSummary({
@@ -863,6 +907,9 @@ export default function StudentScoresPage() {
         importedTargets: 0,
         importedScores: 0,
         generatedOtrs: 0,
+        successCount: 0,
+        skippedCount: 0,
+        failedCount: 1,
         errors: [error.message || 'Import gagal.'],
       })
     } finally {
@@ -1121,11 +1168,38 @@ export default function StudentScoresPage() {
             </div>
           )}
 
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-800">Mode Import</p>
+            <div className="mt-3 flex flex-col gap-3 md:flex-row">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="importMode"
+                  value="strict"
+                  checked={importMode === 'strict'}
+                  onChange={(e) => setImportMode(e.target.value)}
+                />
+                Strict - hentikan import jika ada ralat
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="importMode"
+                  value="partial"
+                  checked={importMode === 'partial'}
+                  onChange={(e) => setImportMode(e.target.value)}
+                />
+                Partial - import data yang valid sahaja, abaikan baris ralat
+              </label>
+            </div>
+          </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={importCsvToSupabase}
-              disabled={importingCsv || csvRows.length === 0 || csvErrors.length > 0}
+              disabled={importingCsv || csvRows.length === 0}
               className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
               {importingCsv ? 'Mengimport...' : 'Import Sekarang'}
@@ -1134,25 +1208,38 @@ export default function StudentScoresPage() {
 
           {importSummary && (
             <div
-              className={`mt-4 rounded-xl p-4 text-sm ${
+              className={`mt-4 rounded-2xl border p-4 text-sm ${
                 importSummary.success
-                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-                  : 'border border-red-200 bg-red-50 text-red-700'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-red-200 bg-red-50 text-red-800'
               }`}
             >
-              {importSummary.success ? (
-                <div className="space-y-1">
-                  <div><strong>Import berjaya.</strong></div>
-                  <div>Target disimpan: {importSummary.importedTargets}</div>
-                  <div>Score disimpan: {importSummary.importedScores}</div>
-                  <div>OTR dijana automatik: {importSummary.generatedOtrs}</div>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <div><strong>Import gagal / ada ralat.</strong></div>
-                  {importSummary.errors.map((err, i) => (
-                    <div key={i}>- {err}</div>
-                  ))}
+              <p className="font-semibold">
+                {importSummary.success ? 'Import selesai.' : 'Import gagal / ada ralat.'}
+              </p>
+
+              <div className="mt-2 space-y-1">
+                <p>Skor berjaya diimport: {importSummary.importedScores}</p>
+                <p>ETR berjaya diimport: {importSummary.importedTargets}</p>
+                <p>OTR dijana automatik: {importSummary.generatedOtrs}</p>
+                <p>Baris berjaya diproses: {importSummary.successCount || 0}</p>
+                <p>Baris diabaikan / gagal: {importSummary.failedCount || 0}</p>
+              </div>
+
+              {importSummary.errors?.length > 0 && (
+                <div className="mt-3">
+                  <p className="font-medium">Butiran ralat / baris diabaikan:</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {importSummary.errors.slice(0, 20).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+
+                  {importSummary.errors.length > 20 && (
+                    <p className="mt-2 text-xs">
+                      Preview memaparkan 20 ralat pertama sahaja.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

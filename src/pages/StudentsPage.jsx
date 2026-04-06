@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
+const ChevronLeftIcon = () => (
+  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+)
+
 const TINGKATAN_ORDER = [
   'Tingkatan 1',
   'Tingkatan 2',
@@ -46,6 +52,8 @@ export default function StudentsPage() {
     tingkatan: '',
     class_id: '',
   })
+
+  const dashboardPath = profile?.role === 'master_admin' ? '/master-admin' : '/dashboard'
 
   useEffect(() => {
     initPage()
@@ -426,13 +434,26 @@ export default function StudentsPage() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-slate-500">
-            Student Module
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="mb-2 text-sm font-semibold text-slate-500">
+                Student Module
+              </div>
+              <h1 className="text-3xl font-bold text-slate-900">Urus Murid</h1>
+              <p className="mt-2 text-slate-600">
+                Data murid dibaca daripada student_profiles dan student_enrollments bagi tahun semasa.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(dashboardPath)}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+            >
+              <ChevronLeftIcon />
+              <span>Kembali Dashboard</span>
+            </button>
           </div>
-          <h1 className="text-3xl font-bold text-slate-900">Urus Murid</h1>
-          <p className="mt-2 text-slate-600">
-            Data murid dibaca daripada student_profiles dan student_enrollments bagi tahun semasa.
-          </p>
 
           <div className="mt-4 flex flex-wrap gap-3">
             <button
