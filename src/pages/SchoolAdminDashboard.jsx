@@ -139,11 +139,6 @@ export default function SchoolAdminDashboard() {
       return
     }
 
-    if (!profile.is_school_admin) {
-      navigate('/scores', { replace: true })
-      return
-    }
-
     const { data: setupData, error: setupError } = await supabase
       .from('school_setup_configs')
       .select('*')
@@ -703,6 +698,9 @@ export default function SchoolAdminDashboard() {
     return options
   }
 
+  const isAdmin =
+    adminProfile?.role === 'school_admin' || adminProfile?.is_school_admin === true
+
   const groupedCompletionRows = useMemo(() => {
     const groupedMap = new Map(
       COMPLETION_GRADE_GROUPS.map((grade) => [grade, []])
@@ -772,6 +770,8 @@ export default function SchoolAdminDashboard() {
                 type="button"
                 onClick={() => handleMobileNavigate('/students')}
                 style={getMobileNavButtonStyle('/students')}
+                disabled={!isAdmin}
+                title={!isAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
               >
                 Input Murid
               </button>
@@ -784,16 +784,18 @@ export default function SchoolAdminDashboard() {
                 Analisis
               </button>
 
-              <button
-                type="button"
-                onClick={() => setShowMobileSettings((prev) => !prev)}
-                style={{
-                  ...styles.mobilePrimaryButton,
-                  ...(showMobileSettings ? styles.mobilePrimaryButtonActive : {}),
-                }}
-              >
-                Tetapan {showMobileSettings ? '▴' : '▾'}
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowMobileSettings((prev) => !prev)}
+                  style={{
+                    ...styles.mobilePrimaryButton,
+                    ...(showMobileSettings ? styles.mobilePrimaryButtonActive : {}),
+                  }}
+                >
+                  Tetapan {showMobileSettings ? '▴' : '▾'}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -804,7 +806,7 @@ export default function SchoolAdminDashboard() {
               </button>
             </div>
 
-            {showMobileSettings && (
+            {showMobileSettings && isAdmin && (
               <div style={styles.mobileSettingsDropdown}>
                 <button
                   type="button"
@@ -867,39 +869,46 @@ export default function SchoolAdminDashboard() {
 
             <button
               onClick={() => navigate('/students')}
-              style={styles.secondaryTopButton}
+              style={{
+                ...styles.secondaryTopButton,
+                ...(!isAdmin ? styles.disabledTopButton : {}),
+              }}
+              disabled={!isAdmin}
+              title={!isAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
             >
               Input Murid
             </button>
 
-            <div style={{ position: 'relative' }} ref={settingsMenuRef}>
-              <button
-                onClick={() => setShowSettingsMenu((prev) => !prev)}
-                style={styles.secondaryTopButton}
-              >
-                Tetapan ▾
-              </button>
+            {isAdmin && (
+              <div style={{ position: 'relative' }} ref={settingsMenuRef}>
+                <button
+                  onClick={() => setShowSettingsMenu((prev) => !prev)}
+                  style={styles.secondaryTopButton}
+                >
+                  Tetapan ▾
+                </button>
 
-              {showSettingsMenu && (
-                <div style={styles.settingsDropdown}>
-                  <button onClick={() => navigate('/school-setup')} style={styles.dropdownItem}>
-                    Struktur Akademik
-                  </button>
-                  <button onClick={() => navigate('/school-setup/exams')} style={styles.dropdownItem}>
-                    Tetapan Peperiksaan
-                  </button>
-                  <button onClick={() => navigate('/school-setup/grades')} style={styles.dropdownItem}>
-                    Tetapan Grade
-                  </button>
-                  <button onClick={() => navigate('/school-setup/subjects')} style={styles.dropdownItem}>
-                    Tetapan Subjek
-                  </button>
-                  <button onClick={() => navigate('/classes')} style={styles.dropdownItem}>
-                    Tetapan Kelas
-                  </button>
-                </div>
-              )}
-            </div>
+                {showSettingsMenu && (
+                  <div style={styles.settingsDropdown}>
+                    <button onClick={() => navigate('/school-setup')} style={styles.dropdownItem}>
+                      Struktur Akademik
+                    </button>
+                    <button onClick={() => navigate('/school-setup/exams')} style={styles.dropdownItem}>
+                      Tetapan Peperiksaan
+                    </button>
+                    <button onClick={() => navigate('/school-setup/grades')} style={styles.dropdownItem}>
+                      Tetapan Grade
+                    </button>
+                    <button onClick={() => navigate('/school-setup/subjects')} style={styles.dropdownItem}>
+                      Tetapan Subjek
+                    </button>
+                    <button onClick={() => navigate('/classes')} style={styles.dropdownItem}>
+                      Tetapan Kelas
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               onClick={() => navigate('/analysis')}
@@ -927,7 +936,7 @@ export default function SchoolAdminDashboard() {
 
       <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
         <section style={styles.hero}>
-          <h1 style={styles.heroTitle}>Dashboard Admin Sekolah</h1>
+          <h1 style={styles.heroTitle}>{isAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
           <p style={styles.heroText}>
             Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
           </p>
@@ -984,7 +993,10 @@ export default function SchoolAdminDashboard() {
 
         <section style={styles.card}>
           <div style={styles.cardHeaderColumn}>
-            <h2 style={styles.cardTitle}>Status Pengisian Markah ({selectedExamKey})</h2>
+            <h2 style={styles.cardTitle}>Pemantauan Pengisian Markah ({selectedExamKey})</h2>
+            <span style={styles.roleHintText}>
+              {isAdmin ? 'Paparan keseluruhan sekolah' : 'Paparan pemantauan'}
+            </span>
             <p style={styles.helperText}>
               Hijau = semua murid dalam kelas itu sudah lengkap markah untuk subjek tersebut.
               Merah = masih ada murid yang belum lengkap. Paparan ini hanya kira peperiksaan
@@ -1136,121 +1148,123 @@ export default function SchoolAdminDashboard() {
           )}
         </section>
 
-        <section style={styles.card}>
-          <div style={styles.sectionHeaderResponsive}>
-            <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
-            <div style={styles.filterWrap}>
-              {TABS.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  style={{ ...styles.filterButton, ...(activeTab === tab ? styles.filterButtonActive : {}) }}
-                >
-                  {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
+        {isAdmin && (
+          <section style={styles.card}>
+            <div style={styles.sectionHeaderResponsive}>
+              <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
+              <div style={styles.filterWrap}>
+                {TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    style={{ ...styles.filterButton, ...(activeTab === tab ? styles.filterButtonActive : {}) }}
+                  >
+                    {tab === 'all' ? 'Semua' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div style={styles.searchRow}>
-            <input
-              type="text"
-              placeholder="Cari nama, email, role, designation..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={styles.searchInput}
-            />
-          </div>
+            <div style={styles.searchRow}>
+              <input
+                type="text"
+                placeholder="Cari nama, email, role, designation..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={styles.searchInput}
+              />
+            </div>
 
-          {filteredUsers.length === 0 ? (
-            <div style={styles.emptyState}>Tiada data untuk paparan ini.</div>
-          ) : (
-            <div style={styles.tableWrap}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Nama</th>
-                    <th style={styles.th}>Email</th>
-                    <th style={styles.th}>Role</th>
-                    <th style={styles.th}>Designation</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Admin</th>
-                    <th style={styles.th}>Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => {
-                    const isCurrentAdmin = user.id === adminProfile?.id
-                    const isProtectedMasterAdmin = user.is_master_admin === true || user.role === 'master_admin'
+            {filteredUsers.length === 0 ? (
+              <div style={styles.emptyState}>Tiada data untuk paparan ini.</div>
+            ) : (
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Nama</th>
+                      <th style={styles.th}>Email</th>
+                      <th style={styles.th}>Role</th>
+                      <th style={styles.th}>Designation</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Admin</th>
+                      <th style={styles.th}>Tindakan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user) => {
+                      const isCurrentAdmin = user.id === adminProfile?.id
+                      const isProtectedMasterAdmin = user.is_master_admin === true || user.role === 'master_admin'
 
-                    return (
-                      <tr key={user.id}>
-                        <td style={styles.td}>{getDisplayName(user)}</td>
-                        <td style={styles.td}>{user.email || '-'}</td>
-                        <td style={styles.td}>{user.role || '-'}</td>
-                        <td style={styles.td}>
-                          {isProtectedMasterAdmin ? (
-                            <span style={styles.readonlyTag}>Master Admin</span>
-                          ) : (
-                            <select
-                              value={user.designation || ''}
-                              onChange={(e) => handleSaveDesignation(user, e.target.value)}
-                              style={styles.designationSelect}
-                              disabled={savingId === user.id}
-                            >
-                              <option value="">Pilih designation</option>
-                              {DESIGNATION_OPTIONS.map((designation) => (
-                                <option key={designation} value={designation}>
-                                  {designation}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.badge, ...getStatusStyle(user.approval_status) }}>
-                            {getStatusText(user.approval_status)}
-                          </span>
-                        </td>
-                        <td style={styles.td}>{user.is_school_admin ? 'Ya' : 'Tidak'}</td>
-                        <td style={styles.td}>
-                          <div style={styles.actionRow}>
-                            {isCurrentAdmin ? (
-                              <span style={styles.selfTag}>Akaun anda</span>
-                            ) : isProtectedMasterAdmin ? (
-                              <span style={styles.protectedTag}>Master admin dilindungi</span>
+                      return (
+                        <tr key={user.id}>
+                          <td style={styles.td}>{getDisplayName(user)}</td>
+                          <td style={styles.td}>{user.email || '-'}</td>
+                          <td style={styles.td}>{user.role || '-'}</td>
+                          <td style={styles.td}>
+                            {isProtectedMasterAdmin ? (
+                              <span style={styles.readonlyTag}>Master Admin</span>
                             ) : (
                               <select
-                                value={actionDrafts[user.id] ?? ''}
-                                onChange={async (e) => {
-                                  const selectedAction = e.target.value
-                                  setActionDrafts((prev) => ({
-                                    ...prev,
-                                    [user.id]: selectedAction,
-                                  }))
-                                  await handleActionChange(user, selectedAction)
-                                }}
-                                style={styles.actionSelect}
+                                value={user.designation || ''}
+                                onChange={(e) => handleSaveDesignation(user, e.target.value)}
+                                style={styles.designationSelect}
                                 disabled={savingId === user.id}
                               >
-                                <option value="">Pilih tindakan</option>
-                                {getActionOptions(user, isCurrentAdmin, isProtectedMasterAdmin).map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
+                                <option value="">Pilih designation</option>
+                                {DESIGNATION_OPTIONS.map((designation) => (
+                                  <option key={designation} value={designation}>
+                                    {designation}
                                   </option>
                                 ))}
                               </select>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{ ...styles.badge, ...getStatusStyle(user.approval_status) }}>
+                              {getStatusText(user.approval_status)}
+                            </span>
+                          </td>
+                          <td style={styles.td}>{user.is_school_admin ? 'Ya' : 'Tidak'}</td>
+                          <td style={styles.td}>
+                            <div style={styles.actionRow}>
+                              {isCurrentAdmin ? (
+                                <span style={styles.selfTag}>Akaun anda</span>
+                              ) : isProtectedMasterAdmin ? (
+                                <span style={styles.protectedTag}>Master admin dilindungi</span>
+                              ) : (
+                                <select
+                                  value={actionDrafts[user.id] ?? ''}
+                                  onChange={async (e) => {
+                                    const selectedAction = e.target.value
+                                    setActionDrafts((prev) => ({
+                                      ...prev,
+                                      [user.id]: selectedAction,
+                                    }))
+                                    await handleActionChange(user, selectedAction)
+                                  }}
+                                  style={styles.actionSelect}
+                                  disabled={savingId === user.id}
+                                >
+                                  <option value="">Pilih tindakan</option>
+                                  {getActionOptions(user, isCurrentAdmin, isProtectedMasterAdmin).map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   )
@@ -1317,6 +1331,10 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
     fontSize: 15,
+  },
+  disabledTopButton: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
   },
   settingsDropdown: {
     position: 'absolute',
@@ -1447,6 +1465,11 @@ const styles = {
   checkDone: { width: '26px', height: '26px', borderRadius: '999px', display: 'inline-grid', placeItems: 'center', background: '#dcfce7', color: '#166534', fontWeight: 700 },
   checkTodo: { width: '26px', height: '26px', borderRadius: '999px', display: 'inline-grid', placeItems: 'center', background: '#f1f5f9', color: '#64748b', fontWeight: 700 },
   helperText: { color: '#64748b', lineHeight: 1.6, marginBottom: '16px' },
+  roleHintText: {
+    fontSize: '12px',
+    color: '#64748b',
+    fontWeight: 600,
+  },
   primaryButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' },
   sectionHeader: { marginBottom: '14px' },
   sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
