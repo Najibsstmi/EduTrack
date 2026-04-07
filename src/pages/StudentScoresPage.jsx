@@ -12,6 +12,7 @@ import {
   getOtrKeysForTingkatan,
   shouldAutoRecalculateOtrs,
 } from '../lib/otrGeneration'
+import { getRelevantEnrollmentIds } from '../lib/completionMatrix'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -692,7 +693,7 @@ export default function StudentScoresPage() {
     const [{ data: subjectData }, { data: gradeScaleData }, { data: enrollmentData }] = await Promise.all([
       supabase
         .from('subjects')
-        .select('id, subject_name, subject_code, tingkatan')
+        .select('id, subject_name, subject_code, tingkatan, subject_type, is_core')
         .eq('school_id', profileData.school_id)
         .order('subject_name', { ascending: true }),
       supabase
@@ -726,6 +727,8 @@ export default function StudentScoresPage() {
   const loadStudentsAndScores = async () => {
     if (!selectedClass || !selectedSubject || !selectedExam || !profile?.school_id) return
 
+    const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+
     let enrollmentQuery = supabase
       .from('student_enrollments')
       .select(`
@@ -746,11 +749,20 @@ export default function StudentScoresPage() {
       .eq('is_active', true)
       .order('id', { ascending: true })
 
-    if (setupConfig?.current_academic_year) {
-      enrollmentQuery = enrollmentQuery.eq('academic_year', setupConfig.current_academic_year)
-    }
+    enrollmentQuery = enrollmentQuery.eq('academic_year', currentYear)
 
-    const { data: enrollmentData } = await enrollmentQuery
+    const [
+      { data: enrollmentData },
+      { data: studentSubjectEnrollmentData },
+    ] = await Promise.all([
+      enrollmentQuery,
+      supabase
+        .from('student_subject_enrollments')
+        .select('subject_id, student_enrollment_id, academic_year, is_active')
+        .eq('subject_id', selectedSubject)
+        .eq('academic_year', currentYear)
+        .eq('is_active', true),
+    ])
 
     const studentRows = (enrollmentData || []).map((row) => ({
       enrollment_id: row.id,
@@ -760,7 +772,25 @@ export default function StudentScoresPage() {
       gender: row.student_profiles?.gender || '',
     }))
 
-    setStudents(studentRows)
+    const selectedSubjectRecord = subjects.find(
+      (subject) => String(subject.id) === String(selectedSubject)
+    )
+    const classEnrollmentIdSet = new Set(studentRows.map((student) => student.enrollment_id))
+    const relevantEnrollmentIds = getRelevantEnrollmentIds({
+      classId: selectedClass,
+      subject: selectedSubjectRecord,
+      academicYear: currentYear,
+      enrollments: enrollmentData || [],
+      studentSubjectEnrollments: (studentSubjectEnrollmentData || []).filter((row) =>
+        classEnrollmentIdSet.has(row.student_enrollment_id)
+      ),
+    })
+    const relevantEnrollmentIdSet = new Set(relevantEnrollmentIds)
+    const filteredStudents = studentRows.filter((student) =>
+      relevantEnrollmentIdSet.has(student.enrollment_id)
+    )
+
+    setStudents(filteredStudents)
 
     let scoreQuery = supabase
       .from('student_scores')
@@ -770,9 +800,7 @@ export default function StudentScoresPage() {
       .eq('exam_key', selectedExam)
       .eq('school_id', profile.school_id)
 
-    if (setupConfig?.current_academic_year) {
-      scoreQuery = scoreQuery.eq('academic_year', setupConfig.current_academic_year)
-    }
+    scoreQuery = scoreQuery.eq('academic_year', currentYear)
 
     const { data: scoreData } = await scoreQuery
 
