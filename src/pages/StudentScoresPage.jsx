@@ -361,6 +361,7 @@ export default function StudentScoresPage() {
   const [scores, setScores] = useState({})
   const [saving, setSaving] = useState(false)
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
+  const [editingStudentId, setEditingStudentId] = useState(null)
 
   const [csvRows, setCsvRows] = useState([])
   const [csvErrors, setCsvErrors] = useState([])
@@ -382,6 +383,9 @@ export default function StudentScoresPage() {
   const prefillSubjectName = searchParams.get('subject_name') || ''
   const prefillExamKey = searchParams.get('exam_key') || ''
   const showIncompleteOnlyFromUrl = searchParams.get('show') === 'incomplete'
+
+  const selectedClassLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
+  const selectedSubjectLabel = String(selectedSubjectData?.subject_name || '').trim()
 
   useEffect(() => {
     init()
@@ -426,11 +430,15 @@ export default function StudentScoresPage() {
     if (!showIncompleteOnly) return displayedStudents || []
 
     return (displayedStudents || []).filter((student) => {
+      if (String(editingStudentId) === String(student.student_id)) {
+        return true
+      }
+
       const foundScore = scores?.[student.student_id]
       const mark = foundScore?.mark
       return mark === '' || mark === null || mark === undefined
     })
-  }, [displayedStudents, showIncompleteOnly, scores])
+  }, [displayedStudents, showIncompleteOnly, scores, editingStudentId])
 
   const displayedStudentIdSet = useMemo(() => {
     return new Set(displayedStudents.map((student) => String(student.student_id)))
@@ -2092,9 +2100,9 @@ export default function StudentScoresPage() {
           {visibleStudents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
               {showIncompleteOnly && displayedStudents.length > 0
-                ? 'Semua murid dalam paparan ini sudah mempunyai markah.'
+                ? `Semua murid bagi ${selectedSubjectLabel || 'subjek ini'} di ${selectedClassLabel || 'kelas ini'} sudah mempunyai markah.`
                 : isSelectiveSubject(selectedSubjectData)
-                ? 'Tiada murid didaftarkan untuk subjek ini lagi. Sila urus murid subjek dahulu.'
+                ? `Tiada murid didaftarkan untuk ${selectedSubjectLabel || 'subjek ini'} di ${selectedClassLabel || 'kelas ini'} lagi. Sila urus murid subjek dahulu.`
                 : 'Tiada murid untuk dipaparkan.'}
             </div>
           ) : (
@@ -2141,6 +2149,8 @@ export default function StudentScoresPage() {
                           min="0"
                           max="100"
                           value={scores[student.student_id]?.mark ?? ''}
+                          onFocus={() => setEditingStudentId(student.student_id)}
+                          onBlur={() => setEditingStudentId(null)}
                           onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
                           className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
                         />

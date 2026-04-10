@@ -391,9 +391,10 @@ function DashboardPage() {
           })
 
           const isComplete = completedStudents === totalStudents
+          const isPartial = completedStudents > 0 && completedStudents < totalStudents
 
           cells[subjectName] = {
-            status: isComplete ? 'complete' : 'incomplete',
+            status: isComplete ? 'complete' : isPartial ? 'partial' : 'incomplete',
             label: isComplete ? 'Lengkap' : `${completedStudents}/${totalStudents}`,
             completedStudents,
             totalStudents,
@@ -639,6 +640,11 @@ function DashboardPage() {
                               ...styles.matrixStatusButton,
                               ...styles.matrixStatusButtonComplete,
                             }
+                          } else if (cell?.status === 'partial') {
+                            buttonStyle = {
+                              ...styles.matrixStatusButton,
+                              ...styles.matrixStatusButtonPartial,
+                            }
                           } else if (cell?.status === 'incomplete') {
                             buttonStyle = {
                               ...styles.matrixStatusButton,
@@ -846,6 +852,11 @@ const styles = {
     background: '#dcfce7',
     borderColor: '#86efac',
     color: '#166534',
+  },
+  matrixStatusButtonPartial: {
+    background: '#fef3c7',
+    borderColor: '#fcd34d',
+    color: '#92400e',
   },
   matrixStatusButtonIncomplete: {
     background: '#fee2e2',

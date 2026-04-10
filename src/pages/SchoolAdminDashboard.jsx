@@ -419,9 +419,10 @@ export default function SchoolAdminDashboard() {
           })
 
           const isComplete = completedStudents === totalStudents
+          const isPartial = completedStudents > 0 && completedStudents < totalStudents
 
           cells[subjectName] = {
-            status: isComplete ? 'complete' : 'incomplete',
+            status: isComplete ? 'complete' : isPartial ? 'partial' : 'incomplete',
             label: isComplete ? 'Lengkap' : `${completedStudents}/${totalStudents}`,
             completedStudents,
             totalStudents,
@@ -1176,6 +1177,12 @@ export default function SchoolAdminDashboard() {
                                             ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
                                             ...styles.matrixStatusButtonComplete,
                                           }
+                                        } else if (cell?.status === 'partial') {
+                                          buttonStyle = {
+                                            ...styles.matrixStatusButton,
+                                            ...(isMobileView ? styles.matrixStatusButtonMobile : {}),
+                                            ...styles.matrixStatusButtonPartial,
+                                          }
                                         } else if (cell?.status === 'incomplete') {
                                           buttonStyle = {
                                             ...styles.matrixStatusButton,
@@ -1740,6 +1747,10 @@ const styles = {
   matrixStatusButtonComplete: {
     background: '#dcfce7',
     color: '#166534',
+  },
+  matrixStatusButtonPartial: {
+    background: '#fef3c7',
+    color: '#92400e',
   },
   matrixStatusButtonIncomplete: {
     background: '#fee2e2',
