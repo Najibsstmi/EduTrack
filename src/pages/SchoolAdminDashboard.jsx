@@ -1164,8 +1164,7 @@ export default function SchoolAdminDashboard() {
 
                                       {completionSubjects.map((subjectName) => {
                                         const cell = row.cells?.[subjectName]
-                                        const isClickable =
-                                          cell?.status === 'complete' || cell?.status === 'incomplete'
+                                        const isClickable = cell?.status !== 'na'
 
                                         let buttonStyle = {
                                           ...styles.matrixStatusButton,
@@ -1200,17 +1199,14 @@ export default function SchoolAdminDashboard() {
                                                 cursor: isClickable ? 'pointer' : 'default',
                                               }}
                                               onClick={() => {
-                                                if (!isClickable) return
+                                                if (cell?.status === 'na') return
 
                                                 const params = new URLSearchParams({
                                                   class_id: row.id,
                                                   subject_name: subjectName,
                                                   exam_key: selectedExamKey,
+                                                  show: 'incomplete',
                                                 })
-
-                                                if (cell?.status === 'incomplete') {
-                                                  params.set('scroll_to', 'incomplete')
-                                                }
 
                                                 navigate(`/scores?${params.toString()}`)
                                               }}

@@ -342,7 +342,7 @@ const generateOtrRows = ({
 export default function StudentScoresPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const firstIncompleteRef = useRef(null)
+  const studentListRef = useRef(null)
 
   const [profile, setProfile] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
@@ -360,6 +360,7 @@ export default function StudentScoresPage() {
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
 
   const [csvRows, setCsvRows] = useState([])
   const [csvErrors, setCsvErrors] = useState([])
@@ -380,7 +381,7 @@ export default function StudentScoresPage() {
   const prefillClassId = searchParams.get('class_id') || ''
   const prefillSubjectName = searchParams.get('subject_name') || ''
   const prefillExamKey = searchParams.get('exam_key') || ''
-  const shouldScrollToIncomplete = searchParams.get('scroll_to') === 'incomplete'
+  const showIncompleteOnlyFromUrl = searchParams.get('show') === 'incomplete'
 
   useEffect(() => {
     init()
@@ -420,6 +421,16 @@ export default function StudentScoresPage() {
   const displayedStudents = useMemo(() => {
     return Array.isArray(students) ? students : []
   }, [students])
+
+  const visibleStudents = useMemo(() => {
+    if (!showIncompleteOnly) return displayedStudents || []
+
+    return (displayedStudents || []).filter((student) => {
+      const foundScore = scores?.[student.student_id]
+      const mark = foundScore?.mark
+      return mark === '' || mark === null || mark === undefined
+    })
+  }, [displayedStudents, showIncompleteOnly, scores])
 
   const displayedStudentIdSet = useMemo(() => {
     return new Set(displayedStudents.map((student) => String(student.student_id)))
@@ -528,14 +539,14 @@ export default function StudentScoresPage() {
   useEffect(() => {
     if (!prefillClassId || !classes.length) return
 
-    const hasClass = classes.some((item) => String(item.id) === String(prefillClassId))
-    if (hasClass && String(selectedClass) !== String(prefillClassId)) {
+    const exists = classes.some((item) => String(item.id) === String(prefillClassId))
+    if (exists) {
       setSelectedClass(prefillClassId)
     }
-  }, [prefillClassId, classes, selectedClass])
+  }, [prefillClassId, classes])
 
   useEffect(() => {
-    if (!selectedExam) return
+    if (!selectedExam || !uniqueExamOptions.length) return
 
     const examStillValid = uniqueExamOptions.some(
       (exam) => String(exam.key) === String(selectedExam)
@@ -547,17 +558,9 @@ export default function StudentScoresPage() {
   }, [uniqueExamOptions, selectedExam])
 
   useEffect(() => {
-    if (!prefillExamKey || !uniqueExamOptions.length) return
-
-    const normalizedPrefillExamKey = String(prefillExamKey).toUpperCase()
-    const exists = uniqueExamOptions.some(
-      (item) => String(item.key || '').toUpperCase() === normalizedPrefillExamKey
-    )
-
-    if (exists && String(selectedExam).toUpperCase() !== normalizedPrefillExamKey) {
-      setSelectedExam(normalizedPrefillExamKey)
-    }
-  }, [prefillExamKey, uniqueExamOptions, selectedExam])
+    if (!prefillExamKey) return
+    setSelectedExam(String(prefillExamKey).trim().toUpperCase())
+  }, [prefillExamKey])
 
   const sortedStudents = useMemo(() => {
     const genderRank = (gender) => {
@@ -566,7 +569,7 @@ export default function StudentScoresPage() {
       return 3
     }
 
-    return [...displayedStudents].sort((a, b) => {
+    return [...visibleStudents].sort((a, b) => {
       const genderA = (a.gender || '').toUpperCase()
       const genderB = (b.gender || '').toUpperCase()
 
@@ -577,7 +580,7 @@ export default function StudentScoresPage() {
         sensitivity: 'base',
       })
     })
-  }, [displayedStudents])
+  }, [visibleStudents])
 
   const uniqueSubjects = useMemo(() => {
     const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
@@ -621,10 +624,16 @@ export default function StudentScoresPage() {
         normalizeGradeLabel(item.tingkatan) === normalizeGradeLabel(selectedClassData.tingkatan)
     )
 
-    if (matchedSubject && String(selectedSubject) !== String(matchedSubject.id)) {
+    if (matchedSubject) {
       setSelectedSubject(matchedSubject.id)
     }
-  }, [prefillSubjectName, selectedClassData, subjects, selectedSubject])
+  }, [prefillSubjectName, subjects, selectedClassData])
+
+  useEffect(() => {
+    if (showIncompleteOnlyFromUrl) {
+      setShowIncompleteOnly(true)
+    }
+  }, [showIncompleteOnlyFromUrl])
 
   const incompleteStudentIds = useMemo(() => {
     if (!displayedStudents.length) return []
@@ -640,18 +649,19 @@ export default function StudentScoresPage() {
   }, [displayedStudents, scores, selectedSubject, selectedExam])
 
   useEffect(() => {
-    if (!shouldScrollToIncomplete) return
-    if (!firstIncompleteRef.current) return
+    if (!showIncompleteOnlyFromUrl) return
+    if (!studentListRef.current) return
+    if (!selectedClass || !selectedSubject || !selectedExam) return
 
     const timer = setTimeout(() => {
-      firstIncompleteRef.current?.scrollIntoView({
+      studentListRef.current?.scrollIntoView({
         behavior: 'smooth',
-        block: 'center',
+        block: 'start',
       })
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [shouldScrollToIncomplete, incompleteStudentIds, displayedStudents, scores])
+  }, [showIncompleteOnlyFromUrl, selectedClass, selectedSubject, selectedExam, visibleStudents.length])
 
   const init = async () => {
     const {
@@ -2047,15 +2057,43 @@ export default function StudentScoresPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div ref={studentListRef} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Senarai Murid & Markah</h2>
-            <span className="text-sm text-slate-500">Jumlah murid: {displayedStudents.length}</span>
+            <span className="text-sm text-slate-500">Jumlah murid: {visibleStudents.length}</span>
           </div>
 
-          {displayedStudents.length === 0 ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowIncompleteOnly(false)}
+              className={`rounded-xl border px-4 py-2 text-sm font-bold ${
+                !showIncompleteOnly
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-300 bg-white text-slate-900'
+              }`}
+            >
+              Semua Murid
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowIncompleteOnly(true)}
+              className={`rounded-xl border px-4 py-2 text-sm font-bold ${
+                showIncompleteOnly
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-300 bg-white text-slate-900'
+              }`}
+            >
+              Belum Isi Sahaja
+            </button>
+          </div>
+
+          {visibleStudents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-              {isSelectiveSubject(selectedSubjectData)
+              {showIncompleteOnly && displayedStudents.length > 0
+                ? 'Semua murid dalam paparan ini sudah mempunyai markah.'
+                : isSelectiveSubject(selectedSubjectData)
                 ? 'Tiada murid didaftarkan untuk subjek ini lagi. Sila urus murid subjek dahulu.'
                 : 'Tiada murid untuk dipaparkan.'}
             </div>
@@ -2079,13 +2117,6 @@ export default function StudentScoresPage() {
                     <tr
                       key={student.student_id}
                       className="border-b"
-                      ref={
-                        shouldScrollToIncomplete &&
-                        incompleteStudentIds.length > 0 &&
-                        student.enrollment_id === incompleteStudentIds[0]
-                          ? firstIncompleteRef
-                          : null
-                      }
                       style={{ background: isIncomplete ? '#fef2f2' : '#ffffff' }}
                     >
                       <td className="px-3 py-3 text-slate-700">{index + 1}</td>
