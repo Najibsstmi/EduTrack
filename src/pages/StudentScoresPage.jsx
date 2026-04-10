@@ -341,7 +341,6 @@ const generateOtrRows = ({
 
 export default function StudentScoresPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const studentListRef = useRef(null)
 
   const [profile, setProfile] = useState(null)
@@ -375,6 +374,7 @@ export default function StudentScoresPage() {
   const [bulkImportErrors, setBulkImportErrors] = useState([])
   const [bulkImportSummary, setBulkImportSummary] = useState(null)
   const [bulkImportLoading, setBulkImportLoading] = useState(false)
+  const [searchParams] = useSearchParams()
 
   const dashboardPath = getDashboardPath(profile)
   const isSchoolAdmin =
@@ -383,9 +383,6 @@ export default function StudentScoresPage() {
   const prefillSubjectName = searchParams.get('subject_name') || ''
   const prefillExamKey = searchParams.get('exam_key') || ''
   const showIncompleteOnlyFromUrl = searchParams.get('show') === 'incomplete'
-
-  const selectedClassLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
-  const selectedSubjectLabel = String(selectedSubjectData?.subject_name || '').trim()
 
   useEffect(() => {
     init()
@@ -421,6 +418,9 @@ export default function StudentScoresPage() {
     () => subjects.find((item) => String(item.id) === String(selectedSubject)) || null,
     [subjects, selectedSubject]
   )
+
+  const selectedClassLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
+  const selectedSubjectLabel = String(selectedSubjectData?.subject_name || '').trim()
 
   const displayedStudents = useMemo(() => {
     return Array.isArray(students) ? students : []
