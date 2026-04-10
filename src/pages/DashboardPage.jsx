@@ -435,6 +435,13 @@ function DashboardPage() {
       tone: 'blue',
     },
     {
+      title: 'Urus Murid Subjek',
+      description: 'Tetapkan murid yang mengambil subjek selective bagi setiap kelas.',
+      onClick: () => navigate('/manage-subject-students'),
+      enabled: true,
+      tone: 'amber',
+    },
+    {
       title: 'Analisis Prestasi',
       description: 'Lihat analisis kelas, individu dan prestasi subjek.',
       onClick: () => navigate('/analysis'),
@@ -467,6 +474,9 @@ function DashboardPage() {
         <nav style={styles.nav}>
           <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
             Input Markah
+          </button>
+          <button style={styles.navButton} onClick={() => navigate('/manage-subject-students')}>
+            Urus Murid Subjek
           </button>
           <button style={styles.navButton} onClick={() => navigate('/analysis')}>
             Analisis

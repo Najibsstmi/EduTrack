@@ -18,6 +18,7 @@ import AnalysisPage from './pages/AnalysisPage'
 import AnalysisHubPage from './pages/AnalysisHubPage'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
+import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
       <Route path="/students/import" element={<StudentImportPage />} />
       <Route path="/scores" element={<StudentScoresPage />} />
       <Route path="/classes" element={<ClassesPage />} />
+      <Route path="/manage-subject-students" element={<ManageSubjectStudentsPage />} />
       <Route path="/targets" element={<TargetsPage />} />
       <Route path="/analysis" element={<AnalysisHubPage />} />
       <Route path="/analysis/class" element={<AnalysisPage />} />

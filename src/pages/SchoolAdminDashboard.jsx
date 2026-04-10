@@ -779,6 +779,14 @@ export default function SchoolAdminDashboard() {
                 Analisis
               </button>
 
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/manage-subject-students')}
+                style={getMobileNavButtonStyle('/manage-subject-students')}
+              >
+                Murid Subjek
+              </button>
+
               {isAdmin && (
                 <button
                   type="button"
@@ -910,6 +918,13 @@ export default function SchoolAdminDashboard() {
               style={styles.secondaryTopButton}
             >
               Analisis
+            </button>
+
+            <button
+              onClick={() => navigate('/manage-subject-students')}
+              style={styles.secondaryTopButton}
+            >
+              Urus Murid Subjek
             </button>
 
             <button
