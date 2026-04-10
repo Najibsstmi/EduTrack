@@ -10,14 +10,14 @@ export const getRelevantEnrollmentIds = ({
   if (!subject) return []
 
   const isSelective =
-    normalizeSubjectType(subject.subject_type) === 'selective' || subject.is_core === false
+    normalizeSubjectType(subject?.subject_type) === 'selective'
 
   if (!isSelective) {
     return (enrollments || [])
       .filter(
         (enrollment) =>
           enrollment.class_id === classId &&
-          enrollment.academic_year === academicYear &&
+          Number(enrollment.academic_year) === Number(academicYear) &&
           enrollment.is_active === true
       )
       .map((enrollment) => enrollment.id)
@@ -27,7 +27,7 @@ export const getRelevantEnrollmentIds = ({
     .filter(
       (row) =>
         row.subject_id === subject.id &&
-        row.academic_year === academicYear &&
+        Number(row.academic_year) === Number(academicYear) &&
         row.is_active === true
     )
     .map((row) => row.student_enrollment_id)
