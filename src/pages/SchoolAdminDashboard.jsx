@@ -966,6 +966,88 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Jumlah Murid" value={studentCount} isMobileView={isMobileView} />
         </section>
 
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>Akses Pantas</h2>
+          <p style={styles.helperText}>
+            Modul paling kerap digunakan untuk kerja harian sekolah.
+          </p>
+
+          <div style={styles.quickActionGrid}>
+            <div
+              onClick={() => navigate('/scores')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardBlue,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>Input Markah</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Masukkan markah peperiksaan murid dengan lebih cepat dan tersusun.
+              </p>
+            </div>
+
+            <div
+              onClick={() => navigate('/analysis')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardGreen,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>Analisis Prestasi</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Lihat analisis kelas, individu dan prestasi subjek dengan lebih jelas.
+              </p>
+            </div>
+
+            <div
+              onClick={() => navigate('/manage-subject-students')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardPurple,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>Urus Murid Subjek</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Tetapkan murid yang mengambil subjek selective seperti Pendidikan Islam,
+                Pendidikan Moral atau subjek elektif lain.
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section style={styles.dualGrid}>
           <div style={styles.card}>
             <div style={styles.cardHeader}>
@@ -1483,8 +1565,54 @@ const styles = {
   primaryButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' },
   sectionHeader: { marginBottom: '14px' },
   sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
-  quickActions: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' },
-  quickButton: { background: '#f8fafc', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '14px 16px', fontWeight: 600, textAlign: 'left', cursor: 'pointer' },
+  quickActionGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+    gap: '14px',
+    marginTop: '16px',
+  },
+  quickActionCard: {
+    borderRadius: '18px',
+    padding: '18px',
+    cursor: 'pointer',
+    border: '1px solid #e2e8f0',
+    background: '#ffffff',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    minHeight: '120px',
+  },
+  quickActionCardBlue: {
+    background: '#eff6ff',
+    border: '1px solid #bfdbfe',
+  },
+  quickActionCardGreen: {
+    background: '#ecfdf5',
+    border: '1px solid #bbf7d0',
+  },
+  quickActionCardPurple: {
+    background: '#faf5ff',
+    border: '1px solid #e9d5ff',
+  },
+  quickActionTitle: {
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#0f172a',
+    margin: 0,
+  },
+  quickActionDesc: {
+    fontSize: '14px',
+    lineHeight: 1.6,
+    color: '#475569',
+    margin: 0,
+  },
+  quickActionArrow: {
+    marginLeft: 'auto',
+    fontSize: '18px',
+    fontWeight: 700,
+    color: '#334155',
+  },
   filterWrap: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   filterButton: { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 12px', cursor: 'pointer', fontWeight: 600 },
   filterButtonActive: { background: '#0f172a', color: '#ffffff', borderColor: '#0f172a' },

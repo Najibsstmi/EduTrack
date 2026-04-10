@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const styles = {
@@ -159,6 +160,17 @@ const styles = {
     fontSize: '13px',
     color: '#475569',
   },
+  backButton: {
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    borderRadius: '12px',
+    padding: '10px 14px',
+    fontSize: '14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    alignSelf: 'flex-start',
+  },
 }
 
 const normalizeText = (value) =>
@@ -168,6 +180,7 @@ const isSelectiveSubject = (subject) =>
   normalizeText(subject?.subject_type) === 'selective'
 
 export default function ManageSubjectStudentsPage() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -426,6 +439,14 @@ export default function ManageSubjectStudentsPage() {
   return (
     <div style={styles.page}>
       <div style={styles.container}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          style={styles.backButton}
+        >
+          ← Kembali
+        </button>
+
         <section style={styles.card}>
           <h1 style={styles.title}>Urus Murid Subjek</h1>
           <p style={styles.subtitle}>
