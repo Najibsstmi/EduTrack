@@ -84,6 +84,12 @@ const normalizeCsvHeader = (value) => {
 const normalizeExamKey = (value) =>
   String(value || '').trim().toUpperCase()
 
+const normalizeSubjectType = (value) =>
+  String(value || '').trim().toLowerCase()
+
+const isSelectiveSubject = (subject) =>
+  normalizeSubjectType(subject?.subject_type) === 'selective'
+
 const isAllowedExamKey = (value) => {
   const key = normalizeExamKey(value)
 
@@ -345,6 +351,7 @@ export default function StudentScoresPage() {
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
   const [allEnrollments, setAllEnrollments] = useState([])
+  const [studentSubjectEnrollments, setStudentSubjectEnrollments] = useState([])
 
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
@@ -409,6 +416,36 @@ export default function StudentScoresPage() {
     () => subjects.find((item) => String(item.id) === String(selectedSubject)) || null,
     [subjects, selectedSubject]
   )
+
+  const displayedStudents = useMemo(() => {
+    return Array.isArray(students) ? students : []
+  }, [students])
+
+  const displayedStudentIdSet = useMemo(() => {
+    return new Set(displayedStudents.map((student) => String(student.student_id)))
+  }, [displayedStudents])
+
+  const displayedEnrollmentIdSet = useMemo(() => {
+    return new Set(
+      displayedStudents.map((student) => String(student.enrollment_id))
+    )
+  }, [displayedStudents])
+
+  const displayedStudentLookupByIc = useMemo(() => {
+    const map = new Map()
+
+    ;(displayedStudents || []).forEach((student) => {
+      const normalizedIc = normalizeIC(student.ic_number)
+      if (!normalizedIc) return
+
+      map.set(normalizedIc, {
+        ...student,
+        student_profile_id: student.student_id,
+      })
+    })
+
+    return map
+  }, [displayedStudents])
 
   const subjectLookupByGrade = useMemo(() => {
     const lookup = new Map()
@@ -529,7 +566,7 @@ export default function StudentScoresPage() {
       return 3
     }
 
-    return [...students].sort((a, b) => {
+    return [...displayedStudents].sort((a, b) => {
       const genderA = (a.gender || '').toUpperCase()
       const genderB = (b.gender || '').toUpperCase()
 
@@ -540,7 +577,7 @@ export default function StudentScoresPage() {
         sensitivity: 'base',
       })
     })
-  }, [students])
+  }, [displayedStudents])
 
   const uniqueSubjects = useMemo(() => {
     const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
@@ -590,9 +627,9 @@ export default function StudentScoresPage() {
   }, [prefillSubjectName, selectedClassData, subjects, selectedSubject])
 
   const incompleteStudentIds = useMemo(() => {
-    if (!students.length || !selectedSubject || !selectedExam) return []
+    if (!displayedStudents.length) return []
 
-    return students
+    return displayedStudents
       .filter((student) => {
         const foundScore = scores[student.student_id]
         const mark = foundScore?.mark
@@ -600,7 +637,7 @@ export default function StudentScoresPage() {
         return mark === '' || mark === null || mark === undefined
       })
       .map((student) => student.enrollment_id)
-  }, [students, scores, selectedSubject, selectedExam])
+  }, [displayedStudents, scores, selectedSubject, selectedExam])
 
   useEffect(() => {
     if (!shouldScrollToIncomplete) return
@@ -614,7 +651,7 @@ export default function StudentScoresPage() {
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [shouldScrollToIncomplete, incompleteStudentIds, students, scores])
+  }, [shouldScrollToIncomplete, incompleteStudentIds, displayedStudents, scores])
 
   const init = async () => {
     const {
@@ -690,7 +727,12 @@ export default function StudentScoresPage() {
     const { data: classData } = await classQuery
     setClasses(classData || [])
 
-    const [{ data: subjectData }, { data: gradeScaleData }, { data: enrollmentData }] = await Promise.all([
+    const [
+      { data: subjectData },
+      { data: gradeScaleData },
+      { data: enrollmentData },
+      { data: studentSubjectEnrollmentData },
+    ] = await Promise.all([
       supabase
         .from('subjects')
         .select('id, subject_name, subject_code, tingkatan, subject_type, is_core')
@@ -717,11 +759,18 @@ export default function StudentScoresPage() {
         .eq('school_id', profileData.school_id)
         .eq('academic_year', setupData?.current_academic_year || new Date().getFullYear())
         .eq('is_active', true),
+      supabase
+        .from('student_subject_enrollments')
+        .select('student_enrollment_id, subject_id, academic_year, is_active')
+        .eq('school_id', profileData.school_id)
+        .eq('academic_year', setupData?.current_academic_year || new Date().getFullYear())
+        .eq('is_active', true),
     ])
 
     setSubjects(subjectData || [])
     setGradeScales(gradeScaleData || [])
     setAllEnrollments(enrollmentData || [])
+    setStudentSubjectEnrollments(studentSubjectEnrollmentData || [])
   }
 
   const loadStudentsAndScores = async () => {
@@ -759,6 +808,7 @@ export default function StudentScoresPage() {
       supabase
         .from('student_subject_enrollments')
         .select('subject_id, student_enrollment_id, academic_year, is_active')
+        .eq('school_id', profile.school_id)
         .eq('subject_id', selectedSubject)
         .eq('academic_year', currentYear)
         .eq('is_active', true),
@@ -779,7 +829,6 @@ export default function StudentScoresPage() {
     const relevantEnrollmentIds = getRelevantEnrollmentIds({
       classId: selectedClass,
       subject: selectedSubjectRecord,
-      academicYear: currentYear,
       enrollments: enrollmentData || [],
       studentSubjectEnrollments: (studentSubjectEnrollmentData || []).filter((row) =>
         classEnrollmentIdSet.has(row.student_enrollment_id)
@@ -964,36 +1013,10 @@ export default function StudentScoresPage() {
       const schoolId = profile.school_id
 
       const [
-        { data: studentEnrollmentsData, error: studentEnrollmentsError },
         { data: setupConfigRows, error: setupConfigError },
         { data: examConfigData, error: examConfigError },
         { data: gradeScalesData, error: gradeScalesError },
       ] = await Promise.all([
-        supabase
-          .from('student_enrollments')
-          .select(`
-            id,
-            student_profile_id,
-            class_id,
-            academic_year,
-            is_active,
-            student_profiles (
-              id,
-              ic_number,
-              full_name,
-              gender
-            ),
-            classes (
-              id,
-              tingkatan,
-              class_name
-            )
-          `)
-          .eq('school_id', schoolId)
-          .eq('class_id', selectedClassData.id)
-          .eq('academic_year', currentYear)
-          .eq('is_active', true),
-
         supabase
           .from('school_setup_configs')
           .select('*')
@@ -1014,7 +1037,6 @@ export default function StudentScoresPage() {
           .eq('school_id', schoolId),
       ])
 
-      if (studentEnrollmentsError) throw studentEnrollmentsError
       if (setupConfigError) throw setupConfigError
       if (examConfigError) throw examConfigError
       if (gradeScalesError) throw gradeScalesError
@@ -1023,18 +1045,6 @@ export default function StudentScoresPage() {
         setupConfigRows?.[0] || null,
         examConfigData || []
       )
-
-      const matchedStudentsMap = new Map()
-      ;(studentEnrollmentsData || []).forEach((enrollment) => {
-        const normalizedStudentIc = normalizeIC(enrollment.student_profiles?.ic_number)
-        if (normalizedStudentIc && !matchedStudentsMap.has(normalizedStudentIc)) {
-          matchedStudentsMap.set(normalizedStudentIc, {
-            enrollment_id: enrollment.id,
-            student_profile_id: enrollment.student_profile_id,
-            full_name: enrollment.student_profiles?.full_name || '',
-          })
-        }
-      })
 
       const targetRows = []
       const scoreRows = []
@@ -1048,7 +1058,7 @@ export default function StudentScoresPage() {
         const csvSubject = normalizeText(row.subjek)
         const examKey = normalizeExamKey(row.jenis_peperiksaan)
         const matchedSubject = resolveSubjectFromCsvRow(csvSubject)
-        const matchedStudent = matchedStudentsMap.get(normalizeIC(row.no_ic))
+        const matchedStudent = displayedStudentLookupByIc.get(normalizeIC(row.no_ic))
 
         if (!matchedSubject) {
           importErrors.push(
@@ -1077,7 +1087,14 @@ export default function StudentScoresPage() {
 
         if (!matchedStudent) {
           importErrors.push(
-            `Baris ${row.__rowNumber}: no_ic ${normalizeText(row.no_ic)} tidak jumpa dalam kelas dipilih`
+            `Baris ${row.__rowNumber}: murid dengan IC '${row.no_ic}' tidak dijumpai dalam paparan subjek ini`
+          )
+          return
+        }
+
+        if (!displayedStudentIdSet.has(String(matchedStudent.student_id))) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: murid dengan IC '${row.no_ic}' tidak dijumpai dalam paparan subjek ini`
           )
           return
         }
@@ -1459,6 +1476,25 @@ export default function StudentScoresPage() {
           continue
         }
 
+        const isSelective = isSelectiveSubject(matchedSubject)
+
+        if (isSelective) {
+          const existsInSubjectEnrollment = (studentSubjectEnrollments || []).some(
+            (row) =>
+              String(row.subject_id) === String(matchedSubject.id) &&
+              String(row.student_enrollment_id) === String(matchedEnrollment.enrollment_id) &&
+              Number(row.academic_year) === Number(currentAcademicYear) &&
+              row.is_active === true
+          )
+
+          if (!existsInSubjectEnrollment) {
+            errors.push(
+              `Baris ${rowNumber}: murid IC '${ic}' tidak didaftarkan untuk subjek '${matchedSubject.subject_name}'`
+            )
+            continue
+          }
+        }
+
         const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
           const label =
             grade.tingkatan ??
@@ -1559,8 +1595,12 @@ export default function StudentScoresPage() {
       return String(label).trim().toLowerCase() === String(selectedGradeLabel).trim().toLowerCase()
     })
 
-    const payload = students
+    const payload = displayedStudents
       .filter((student) => {
+        if (!displayedEnrollmentIdSet.has(String(student.enrollment_id))) {
+          return false
+        }
+
         const rawMark = scores[student.student_id]?.mark
         return rawMark !== '' && rawMark !== null && rawMark !== undefined && !Number.isNaN(Number(rawMark))
       })
@@ -2010,68 +2050,76 @@ export default function StudentScoresPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Senarai Murid & Markah</h2>
-            <span className="text-sm text-slate-500">Jumlah murid: {students.length}</span>
+            <span className="text-sm text-slate-500">Jumlah murid: {displayedStudents.length}</span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b bg-slate-50 text-left text-slate-700">
-                  <th className="px-3 py-3 font-semibold">Bil</th>
-                  <th className="px-3 py-3 font-semibold">Nama</th>
-                  <th className="px-3 py-3 font-semibold">No IC</th>
-                  <th className="px-3 py-3 font-semibold">Markah</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {sortedStudents.map((student, index) => {
-                  const isIncomplete = incompleteStudentIds.includes(student.enrollment_id)
-
-                  return (
-                  <tr
-                    key={student.student_id}
-                    className="border-b"
-                    ref={
-                      shouldScrollToIncomplete &&
-                      incompleteStudentIds.length > 0 &&
-                      student.enrollment_id === incompleteStudentIds[0]
-                        ? firstIncompleteRef
-                        : null
-                    }
-                    style={{ background: isIncomplete ? '#fef2f2' : '#ffffff' }}
-                  >
-                    <td className="px-3 py-3 text-slate-700">{index + 1}</td>
-                    <td className="px-3 py-3 text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <span>{student.full_name}</span>
-                        {isIncomplete && (
-                          <span
-                            title="Belum isi"
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700"
-                          >
-                            !
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
-
-                    <td className="px-3 py-3">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={scores[student.student_id]?.mark ?? ''}
-                        onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
-                        className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                      />
-                    </td>
+          {displayedStudents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-600">
+              {isSelectiveSubject(selectedSubjectData)
+                ? 'Tiada murid didaftarkan untuk subjek ini lagi. Sila urus murid subjek dahulu.'
+                : 'Tiada murid untuk dipaparkan.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-left text-slate-700">
+                    <th className="px-3 py-3 font-semibold">Bil</th>
+                    <th className="px-3 py-3 font-semibold">Nama</th>
+                    <th className="px-3 py-3 font-semibold">No IC</th>
+                    <th className="px-3 py-3 font-semibold">Markah</th>
                   </tr>
-                )})}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody>
+                  {sortedStudents.map((student, index) => {
+                    const isIncomplete = incompleteStudentIds.includes(student.enrollment_id)
+
+                    return (
+                    <tr
+                      key={student.student_id}
+                      className="border-b"
+                      ref={
+                        shouldScrollToIncomplete &&
+                        incompleteStudentIds.length > 0 &&
+                        student.enrollment_id === incompleteStudentIds[0]
+                          ? firstIncompleteRef
+                          : null
+                      }
+                      style={{ background: isIncomplete ? '#fef2f2' : '#ffffff' }}
+                    >
+                      <td className="px-3 py-3 text-slate-700">{index + 1}</td>
+                      <td className="px-3 py-3 text-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span>{student.full_name}</span>
+                          {isIncomplete && (
+                            <span
+                              title="Belum isi"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700"
+                            >
+                              !
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
+
+                      <td className="px-3 py-3">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={scores[student.student_id]?.mark ?? ''}
+                          onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
+                          className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                        />
+                      </td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <button
             onClick={handleSave}
