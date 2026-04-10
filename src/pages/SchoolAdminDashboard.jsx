@@ -5,7 +5,10 @@ import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
-import { getRelevantEnrollmentIds } from '../lib/completionMatrix'
+import {
+  buildStudentExamMap,
+  getRelevantEnrollmentIds,
+} from '../lib/completionMatrix'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 const COMPLETION_GRADE_GROUPS = [
@@ -229,8 +232,8 @@ export default function SchoolAdminDashboard() {
       { data: subjectRows, error: subjectError },
       { data: enrollmentRows, error: enrollmentError },
       { data: scoreRows, error: scoreError },
-      { data: studentSubjectEnrollmentRows, error: studentSubjectEnrollmentError },
       { data: examConfigRows, error: examConfigError },
+      { data: studentSubjectEnrollmentRows, error: studentSubjectEnrollmentError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -241,7 +244,7 @@ export default function SchoolAdminDashboard() {
 
       supabase
         .from('subjects')
-        .select('id, subject_name, tingkatan, subject_type, is_core, is_active')
+        .select('id, subject_name, tingkatan, subject_type, is_active')
         .eq('school_id', schoolId)
         .eq('is_active', true)
         .order('tingkatan', { ascending: true })
@@ -249,7 +252,7 @@ export default function SchoolAdminDashboard() {
 
       supabase
         .from('student_enrollments')
-        .select('id, class_id')
+        .select('id, class_id, academic_year, is_active')
         .eq('school_id', schoolId)
         .eq('academic_year', academicYear)
         .eq('is_active', true),
@@ -261,16 +264,17 @@ export default function SchoolAdminDashboard() {
         .eq('academic_year', academicYear),
 
       supabase
-        .from('student_subject_enrollments')
-        .select('subject_id, student_enrollment_id, academic_year, is_active')
-        .eq('academic_year', academicYear)
-        .eq('is_active', true),
-
-      supabase
         .from('exam_configs')
         .select('grade_label, exam_key, exam_name, exam_order, is_active')
         .eq('school_id', schoolId)
         .eq('academic_year', academicYear),
+
+      supabase
+        .from('student_subject_enrollments')
+        .select('student_enrollment_id, subject_id, academic_year, is_active')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear)
+        .eq('is_active', true),
     ])
 
     if (classError) console.error('Class matrix error:', classError)
@@ -322,31 +326,15 @@ export default function SchoolAdminDashboard() {
       a.localeCompare(b, 'ms', { sensitivity: 'base' })
     )
 
-    const scoreMap = new Map()
-    ;(scoreRows || []).forEach((row) => {
-      const classId = row.class_id
-      const subjectId = row.subject_id
-      const enrollmentId = row.student_enrollment_id
-      const examKey = String(row.exam_key || '').trim().toUpperCase()
+    const studentExamMap = buildStudentExamMap(scoreRows || [])
 
-      if (!classId || !subjectId || !enrollmentId || !examKey) return
-
-      const key = `${classId}__${subjectId}`
-
-      if (!scoreMap.has(key)) {
-        scoreMap.set(key, new Map())
+    const enrollmentsByClass = new Map()
+    ;(enrollmentRows || []).forEach((row) => {
+      if (!enrollmentsByClass.has(row.class_id)) {
+        enrollmentsByClass.set(row.class_id, [])
       }
-
-      const studentMap = scoreMap.get(key)
-
-      if (!studentMap.has(enrollmentId)) {
-        studentMap.set(enrollmentId, new Set())
-      }
-
-      studentMap.get(enrollmentId).add(examKey)
+      enrollmentsByClass.get(row.class_id).push(row.id)
     })
-
-    const selectedExam = String(selectedExamKey || '').toUpperCase()
 
     const rows = (classRows || [])
       .slice()
@@ -378,11 +366,6 @@ export default function SchoolAdminDashboard() {
               )
           )
 
-        const enrollmentIds = (enrollmentRows || [])
-          .filter((row) => row.class_id === classItem.id)
-          .map((row) => row.id)
-        const classEnrollmentIdSet = new Set(enrollmentIds)
-
         const cells = {}
 
         subjectNames.forEach((subjectName) => {
@@ -404,47 +387,45 @@ export default function SchoolAdminDashboard() {
           const relevantEnrollmentIds = getRelevantEnrollmentIds({
             classId: classItem.id,
             subject,
-            academicYear,
             enrollments: enrollmentRows || [],
-            studentSubjectEnrollments: (studentSubjectEnrollmentRows || []).filter((row) =>
-              classEnrollmentIdSet.has(row.student_enrollment_id)
-            ),
-          }).filter((enrollmentId) => classEnrollmentIdSet.has(enrollmentId))
+            studentSubjectEnrollments: studentSubjectEnrollmentRows || [],
+          })
 
-          if (!relevantEnrollmentIds.length || !selectedExam) {
+          const totalStudents = relevantEnrollmentIds.length
+
+          if (totalStudents === 0) {
             cells[subjectName] = {
-              status: 'incomplete',
-              label: '0/0',
+              status: 'na',
+              label: 'N/A',
               completedStudents: 0,
-              totalStudents: relevantEnrollmentIds.length,
-              expectedExamCount: selectedExam ? 1 : 0,
+              totalStudents: 0,
+              expectedExamCount: selectedExamKey ? 1 : 0,
             }
             return
           }
 
-          const studentExamMap =
-            scoreMap.get(`${classItem.id}__${subject.id}`) || new Map()
-
           let completedStudents = 0
+          const normalizedSelectedExamKey = String(selectedExamKey || '')
+            .trim()
+            .toUpperCase()
 
           relevantEnrollmentIds.forEach((enrollmentId) => {
-            const examSet = studentExamMap.get(enrollmentId) || new Set()
+            const mapKey = `${enrollmentId}__${subject.id}`
+            const examSet = studentExamMap.get(mapKey) || new Set()
 
-            if (examSet.has(selectedExam)) {
+            if (examSet.has(normalizedSelectedExamKey)) {
               completedStudents += 1
             }
           })
 
-          const totalStudents = relevantEnrollmentIds.length
-          const isComplete =
-            totalStudents > 0 && completedStudents === totalStudents
+          const isComplete = completedStudents === totalStudents
 
           cells[subjectName] = {
             status: isComplete ? 'complete' : 'incomplete',
-            label: `${completedStudents}/${totalStudents}`,
+            label: isComplete ? 'Lengkap' : `${completedStudents}/${totalStudents}`,
             completedStudents,
             totalStudents,
-            expectedExamCount: selectedExam ? 1 : 0,
+            expectedExamCount: selectedExamKey ? 1 : 0,
           }
         })
 
