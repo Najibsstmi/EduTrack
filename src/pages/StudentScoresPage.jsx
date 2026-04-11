@@ -217,10 +217,10 @@ const parseCsvText = (text) => {
   return { headers, rows }
 }
 
-const validateCsvData = (headers, rows) => {
+const validateCsvData = (headers, rows, expectedHeaders = REQUIRED_HEADERS) => {
   const errors = []
 
-  const missingHeaders = REQUIRED_HEADERS.filter(
+  const missingHeaders = expectedHeaders.filter(
     (header) => !headers.includes(header)
   )
 
@@ -894,70 +894,42 @@ export default function StudentScoresPage() {
     }))
   }
 
-  const downloadTemplateCSV = () => {
-    const sample = [
-      'no_ic,nama_murid,kelas,tingkatan,subjek,jenis_peperiksaan,markah',
-      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,TOV,45',
-      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,ETR,70',
-      '090123101234,ALI BIN ABU,BANGSAWAN,Tingkatan 3,Sains,AR1,58',
-      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,TOV,60',
-      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,ETR,80',
-      '100201101111,SITI AISYAH,INANG,Tingkatan 2,Bahasa Melayu,AR1,72',
-    ].join('\n')
+  const downloadTemplateCsv = () => {
+    const isBulkAdmin = importMode === 'bulk_admin'
 
-    const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
+    const headers = isBulkAdmin ? BULK_REQUIRED_HEADERS : REQUIRED_HEADERS
 
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'template_import_markah_edutrack.csv')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const sampleRows = isBulkAdmin
+      ? [
+          ['Tingkatan 3', 'BANGSAWAN', '030101010101', 'ALI BIN ABU', 'Sains', 'TOV', '45'],
+          ['Tingkatan 2', 'INANG', '040202020202', 'SITI AISYAH', 'Bahasa Melayu', 'ETR', '80'],
+        ]
+      : [
+          ['ALI BIN ABU', '030101010101', 'Sains', 'TOV', '45'],
+          ['SITI AISYAH', '040202020202', 'Bahasa Melayu', 'ETR', '80'],
+        ]
 
-    URL.revokeObjectURL(url)
-  }
-
-  const downloadBulkTemplate = () => {
-    const headers = [
-      'no_ic',
-      'nama_murid',
-      'kelas',
-      'tingkatan',
-      'subjek',
-      'jenis_peperiksaan',
-      'markah',
+    const csvLines = [
+      headers.join(','),
+      ...sampleRows.map((row) =>
+        row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')
+      ),
     ]
 
-    const sampleRows = [
-      ['090101011234', 'ALI BIN AHMAD', 'BANGSAWAN', 'Tingkatan 3', 'Sains', 'TOV', '54'],
-      ['090101011235', 'SITI BINTI ALI', 'BONEKA', 'Tingkatan 3', 'Sains', 'TOV', '67'],
-      ['100202021111', 'ABU BIN BAKAR', 'INANG', 'Tingkatan 2', 'Sains', 'TOV', '71'],
-      ['110303031234', 'AHMAD BIN SALIM', 'JAZZ', 'Tingkatan 1', 'Matematik', 'AR1', '80'],
-      ['080404041234', 'NURUL AIN', 'SENIMAN', 'Tingkatan 5', 'Sejarah', 'ETR', '76'],
-    ]
-
-    sampleRows.sort((a, b) => {
-      if (a[3] !== b[3]) return a[3].localeCompare(b[3])
-      if (a[2] !== b[2]) return a[2].localeCompare(b[2])
-      return a[1].localeCompare(b[1])
-    })
-
-    const csvContent = [headers, ...sampleRows]
-      .map((row) => row.join(','))
-      .join('\n')
-
+    const csvContent = '\uFEFF' + csvLines.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
+    const url = window.URL.createObjectURL(blob)
 
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', 'template_import_pukal_admin.csv')
+    link.download = isBulkAdmin
+      ? 'template_import_pukal_admin.csv'
+      : 'template_import_biasa.csv'
+
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-
-    URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(url)
   }
 
   const handleCsvUpload = async (event) => {
@@ -967,8 +939,15 @@ export default function StudentScoresPage() {
     setCsvFileName(file.name)
 
     const text = await file.text()
-    const { headers, rows } = parseCsvText(text)
-    const errors = validateCsvData(headers, rows)
+    const { headers: parsedHeaders, rows } = parseCsvText(text)
+    const expectedHeaders =
+      importMode === 'bulk_admin' ? BULK_REQUIRED_HEADERS : REQUIRED_HEADERS
+
+    const normalizedHeaders = parsedHeaders.map((header) =>
+      String(header || '').trim().toLowerCase()
+    )
+
+    const errors = validateCsvData(normalizedHeaders, rows, expectedHeaders)
 
     setCsvRows(rows)
     setCsvErrors(errors)
@@ -985,10 +964,17 @@ export default function StudentScoresPage() {
     if (!file) return
 
     const text = await file.text()
-    const { headers, rows } = parseCsvText(text)
+    const { headers: parsedHeaders, rows } = parseCsvText(text)
 
-    const missingHeaders = BULK_REQUIRED_HEADERS.filter(
-      (header) => !headers.includes(header)
+    const expectedHeaders =
+      importMode === 'bulk_admin' ? BULK_REQUIRED_HEADERS : REQUIRED_HEADERS
+
+    const normalizedHeaders = parsedHeaders.map((header) =>
+      String(header || '').trim().toLowerCase()
+    )
+
+    const missingHeaders = expectedHeaders.filter(
+      (header) => !normalizedHeaders.includes(header)
     )
 
     if (missingHeaders.length > 0) {
@@ -1736,17 +1722,20 @@ export default function StudentScoresPage() {
             <div>
               <h2 className="text-xl font-semibold text-slate-900">Import Markah CSV</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Gunakan key sistem untuk jenis peperiksaan: TOV, ETR, AR1, AR2, AR3 dan seterusnya.
-                OTR tidak perlu diisi kerana sistem akan jana automatik.
+                {importMode === 'bulk_admin'
+                  ? 'Gunakan template pukal admin yang mengandungi tingkatan, kelas, no_ic, nama_murid, subjek, jenis_peperiksaan dan markah.'
+                  : 'Gunakan template import biasa yang mengandungi nama_murid, no_ic, subjek, jenis_peperiksaan dan markah sahaja. Kelas dan tingkatan tidak perlu kerana konteks sudah dipilih pada halaman ini.'}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={downloadTemplateCSV}
+              onClick={downloadTemplateCsv}
               className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
             >
-              Download Template CSV
+              {importMode === 'bulk_admin'
+                ? 'Download Template Pukal Admin'
+                : 'Download Template Import Biasa'}
             </button>
           </div>
 
@@ -1760,7 +1749,7 @@ export default function StudentScoresPage() {
                   : 'border border-slate-300 bg-white text-slate-700'
               }`}
             >
-              Import Biasa
+              Mode Biasa
             </button>
 
             {isSchoolAdmin && (
@@ -1773,7 +1762,7 @@ export default function StudentScoresPage() {
                     : 'border border-slate-300 bg-white text-slate-700'
                 }`}
               >
-                Import Pukal Admin
+                Mode Pukal Admin
               </button>
             )}
           </div>
@@ -1912,10 +1901,10 @@ export default function StudentScoresPage() {
             <button
               type="button"
               onClick={importCsvToSupabase}
-              disabled={importingCsv || csvRows.length === 0}
-              className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              disabled={!csvFileName || importingCsv || csvRows.length === 0}
+              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-emerald-200 disabled:opacity-80"
             >
-              {importingCsv ? 'Mengimport...' : 'Import Sekarang'}
+              {importingCsv ? 'Sedang Import...' : 'Import Data'}
             </button>
           </div>
 
@@ -1962,24 +1951,19 @@ export default function StudentScoresPage() {
 
           {importMode === 'bulk_admin' && isSchoolAdmin && (
             <div className="mt-5 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Import Pukal Admin
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Import Pukal Admin
+                </h2>
+                <span className="inline-block rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700">
+                  Admin Sahaja
+                </span>
+              </div>
               <p className="mt-2 text-sm text-slate-600">
                 Muat naik markah bagi banyak kelas dan tingkatan serentak.
                 Format CSV wajib: tingkatan, kelas, no_ic, nama_murid, subjek,
                 jenis_peperiksaan, markah
               </p>
-
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={downloadBulkTemplate}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Download Template CSV
-                </button>
-              </div>
 
               <div className="mt-4">
                 <input
