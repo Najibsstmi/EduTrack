@@ -743,11 +743,17 @@ export default function SchoolAdminDashboard() {
   return (
     <div style={styles.page}>
       <header style={styles.topbar}>
-        <div>
-          <div style={styles.brand}>EduTrack</div>
-          <div style={styles.schoolMeta}>
-            {schoolInfo?.school_name || '-'}
-            {schoolInfo?.school_code ? ` (${schoolInfo.school_code})` : ''}
+        <div style={styles.brandWrap}>
+          <img
+            src="/edutrack-logo.png"
+            alt="EduTrack"
+            style={styles.brandLogo}
+          />
+          <div style={styles.brandTextWrap}>
+            <div style={styles.brandTitle}>EduTrack</div>
+            <div style={styles.brandSub}>
+              {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
+            </div>
           </div>
         </div>
 
@@ -1387,9 +1393,12 @@ const styles = {
   page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
   loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
   loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
-  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
-  brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
-  schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
+  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 20px', background: '#08142b', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  brandWrap: { display: 'flex', alignItems: 'center', gap: '12px' },
+  brandLogo: { width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px', background: 'transparent', flexShrink: 0 },
+  brandTextWrap: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 },
+  brandTitle: { fontSize: '20px', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, margin: 0 },
+  brandSub: { fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', lineHeight: 1.2, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px' },
   topActions: {
     display: 'flex',
     alignItems: 'center',

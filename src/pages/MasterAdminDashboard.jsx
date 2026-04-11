@@ -370,13 +370,21 @@ export default function MasterAdminDashboard() {
     <div className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">EDUTRACK</p>
-            <h1 className="mt-2 text-3xl font-bold text-slate-900">Master Admin Dashboard</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Pantau sekolah yang menggunakan sistem, urus admin sekolah, dan kawal status pengguna.
-            </p>
-            <p className="mt-2 text-sm text-slate-500">Log masuk sebagai {currentUserDisplayName}</p>
+          <div className="flex items-start gap-3">
+            <img
+              src="/edutrack-logo.png"
+              alt="EduTrack"
+              className="h-[42px] w-[42px] flex-shrink-0 rounded-[10px] object-contain"
+            />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">EDUTRACK</p>
+              <p className="mt-1 truncate text-xs text-slate-500">Sistem Pemantauan Akademik Sekolah</p>
+              <h1 className="mt-2 text-3xl font-bold text-slate-900">Master Admin Dashboard</h1>
+              <p className="mt-2 text-sm text-slate-600">
+                Pantau sekolah yang menggunakan sistem, urus admin sekolah, dan kawal status pengguna.
+              </p>
+              <p className="mt-2 text-sm text-slate-500">Log masuk sebagai {currentUserDisplayName}</p>
+            </div>
           </div>
 
           <div className="flex w-full max-w-2xl flex-col gap-3 md:flex-row md:items-center md:justify-end">

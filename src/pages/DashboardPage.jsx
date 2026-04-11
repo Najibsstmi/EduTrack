@@ -28,6 +28,7 @@ function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [schoolName, setSchoolName] = useState('')
   const [setupConfig, setSetupConfig] = useState(null)
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
@@ -97,7 +98,18 @@ function DashboardPage() {
       return
     }
 
+    const { data: schoolData, error: schoolError } = await supabase
+      .from('schools')
+      .select('school_name')
+      .eq('id', data.school_id)
+      .maybeSingle()
+
+    if (schoolError) {
+      console.error('School info error:', schoolError)
+    }
+
     setProfile(data)
+    setSchoolName(schoolData?.school_name || '')
     const loadedSetupConfig = await loadSetupStatus(data.school_id)
     setSetupConfig(loadedSetupConfig || null)
     setLoading(false)
@@ -443,9 +455,18 @@ function DashboardPage() {
   return (
     <div style={styles.page}>
       <header style={styles.topbar}>
-        <div>
-          <div style={styles.brand}>EduTrack</div>
-          <div style={styles.schoolMeta}>{displayName} {profile?.email ? `(${profile.email})` : ''}</div>
+        <div style={styles.brandWrap}>
+          <img
+            src="/edutrack-logo.png"
+            alt="EduTrack"
+            style={styles.brandLogo}
+          />
+          <div style={styles.brandTextWrap}>
+            <div style={styles.brandTitle}>EduTrack</div>
+            <div style={styles.brandSub}>
+              {schoolName || 'Sistem Pemantauan Akademik Sekolah'}
+            </div>
+          </div>
         </div>
 
         <nav style={styles.nav}>
@@ -713,9 +734,12 @@ function StatCard({ title, value }) {
 
 const styles = {
   page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
-  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '16px 24px', background: '#0f172a', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
-  brand: { fontSize: '22px', fontWeight: 800, lineHeight: 1.1 },
-  schoolMeta: { fontSize: '13px', color: '#cbd5e1', marginTop: '4px' },
+  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 20px', background: '#08142b', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  brandWrap: { display: 'flex', alignItems: 'center', gap: '12px' },
+  brandLogo: { width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px', background: 'transparent', flexShrink: 0 },
+  brandTextWrap: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 },
+  brandTitle: { fontSize: '20px', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, margin: 0 },
+  brandSub: { fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', lineHeight: 1.2, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px' },
   nav: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
   navButtonPrimary: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
   navButton: { background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
