@@ -790,7 +790,7 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.topbar}>
+      <header style={styles.topBar}>
         <div style={styles.brandWrap}>
           <img
             src="/edutrack-logo.png"
@@ -943,26 +943,33 @@ export default function SchoolAdminDashboard() {
       </header>
 
       <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
-        <section style={styles.hero}>
-          <div style={styles.headerRow}>
-            {schoolInfo?.logo_url ? (
-              <img
-                src={schoolInfo.logo_url}
-                alt="Logo Sekolah"
-                style={styles.logoInline}
-              />
-            ) : null}
-            <div>
-              <h1 style={styles.heroTitle}>{isSchoolAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
-              <p style={styles.heroText}>
-                Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
-              </p>
+        <section style={styles.heroCard}>
+          <div style={styles.heroGlow} />
+          <div style={styles.heroGlowSecondary} />
+          <div style={styles.heroInner}>
+            <div style={styles.heroHeaderRow}>
+              {schoolInfo?.logo_url ? (
+                <img
+                  src={schoolInfo.logo_url}
+                  alt="Logo Sekolah"
+                  style={styles.schoolLogoInline}
+                />
+              ) : null}
+              <div>
+                <h1 style={styles.heroTitle}>{isSchoolAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
+                <p style={styles.heroDescription}>
+                  Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
+                </p>
+                {schoolInfo?.school_name ? (
+                  <div style={styles.schoolNameBadge}>{schoolInfo.school_name}</div>
+                ) : null}
+              </div>
             </div>
-          </div>
-          <div style={styles.heroInfo}>
-            <span><strong>Admin:</strong> {getDisplayName(adminProfile)} ({adminProfile?.email || '-'})</span>
-            <span><strong>Jenis:</strong> {schoolInfo?.school_type || '-'}</span>
-            <span><strong>Negeri / PPD:</strong> {[schoolInfo?.state, schoolInfo?.district].filter(Boolean).join(' / ') || '-'}</span>
+            <div style={styles.heroMetaRow}>
+              <span><strong>Admin:</strong> {getDisplayName(adminProfile)} ({adminProfile?.email || '-'})</span>
+              <span><strong>Jenis:</strong> {schoolInfo?.school_type || '-'}</span>
+              <span><strong>Negeri / PPD:</strong> {[schoolInfo?.state, schoolInfo?.district].filter(Boolean).join(' / ') || '-'}</span>
+            </div>
           </div>
         </section>
 
@@ -975,7 +982,7 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Jumlah Murid" value={studentCount} isMobileView={isMobileView} />
         </section>
 
-        <section style={styles.card}>
+        <section style={styles.sectionCard}>
           <h2 style={styles.cardTitle}>Akses Pantas</h2>
           <p style={styles.helperText}>
             Modul paling kerap digunakan untuk kerja harian sekolah.
@@ -1060,7 +1067,7 @@ export default function SchoolAdminDashboard() {
         </section>
 
         <section style={styles.dualGrid}>
-          <div style={styles.card}>
+          <div style={styles.sectionCard}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>Status Setup Sistem</h2>
             </div>
@@ -1078,7 +1085,7 @@ export default function SchoolAdminDashboard() {
             )}
           </div>
 
-          <div style={styles.card}>
+          <div style={styles.sectionCard}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>Status Data Akademik</h2>
             </div>
@@ -1094,7 +1101,7 @@ export default function SchoolAdminDashboard() {
           </div>
         </section>
 
-        <section style={styles.card}>
+        <section style={styles.sectionCard}>
           <div style={styles.cardHeaderColumn}>
             <h2 style={styles.cardTitle}>Pemantauan Pengisian Markah ({selectedExamKey})</h2>
             <span style={styles.roleHintText}>
@@ -1254,7 +1261,7 @@ export default function SchoolAdminDashboard() {
         </section>
 
         {isSchoolAdmin && (
-          <section style={styles.card}>
+          <section style={styles.sectionCard}>
             <div style={styles.sectionHeaderResponsive}>
               <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
               <div style={styles.filterWrap}>
@@ -1397,12 +1404,25 @@ const styles = {
   page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
   loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
   loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
-  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 20px', background: '#08142b', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  topBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '16px',
+    background: 'linear-gradient(90deg, #08142b 0%, #0b1730 55%, #0f1c3a 100%)',
+    padding: '16px 24px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    boxShadow: '0 10px 24px rgba(2, 8, 23, 0.22)',
+    flexWrap: 'wrap',
+  },
   brandWrap: { display: 'flex', alignItems: 'center', gap: '12px' },
   brandLogo: { width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px', background: 'transparent', flexShrink: 0 },
   brandTextWrap: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 },
-  brandTitle: { fontSize: '20px', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, margin: 0 },
-  brandSub: { fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', lineHeight: 1.2, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px' },
+  brandTitle: { fontSize: '18px', fontWeight: 800, color: '#ffffff', lineHeight: 1.05, letterSpacing: '-0.02em', margin: 0 },
+  brandSub: { fontSize: '12px', color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px', maxWidth: '260px' },
   topActions: {
     display: 'flex',
     alignItems: 'center',
@@ -1410,35 +1430,38 @@ const styles = {
     flexWrap: 'wrap',
   },
   primaryTopButton: {
-    padding: '12px 18px',
-    borderRadius: 12,
-    border: '1px solid #2563eb',
-    background: '#2563eb',
+    padding: '14px 22px',
+    borderRadius: 16,
+    border: 'none',
+    background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)',
     color: '#fff',
-    fontWeight: 700,
+    fontWeight: 800,
     cursor: 'pointer',
     fontSize: 15,
+    boxShadow: '0 12px 24px rgba(37, 99, 235, 0.32)',
   },
   secondaryTopButton: {
-    padding: '12px 18px',
-    borderRadius: 12,
-    border: '1px solid rgba(255,255,255,0.15)',
-    background: '#111827',
+    padding: '14px 22px',
+    borderRadius: 16,
+    border: '1px solid rgba(255,255,255,0.14)',
+    background: 'rgba(255,255,255,0.04)',
     color: '#fff',
     fontWeight: 700,
     cursor: 'pointer',
     fontSize: 15,
     minWidth: 120,
+    backdropFilter: 'blur(6px)',
   },
   darkTopButton: {
-    padding: '12px 18px',
-    borderRadius: 12,
+    padding: '14px 22px',
+    borderRadius: 16,
     border: '1px solid rgba(255,255,255,0.15)',
-    background: '#0f172a',
+    background: 'rgba(255,255,255,0.04)',
     color: '#fff',
     fontWeight: 700,
     cursor: 'pointer',
     fontSize: 15,
+    backdropFilter: 'blur(6px)',
   },
   disabledTopButton: {
     opacity: 0.5,
@@ -1528,34 +1551,91 @@ const styles = {
   },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
   containerMobile: { padding: '18px 14px', gap: '16px' },
-  hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
-  headerRow: {
+  heroCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    background: 'linear-gradient(135deg, #f8fbff 0%, #eef4ff 45%, #f8fafc 100%)',
+    border: '1px solid #dbe4ee',
+    borderRadius: '30px',
+    padding: '30px',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: '-80px',
+    right: '-80px',
+    width: '220px',
+    height: '220px',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle, rgba(37,99,235,0.16) 0%, rgba(37,99,235,0.06) 35%, rgba(37,99,235,0) 70%)',
+    pointerEvents: 'none',
+  },
+  heroGlowSecondary: {
+    position: 'absolute',
+    bottom: '-100px',
+    left: '-80px',
+    width: '240px',
+    height: '240px',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle, rgba(14,165,233,0.10) 0%, rgba(14,165,233,0.04) 35%, rgba(14,165,233,0) 70%)',
+    pointerEvents: 'none',
+  },
+  heroInner: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  heroHeaderRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '18px',
+    gap: '20px',
+    flexWrap: 'wrap',
+    animation: 'heroFadeUp 480ms ease-out',
   },
-  logoInline: {
-    width: '64px',
-    height: '64px',
+  schoolLogoInline: {
+    width: '88px',
+    height: '88px',
     objectFit: 'contain',
-    background: '#fff',
-    borderRadius: '16px',
-    padding: '6px',
-    boxShadow: '0 6px 16px rgba(15,23,42,0.1)',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '22px',
+    padding: '8px',
+    border: '1px solid rgba(255,255,255,0.8)',
+    boxShadow: '0 14px 30px rgba(15, 23, 42, 0.12)',
     flexShrink: 0,
+    animation: 'logoFloatIn 520ms ease-out',
   },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
-  heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
-  heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
+  heroDescription: { marginTop: '8px', color: '#64748b', lineHeight: 1.7 },
+  schoolNameBadge: {
+    display: 'inline-block',
+    marginTop: '10px',
+    padding: '7px 13px',
+    borderRadius: '999px',
+    background: 'linear-gradient(180deg, #dbeafe 0%, #e0f2fe 100%)',
+    color: '#1d4ed8',
+    fontSize: '12px',
+    fontWeight: 800,
+    border: '1px solid rgba(59,130,246,0.12)',
+    boxShadow: '0 4px 12px rgba(59,130,246,0.08)',
+  },
+  heroMetaRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '18px',
+    marginTop: '20px',
+    paddingTop: '18px',
+    borderTop: '1px solid #e2e8f0',
+    fontSize: '14px',
+    color: '#334155',
+  },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' },
-  statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
+  statCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)', animation: 'statFadeIn 560ms ease-out' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
   summaryCardMobile: { padding: '16px', borderRadius: '16px' },
   summaryValueMobile: { fontSize: '28px', fontWeight: 800 },
   summaryLabelMobile: { fontSize: '14px', fontWeight: 600 },
   dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
-  card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)', overflow: 'hidden' },
+  sectionCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)', overflow: 'hidden' },
   cardHeader: { marginBottom: '14px' },
   cardHeaderColumn: {
     display: 'flex',
@@ -1603,28 +1683,30 @@ const styles = {
     marginTop: '16px',
   },
   quickActionCard: {
-    borderRadius: '18px',
+    border: '1px solid transparent',
+    borderRadius: '22px',
     padding: '18px',
+    textAlign: 'left',
     cursor: 'pointer',
-    border: '1px solid #e2e8f0',
+    transition: 'all 180ms ease',
     background: '#ffffff',
-    transition: 'all 0.2s ease',
+    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
     minHeight: '120px',
   },
   quickActionCardBlue: {
-    background: '#eff6ff',
-    border: '1px solid #bfdbfe',
+    background: 'linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%)',
+    borderColor: '#bfdbfe',
   },
   quickActionCardGreen: {
-    background: '#ecfdf5',
-    border: '1px solid #bbf7d0',
+    background: 'linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%)',
+    borderColor: '#bbf7d0',
   },
   quickActionCardPurple: {
-    background: '#faf5ff',
-    border: '1px solid #e9d5ff',
+    background: 'linear-gradient(180deg, #faf5ff 0%, #fdf9ff 100%)',
+    borderColor: '#e9d5ff',
   },
   quickActionTitle: {
     fontSize: '18px',

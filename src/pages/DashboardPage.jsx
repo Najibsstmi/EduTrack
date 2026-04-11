@@ -28,7 +28,7 @@ function DashboardPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
-  const [schoolName, setSchoolName] = useState('')
+  const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
@@ -100,7 +100,7 @@ function DashboardPage() {
 
     const { data: schoolData, error: schoolError } = await supabase
       .from('schools')
-      .select('school_name')
+      .select('id, school_name, school_code, logo_url')
       .eq('id', data.school_id)
       .maybeSingle()
 
@@ -109,7 +109,7 @@ function DashboardPage() {
     }
 
     setProfile(data)
-    setSchoolName(schoolData?.school_name || '')
+    setSchoolInfo(schoolData || null)
     const loadedSetupConfig = await loadSetupStatus(data.school_id)
     setSetupConfig(loadedSetupConfig || null)
     setLoading(false)
@@ -454,7 +454,7 @@ function DashboardPage() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.topbar}>
+      <header style={styles.topBar}>
         <div style={styles.brandWrap}>
           <img
             src="/edutrack-logo.png"
@@ -464,41 +464,47 @@ function DashboardPage() {
           <div style={styles.brandTextWrap}>
             <div style={styles.brandTitle}>EduTrack</div>
             <div style={styles.brandSub}>
-              {schoolName || 'Sistem Pemantauan Akademik Sekolah'}
+              {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
             </div>
           </div>
         </div>
 
-        <nav style={styles.nav}>
-          <button style={styles.navButtonPrimary} onClick={() => navigate('/scores')}>
-            Input Markah
-          </button>
-          <button style={styles.navButton} onClick={() => navigate('/manage-subject-students')}>
-            Urus Murid Subjek
-          </button>
-          <button style={styles.navButton} onClick={() => navigate('/analysis')}>
-            Analisis
-          </button>
-        </nav>
-
         <div style={styles.topbarRight}>
-          <button style={styles.darkButton} onClick={handleLogout}>
+          <button style={styles.navButton} onClick={handleLogout}>
             Logout
           </button>
         </div>
       </header>
 
       <main style={styles.container}>
-        <section style={styles.hero}>
-          <h1 style={styles.heroTitle}>Dashboard Guru</h1>
-          <p style={styles.heroText}>
-            Selamat datang, {displayName}. Gunakan dashboard ini untuk masukkan markah murid dan
-            melihat analisis prestasi sekolah anda.
-          </p>
-          <div style={styles.heroInfo}>
-            <span><strong>Peranan:</strong> {profile?.role || '-'}</span>
-            <span><strong>Status Sistem:</strong> {isAcademicSetupComplete ? 'Sedia Digunakan' : 'Perlu Lengkapkan Setup'}</span>
-            <span><strong>Jumlah Murid:</strong> {setupStatus.studentCount}</span>
+        <section style={styles.heroCard}>
+          <div style={styles.heroGlow} />
+          <div style={styles.heroGlowSecondary} />
+          <div style={styles.heroInner}>
+            <div style={styles.heroHeaderRow}>
+              {schoolInfo?.logo_url && (
+                <img
+                  src={schoolInfo.logo_url}
+                  alt="Logo Sekolah"
+                  style={styles.schoolLogoInline}
+                />
+              )}
+              <div>
+                <h1 style={styles.heroTitle}>Dashboard Guru</h1>
+                <p style={styles.heroDescription}>
+                  Selamat datang, {displayName}. Gunakan dashboard ini untuk masukkan markah murid dan
+                  melihat analisis prestasi sekolah anda.
+                </p>
+                {schoolInfo?.school_name ? (
+                  <div style={styles.schoolNameBadge}>{schoolInfo.school_name}</div>
+                ) : null}
+              </div>
+            </div>
+            <div style={styles.heroMetaRow}>
+              <span><strong>Peranan:</strong> {profile?.role || '-'}</span>
+              <span><strong>Status Sistem:</strong> {isAcademicSetupComplete ? 'Sedia Digunakan' : 'Perlu Lengkapkan Setup'}</span>
+              <span><strong>Jumlah Murid:</strong> {setupStatus.studentCount}</span>
+            </div>
           </div>
         </section>
 
@@ -509,7 +515,7 @@ function DashboardPage() {
           <StatCard title="Murid" value={setupStatus.studentCount} />
         </section>
 
-        <section style={styles.card}>
+        <section style={styles.sectionCard}>
           <h2 style={styles.cardTitle}>Akses Pantas</h2>
           <p style={styles.helperText}>
             Modul paling kerap digunakan untuk kerja harian guru.
@@ -563,35 +569,10 @@ function DashboardPage() {
                 Lihat analisis kelas, individu dan prestasi subjek dengan lebih jelas.
               </p>
             </div>
-
-            <div
-              onClick={() => navigate('/manage-subject-students')}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-              style={{
-                ...styles.quickActionCard,
-                ...styles.quickActionCardPurple,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Urus Murid Subjek</h3>
-                <span style={styles.quickActionArrow}>›</span>
-              </div>
-              <p style={styles.quickActionDesc}>
-                Tetapkan murid yang mengambil subjek selective seperti Pendidikan Islam,
-                Pendidikan Moral atau subjek elektif lain.
-              </p>
-            </div>
           </div>
         </section>
 
-        <section style={styles.card}>
+        <section style={styles.sectionCard}>
           <div style={styles.cardHeaderColumn}>
             <h2 style={styles.cardTitle}>Status Pengisian Markah ({selectedExamKey || '-'})</h2>
             <p style={styles.helperText}>
@@ -734,27 +715,132 @@ function StatCard({ title, value }) {
 
 const styles = {
   page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
-  topbar: { position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 20px', background: '#08142b', color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' },
+  topBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '16px',
+    background: 'linear-gradient(90deg, #08142b 0%, #0b1730 55%, #0f1c3a 100%)',
+    padding: '14px 22px',
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 20,
+    boxShadow: '0 10px 24px rgba(2, 8, 23, 0.22)',
+    flexWrap: 'wrap',
+  },
   brandWrap: { display: 'flex', alignItems: 'center', gap: '12px' },
   brandLogo: { width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px', background: 'transparent', flexShrink: 0 },
   brandTextWrap: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 },
-  brandTitle: { fontSize: '20px', fontWeight: 800, color: '#ffffff', lineHeight: 1.1, margin: 0 },
-  brandSub: { fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.85)', lineHeight: 1.2, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '260px' },
+  brandTitle: { fontSize: '18px', fontWeight: 800, color: '#ffffff', lineHeight: 1.05, letterSpacing: '-0.02em', margin: 0 },
+  brandSub: { fontSize: '12px', color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px', maxWidth: '260px' },
   nav: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
-  navButtonPrimary: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
-  navButton: { background: 'rgba(255,255,255,0.08)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
+  navButtonPrimary: {
+    border: 'none',
+    background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)',
+    color: '#ffffff',
+    padding: '14px 22px',
+    borderRadius: '16px',
+    fontSize: '15px',
+    fontWeight: 800,
+    cursor: 'pointer',
+    boxShadow: '0 12px 24px rgba(37, 99, 235, 0.32)',
+  },
+  navButton: {
+    border: '1px solid rgba(255,255,255,0.14)',
+    background: 'rgba(255,255,255,0.04)',
+    color: '#ffffff',
+    padding: '12px 18px',
+    borderRadius: '14px',
+    fontSize: '14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    backdropFilter: 'blur(6px)',
+  },
   topbarRight: { display: 'flex', alignItems: 'center', gap: '10px' },
   darkButton: { background: '#111827', color: '#ffffff', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '10px 14px', fontWeight: 600, cursor: 'pointer' },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
-  hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
-  heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
-  heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
-  heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
+  heroCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    background: 'linear-gradient(135deg, #f8fbff 0%, #eef4ff 45%, #f8fafc 100%)',
+    border: '1px solid #dbe4ee',
+    borderRadius: '30px',
+    padding: '30px',
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: '-80px',
+    right: '-80px',
+    width: '220px',
+    height: '220px',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle, rgba(37,99,235,0.16) 0%, rgba(37,99,235,0.06) 35%, rgba(37,99,235,0) 70%)',
+    pointerEvents: 'none',
+  },
+  heroGlowSecondary: {
+    position: 'absolute',
+    bottom: '-100px',
+    left: '-80px',
+    width: '240px',
+    height: '240px',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle, rgba(14,165,233,0.10) 0%, rgba(14,165,233,0.04) 35%, rgba(14,165,233,0) 70%)',
+    pointerEvents: 'none',
+  },
+  heroInner: {
+    position: 'relative',
+    zIndex: 1,
+  },
+  heroHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '18px',
+    flexWrap: 'wrap',
+    animation: 'heroFadeUp 480ms ease-out',
+  },
+  schoolLogoInline: {
+    width: '88px',
+    height: '88px',
+    objectFit: 'contain',
+    background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '22px',
+    padding: '8px',
+    border: '1px solid rgba(255,255,255,0.8)',
+    boxShadow: '0 14px 30px rgba(15, 23, 42, 0.12)',
+    flexShrink: 0,
+    animation: 'logoFloatIn 520ms ease-out',
+  },
+  heroTitle: { margin: 0, fontSize: '32px', fontWeight: 800 },
+  heroDescription: { marginTop: '8px', color: '#64748b', lineHeight: 1.7 },
+  schoolNameBadge: {
+    display: 'inline-block',
+    marginTop: '10px',
+    padding: '7px 13px',
+    borderRadius: '999px',
+    background: 'linear-gradient(180deg, #dbeafe 0%, #e0f2fe 100%)',
+    color: '#1d4ed8',
+    fontSize: '12px',
+    fontWeight: 800,
+    border: '1px solid rgba(59,130,246,0.12)',
+    boxShadow: '0 4px 12px rgba(59,130,246,0.08)',
+  },
+  heroMetaRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '18px',
+    marginTop: '20px',
+    paddingTop: '18px',
+    borderTop: '1px solid #e2e8f0',
+    fontSize: '14px',
+    color: '#334155',
+  },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' },
-  statCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '18px', padding: '18px', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)' },
+  statCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)', animation: 'statFadeIn 560ms ease-out' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
-  card: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
+  sectionCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
   cardHeaderColumn: { display: 'grid', gap: '8px', marginBottom: '16px' },
   cardTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
   helperText: { color: '#64748b', lineHeight: 1.6, margin: 0 },
@@ -770,28 +856,26 @@ const styles = {
     marginTop: '16px',
   },
   quickActionCard: {
-    borderRadius: '18px',
+    border: '1px solid transparent',
+    borderRadius: '22px',
     padding: '18px',
+    textAlign: 'left',
     cursor: 'pointer',
-    border: '1px solid #e2e8f0',
+    transition: 'all 180ms ease',
     background: '#ffffff',
-    transition: 'all 0.2s ease',
+    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.04)',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
     minHeight: '120px',
   },
   quickActionCardBlue: {
-    background: '#eff6ff',
-    border: '1px solid #bfdbfe',
+    background: 'linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%)',
+    borderColor: '#bfdbfe',
   },
   quickActionCardGreen: {
-    background: '#ecfdf5',
-    border: '1px solid #bbf7d0',
-  },
-  quickActionCardPurple: {
-    background: '#faf5ff',
-    border: '1px solid #e9d5ff',
+    background: 'linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%)',
+    borderColor: '#bbf7d0',
   },
   quickActionTitle: {
     fontSize: '18px',
