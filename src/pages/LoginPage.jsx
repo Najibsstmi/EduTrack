@@ -64,8 +64,19 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:mt-14">
+    <div className="min-h-screen bg-slate-50 px-4 py-6 flex items-center justify-center">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex flex-col items-center text-center">
+          <img
+            src="/edutrack-logo.png"
+            alt="EduTrack"
+            className="h-auto w-[120px] object-contain"
+          />
+          <div className="mt-3 text-[13px] text-slate-500">
+            Sistem Pemantauan Akademik Sekolah
+          </div>
+        </div>
+
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           EduTrack
         </p>

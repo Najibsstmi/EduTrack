@@ -232,6 +232,17 @@ function SignupPage() {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-6">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mb-5 flex flex-col items-center text-center">
+          <img
+            src="/edutrack-logo.png"
+            alt="EduTrack"
+            className="h-auto w-[120px] object-contain"
+          />
+          <div className="mt-3 text-[13px] text-slate-500">
+            Sistem Pemantauan Akademik Sekolah
+          </div>
+        </div>
+
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           EDUTRACK
         </p>
