@@ -944,19 +944,21 @@ export default function SchoolAdminDashboard() {
 
       <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
         <section style={styles.hero}>
-          {schoolInfo?.logo_url ? (
-            <div style={styles.schoolLogoWrap}>
+          <div style={styles.headerRow}>
+            {schoolInfo?.logo_url ? (
               <img
                 src={schoolInfo.logo_url}
                 alt="Logo Sekolah"
-                style={styles.schoolLogo}
+                style={styles.logoInline}
               />
+            ) : null}
+            <div>
+              <h1 style={styles.heroTitle}>{isSchoolAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
+              <p style={styles.heroText}>
+                Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
+              </p>
             </div>
-          ) : null}
-          <h1 style={styles.heroTitle}>{isSchoolAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
-          <p style={styles.heroText}>
-            Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
-          </p>
+          </div>
           <div style={styles.heroInfo}>
             <span><strong>Admin:</strong> {getDisplayName(adminProfile)} ({adminProfile?.email || '-'})</span>
             <span><strong>Jenis:</strong> {schoolInfo?.school_type || '-'}</span>
@@ -1028,30 +1030,32 @@ export default function SchoolAdminDashboard() {
               </p>
             </div>
 
-            <div
-              onClick={() => navigate('/manage-subject-students')}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-              style={{
-                ...styles.quickActionCard,
-                ...styles.quickActionCardPurple,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Urus Murid Subjek</h3>
-                <span style={styles.quickActionArrow}>›</span>
+            {isSchoolAdmin && (
+              <div
+                onClick={() => navigate('/manage-subject-students')}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+                style={{
+                  ...styles.quickActionCard,
+                  ...styles.quickActionCardPurple,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={styles.quickActionTitle}>Urus Murid Subjek</h3>
+                  <span style={styles.quickActionArrow}>›</span>
+                </div>
+                <p style={styles.quickActionDesc}>
+                  Tetapkan murid yang mengambil subjek selective seperti Pendidikan Islam,
+                  Pendidikan Moral atau subjek elektif lain.
+                </p>
               </div>
-              <p style={styles.quickActionDesc}>
-                Tetapkan murid yang mengambil subjek selective seperti Pendidikan Islam,
-                Pendidikan Moral atau subjek elektif lain.
-              </p>
-            </div>
+            )}
           </div>
         </section>
 
@@ -1525,19 +1529,20 @@ const styles = {
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
   containerMobile: { padding: '18px 14px', gap: '16px' },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
-  schoolLogoWrap: {
+  headerRow: {
     display: 'flex',
-    justifyContent: 'center',
-    marginBottom: '18px',
+    alignItems: 'center',
+    gap: '18px',
   },
-  schoolLogo: {
-    width: '88px',
-    height: '88px',
+  logoInline: {
+    width: '64px',
+    height: '64px',
     objectFit: 'contain',
-    background: '#ffffff',
+    background: '#fff',
     borderRadius: '16px',
-    padding: '8px',
-    boxShadow: '0 6px 18px rgba(15, 23, 42, 0.08)',
+    padding: '6px',
+    boxShadow: '0 6px 16px rgba(15,23,42,0.1)',
+    flexShrink: 0,
   },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
   heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
