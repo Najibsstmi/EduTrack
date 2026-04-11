@@ -9,6 +9,7 @@ import SchoolSetupPage from './pages/SchoolSetupPage.jsx'
 import SchoolSetupExamsPage from './pages/SchoolSetupExamsPage.jsx'
 import SchoolSetupGradesPage from './pages/SchoolSetupGradesPage.jsx'
 import SchoolSetupSubjectsPage from './pages/SchoolSetupSubjectsPage.jsx'
+import SchoolLogoSettingsPage from './pages/SchoolLogoSettingsPage.jsx'
 import StudentsPage from './pages/StudentsPage'
 import ClassesPage from './pages/ClassesPage'
 import StudentImportPage from './pages/StudentImportPage'
@@ -34,6 +35,11 @@ function App() {
       <Route path="/school-setup/exams" element={<SchoolSetupExamsPage />} />
       <Route path="/school-setup/grades" element={<SchoolSetupGradesPage />} />
       <Route path="/school-setup/subjects" element={<SchoolSetupSubjectsPage />} />
+      <Route path="/exam-settings" element={<SchoolSetupExamsPage />} />
+      <Route path="/grade-settings" element={<SchoolSetupGradesPage />} />
+      <Route path="/subject-settings" element={<SchoolSetupSubjectsPage />} />
+      <Route path="/class-settings" element={<ClassesPage />} />
+      <Route path="/settings/school-logo" element={<SchoolLogoSettingsPage />} />
       <Route path="/students" element={<StudentsPage />} />
       <Route path="/students/import" element={<StudentImportPage />} />
       <Route path="/scores" element={<StudentScoresPage />} />

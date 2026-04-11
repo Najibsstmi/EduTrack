@@ -198,7 +198,7 @@ export default function SchoolAdminDashboard() {
     ] = await Promise.all([
       supabase
         .from('schools')
-        .select('id, school_name, school_code, school_type, state, district')
+        .select('id, school_name, school_code, school_type, state, district, logo_url')
         .eq('id', schoolId)
         .maybeSingle(),
       supabase
@@ -694,8 +694,56 @@ export default function SchoolAdminDashboard() {
     return options
   }
 
-  const isAdmin =
-    adminProfile?.role === 'school_admin' || adminProfile?.is_school_admin === true
+  const role = String(adminProfile?.role || '').trim().toLowerCase()
+  const isSchoolAdmin = role === 'school_admin'
+
+  const navigateFromSettings = (path) => {
+    setShowSettingsMenu(false)
+    setShowMobileSettings(false)
+    navigate(path)
+  }
+
+  const settingsItems = [
+    {
+      key: 'academic-structure',
+      label: 'Struktur Akademik',
+      onClick: () => navigateFromSettings('/school-setup'),
+    },
+    {
+      key: 'exam-settings',
+      label: 'Tetapan Peperiksaan',
+      onClick: () => navigateFromSettings('/exam-settings'),
+    },
+    {
+      key: 'grade-settings',
+      label: 'Tetapan Gred',
+      onClick: () => navigateFromSettings('/grade-settings'),
+    },
+    {
+      key: 'subject-settings',
+      label: 'Tetapan Subjek',
+      onClick: () => navigateFromSettings('/subject-settings'),
+    },
+    {
+      key: 'class-settings',
+      label: 'Tetapan Kelas',
+      onClick: () => navigateFromSettings('/class-settings'),
+    },
+    ...(isSchoolAdmin
+      ? [
+          {
+            key: 'student-subject-settings',
+            label: 'Tetapan Murid-Subjek',
+            onClick: () => navigateFromSettings('/manage-subject-students'),
+          },
+          {
+            key: 'school-logo-settings',
+            label: 'Tetapan Logo Sekolah',
+            onClick: () => navigateFromSettings('/settings/school-logo'),
+          },
+        ]
+      : []),
+  ]
 
   const groupedCompletionRows = useMemo(() => {
     const groupedMap = new Map(
@@ -786,14 +834,6 @@ export default function SchoolAdminDashboard() {
                 Analisis
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleMobileNavigate('/manage-subject-students')}
-                style={getMobileNavButtonStyle('/manage-subject-students')}
-              >
-                Murid Subjek
-              </button>
-
               {isAdmin && (
                 <button
                   type="button"
@@ -818,53 +858,16 @@ export default function SchoolAdminDashboard() {
 
             {showMobileSettings && isAdmin && (
               <div style={styles.mobileSettingsDropdown}>
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/school-setup')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Struktur Akademik
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/school-setup/exams')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Peperiksaan
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/school-setup/grades')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Grade
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/school-setup/subjects')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Subjek
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/classes')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Kelas
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleMobileNavigate('/targets')}
-                  style={styles.mobileSettingsItem}
-                >
-                  Sasaran Akademik
-                </button>
+                {settingsItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={item.onClick}
+                    style={styles.mobileSettingsItem}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -900,21 +903,16 @@ export default function SchoolAdminDashboard() {
 
                 {showSettingsMenu && (
                   <div style={styles.settingsDropdown}>
-                    <button onClick={() => navigate('/school-setup')} style={styles.dropdownItem}>
-                      Struktur Akademik
-                    </button>
-                    <button onClick={() => navigate('/school-setup/exams')} style={styles.dropdownItem}>
-                      Tetapan Peperiksaan
-                    </button>
-                    <button onClick={() => navigate('/school-setup/grades')} style={styles.dropdownItem}>
-                      Tetapan Grade
-                    </button>
-                    <button onClick={() => navigate('/school-setup/subjects')} style={styles.dropdownItem}>
-                      Tetapan Subjek
-                    </button>
-                    <button onClick={() => navigate('/classes')} style={styles.dropdownItem}>
-                      Tetapan Kelas
-                    </button>
+                    {settingsItems.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={item.onClick}
+                        style={styles.dropdownItem}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -925,13 +923,6 @@ export default function SchoolAdminDashboard() {
               style={styles.secondaryTopButton}
             >
               Analisis
-            </button>
-
-            <button
-              onClick={() => navigate('/manage-subject-students')}
-              style={styles.secondaryTopButton}
-            >
-              Urus Murid Subjek
             </button>
 
             <button
@@ -953,6 +944,15 @@ export default function SchoolAdminDashboard() {
 
       <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
         <section style={styles.hero}>
+          {schoolInfo?.logo_url ? (
+            <div style={styles.schoolLogoWrap}>
+              <img
+                src={schoolInfo.logo_url}
+                alt="Logo Sekolah"
+                style={styles.schoolLogo}
+              />
+            </div>
+          ) : null}
           <h1 style={styles.heroTitle}>{isAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
           <p style={styles.heroText}>
             Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
@@ -1525,6 +1525,20 @@ const styles = {
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },
   containerMobile: { padding: '18px 14px', gap: '16px' },
   hero: { background: 'linear-gradient(135deg, #ffffff, #eef4ff)', border: '1px solid #e2e8f0', borderRadius: '22px', padding: '28px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)' },
+  schoolLogoWrap: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '18px',
+  },
+  schoolLogo: {
+    width: '88px',
+    height: '88px',
+    objectFit: 'contain',
+    background: '#ffffff',
+    borderRadius: '16px',
+    padding: '8px',
+    boxShadow: '0 6px 18px rgba(15, 23, 42, 0.08)',
+  },
   heroTitle: { margin: 0, fontSize: '30px', fontWeight: 800 },
   heroText: { margin: '10px 0 0 0', color: '#475569', lineHeight: 1.6 },
   heroInfo: { display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '16px', color: '#334155', fontSize: '14px' },
