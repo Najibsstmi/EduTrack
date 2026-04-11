@@ -1746,11 +1746,23 @@ export default function StudentScoresPage() {
               onClick={downloadTemplateCSV}
               className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
             >
-              Download Template
+              Download Template CSV
             </button>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setImportMode('normal')}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                importMode === 'normal'
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-300 bg-white text-slate-700'
+              }`}
+            >
+              Import Biasa
+            </button>
+
             {isSchoolAdmin && (
               <button
                 type="button"
@@ -1768,76 +1780,41 @@ export default function StudentScoresPage() {
 
           {importMode === 'normal' && (
             <>
-          <div className="mt-6 space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step 1</div>
-              <label className="mt-2 block text-sm font-semibold text-slate-800">
-                Upload CSV
-              </label>
+          <div className="mt-5">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Upload Fail CSV
+            </label>
 
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleCsvUpload}
-                className="mt-3 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
-              />
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvUpload}
+              className="block w-full rounded-xl border border-slate-300 px-3 py-2"
+            />
 
-              {csvFileName && (
-                <p className="mt-2 text-sm text-slate-500">
-                  Fail dipilih: <strong>{csvFileName}</strong>
-                </p>
-              )}
+            {csvFileName && (
+              <p className="mt-2 text-sm text-slate-500">
+                Fail dipilih: <strong>{csvFileName}</strong>
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Jumlah Row CSV</div>
+              <div className="mt-1 text-2xl font-bold text-slate-900">{csvRows.length}</div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step 2</div>
-              <p className="mt-2 text-sm font-semibold text-slate-800">Mode Import</p>
-              <div className="mt-3 flex flex-col gap-3 md:flex-row">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="csvImportPolicy"
-                    value="strict"
-                    checked={csvImportPolicy === 'strict'}
-                    onChange={(e) => setCsvImportPolicy(e.target.value)}
-                  />
-                  Strict - hentikan import jika ada ralat
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="csvImportPolicy"
-                    value="partial"
-                    checked={csvImportPolicy === 'partial'}
-                    onChange={(e) => setCsvImportPolicy(e.target.value)}
-                  />
-                  Partial - import data yang valid sahaja, abaikan baris ralat
-                </label>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Row Valid</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-600">
+                {csvErrors.length === 0 ? csvRows.length : 0}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step 3</div>
-              <p className="mt-2 text-sm font-semibold text-slate-800">Statistik Import</p>
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
-                  <div className="text-sm text-slate-500">Jumlah Row CSV</div>
-                  <div className="mt-1 text-2xl font-bold text-slate-900">{csvRows.length}</div>
-                </div>
-
-                <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
-                  <div className="text-sm text-slate-500">Row Valid</div>
-                  <div className="mt-1 text-2xl font-bold text-emerald-600">
-                    {Math.max(csvRows.length - csvErrors.length, 0)}
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
-                  <div className="text-sm text-slate-500">Jumlah Error</div>
-                  <div className="mt-1 text-2xl font-bold text-red-600">{csvErrors.length}</div>
-                </div>
-              </div>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Jumlah Error</div>
+              <div className="mt-1 text-2xl font-bold text-red-600">{csvErrors.length}</div>
             </div>
           </div>
 
@@ -1904,18 +1881,42 @@ export default function StudentScoresPage() {
             </div>
           )}
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Action</div>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={importCsvToSupabase}
-                disabled={importingCsv || !csvFileName || csvRows.length === 0}
-                className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {importingCsv ? 'Mengimport...' : 'Import Data'}
-              </button>
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-800">Mode Import</p>
+            <div className="mt-3 flex flex-col gap-3 md:flex-row">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="csvImportPolicy"
+                  value="strict"
+                  checked={csvImportPolicy === 'strict'}
+                  onChange={(e) => setCsvImportPolicy(e.target.value)}
+                />
+                Strict - hentikan import jika ada ralat
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="csvImportPolicy"
+                  value="partial"
+                  checked={csvImportPolicy === 'partial'}
+                  onChange={(e) => setCsvImportPolicy(e.target.value)}
+                />
+                Partial - import data yang valid sahaja, abaikan baris ralat
+              </label>
             </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={importCsvToSupabase}
+              disabled={importingCsv || csvRows.length === 0}
+              className="rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {importingCsv ? 'Mengimport...' : 'Import Sekarang'}
+            </button>
           </div>
 
           {importSummary && (
