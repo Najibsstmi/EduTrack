@@ -820,8 +820,8 @@ export default function SchoolAdminDashboard() {
                 type="button"
                 onClick={() => handleMobileNavigate('/students')}
                 style={getMobileNavButtonStyle('/students')}
-                disabled={!isAdmin}
-                title={!isAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
+                disabled={!isSchoolAdmin}
+                title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
               >
                 Input Murid
               </button>
@@ -834,7 +834,7 @@ export default function SchoolAdminDashboard() {
                 Analisis
               </button>
 
-              {isAdmin && (
+              {isSchoolAdmin && (
                 <button
                   type="button"
                   onClick={() => setShowMobileSettings((prev) => !prev)}
@@ -856,7 +856,7 @@ export default function SchoolAdminDashboard() {
               </button>
             </div>
 
-            {showMobileSettings && isAdmin && (
+            {showMobileSettings && isSchoolAdmin && (
               <div style={styles.mobileSettingsDropdown}>
                 {settingsItems.map((item) => (
                   <button
@@ -884,15 +884,15 @@ export default function SchoolAdminDashboard() {
               onClick={() => navigate('/students')}
               style={{
                 ...styles.secondaryTopButton,
-                ...(!isAdmin ? styles.disabledTopButton : {}),
+                ...(!isSchoolAdmin ? styles.disabledTopButton : {}),
               }}
-              disabled={!isAdmin}
-              title={!isAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
+              disabled={!isSchoolAdmin}
+              title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
             >
               Input Murid
             </button>
 
-            {isAdmin && (
+            {isSchoolAdmin && (
               <div style={{ position: 'relative' }} ref={settingsMenuRef}>
                 <button
                   onClick={() => setShowSettingsMenu((prev) => !prev)}
@@ -953,7 +953,7 @@ export default function SchoolAdminDashboard() {
               />
             </div>
           ) : null}
-          <h1 style={styles.heroTitle}>{isAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
+          <h1 style={styles.heroTitle}>{isSchoolAdmin ? 'Dashboard Admin Sekolah' : 'Dashboard Pemantauan Sekolah'}</h1>
           <p style={styles.heroText}>
             Urus pengguna, tetapan akademik, data murid, dan semakan status sekolah dalam satu paparan yang lebih kemas.
           </p>
@@ -1094,7 +1094,7 @@ export default function SchoolAdminDashboard() {
           <div style={styles.cardHeaderColumn}>
             <h2 style={styles.cardTitle}>Pemantauan Pengisian Markah ({selectedExamKey})</h2>
             <span style={styles.roleHintText}>
-              {isAdmin ? 'Paparan keseluruhan sekolah' : 'Paparan pemantauan'}
+              {isSchoolAdmin ? 'Paparan keseluruhan sekolah' : 'Paparan pemantauan'}
             </span>
             <p style={styles.helperText}>
               Hijau = semua murid dalam kelas itu sudah lengkap markah untuk subjek tersebut.
@@ -1249,7 +1249,7 @@ export default function SchoolAdminDashboard() {
           )}
         </section>
 
-        {isAdmin && (
+        {isSchoolAdmin && (
           <section style={styles.card}>
             <div style={styles.sectionHeaderResponsive}>
               <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
