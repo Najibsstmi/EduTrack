@@ -12,6 +12,8 @@ function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
+    await supabase.auth.signOut().catch(() => {})
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,

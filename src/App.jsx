@@ -22,8 +22,9 @@ import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
 import { supabase } from './lib/supabaseClient'
+import { forceCleanLogout } from './lib/authSession'
 
-function AppAuthGuard() {
+function AuthSessionWatcher() {
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -32,10 +33,11 @@ function AppAuthGuard() {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         navigate('/login', { replace: true })
+        return
       }
 
       if (!session && event !== 'INITIAL_SESSION') {
-        navigate('/login', { replace: true })
+        await forceCleanLogout()
       }
     })
 
@@ -48,7 +50,7 @@ function AppAuthGuard() {
 function App() {
   return (
     <>
-      <AppAuthGuard />
+      <AuthSessionWatcher />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/signup" element={<SignupPage />} />

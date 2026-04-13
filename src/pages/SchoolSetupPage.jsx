@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { forceCleanLogout, isAuthSessionError } from '../lib/authSession'
+import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
 import {
   buildDefaultOtrPercentagesByGrade,
   getOtrSettings,
@@ -56,14 +56,15 @@ export default function SchoolSetupPage() {
         setErrorMessage('')
         await initPage()
       } catch (error) {
-        if (isAuthSessionError(error)) {
+        console.error('Load page error:', error)
+
+        if (isRefreshTokenError(error)) {
           await forceCleanLogout()
           return
         }
 
-        console.error('Load page error:', error)
         if (isMounted) {
-          setErrorMessage('Sesi anda tamat. Sila log masuk semula.')
+          setErrorMessage(error?.message || 'Ralat semasa memuatkan halaman.')
         }
       } finally {
         if (isMounted) setLoading(false)
@@ -129,12 +130,9 @@ export default function SchoolSetupPage() {
       error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError) {
-      throw userError
-    }
-
-    if (!user) {
-      navigate('/login', { replace: true })
+    if (userError || !user) {
+      console.log('Session invalid → redirect login')
+      await forceCleanLogout()
       return
     }
 

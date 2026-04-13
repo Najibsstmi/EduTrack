@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
 import {
   ChevronDown,
   ChevronRight,
@@ -109,7 +110,8 @@ export default function MasterAdminDashboard() {
       } = await supabase.auth.getUser()
 
       if (authError || !user) {
-        navigate('/login', { replace: true })
+        console.log('Session invalid → redirect login')
+        await forceCleanLogout()
         return
       }
 
@@ -155,8 +157,14 @@ export default function MasterAdminDashboard() {
       setProfiles(profilesData || [])
       setSchools((schoolsData || []).filter((school) => school.is_active !== false))
     } catch (error) {
-      console.error(error)
-      alert(error.message || 'Gagal memuatkan dashboard master admin.')
+      console.error('Load page error:', error)
+
+      if (isRefreshTokenError(error)) {
+        await forceCleanLogout()
+        return
+      }
+
+      alert(error?.message || 'Gagal memuatkan dashboard master admin.')
     } finally {
       setLoading(false)
     }

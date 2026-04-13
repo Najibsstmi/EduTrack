@@ -4,36 +4,16 @@ const AUTH_ERROR_PATTERNS = [
   'Invalid Refresh Token',
   'Refresh Token Not Found',
   'JWT expired',
+  'refresh_token_not_found',
 ]
 
-export const isAuthSessionError = (error) => {
+export const isRefreshTokenError = (error) => {
   const msg = String(error?.message || '')
   return AUTH_ERROR_PATTERNS.some((pattern) => msg.includes(pattern))
 }
 
-const clearSupabaseStorageKeys = () => {
-  try {
-    localStorage.removeItem('supabase.auth.token')
-
-    const localKeys = Object.keys(localStorage)
-    localKeys
-      .filter((key) => key.startsWith('sb-') && key.includes('auth-token'))
-      .forEach((key) => localStorage.removeItem(key))
-  } catch (error) {
-    console.error('localStorage cleanup error:', error)
-  }
-
-  try {
-    const sessionKeys = Object.keys(sessionStorage)
-    sessionKeys
-      .filter((key) => key.startsWith('sb-') && key.includes('auth-token'))
-      .forEach((key) => sessionStorage.removeItem(key))
-
-    sessionStorage.clear()
-  } catch (error) {
-    console.error('sessionStorage cleanup error:', error)
-  }
-}
+// backward-compat alias
+export const isAuthSessionError = isRefreshTokenError
 
 export const forceCleanLogout = async () => {
   try {
@@ -41,7 +21,13 @@ export const forceCleanLogout = async () => {
   } catch (error) {
     console.error('signOut error:', error)
   } finally {
-    clearSupabaseStorageKeys()
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+    } catch (storageError) {
+      console.error('storage clear error:', storageError)
+    }
+
     window.location.replace('/login')
   }
 }
