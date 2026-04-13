@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import AppHeader from '../components/AppHeader'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
 import {
   buildDefaultOtrPercentagesByGrade,
@@ -405,30 +406,20 @@ export default function SchoolSetupPage() {
           </div>
         ) : null}
 
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">EduTrack</p>
-              <p className="text-lg font-bold text-slate-900">Tetapan Akademik Sekolah</p>
-            </div>
-            <div className="flex w-full gap-2 overflow-x-auto md:w-auto md:flex-wrap">
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard')}
-                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
+        <AppHeader
+          title="Tetapan Akademik Sekolah"
+          subtitle="Tetapkan tingkatan / tahun aktif, bilangan kelas, bilangan AR, dan bilangan OTR."
+          actions={
+            <>
+              <Link to="/dashboard" className="btn-secondary">
                 Dashboard
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/school-setup/exams')}
-                className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
+              </Link>
+              <Link to="/school-setup/exams" className="btn-secondary">
                 Tetapan Peperiksaan →
-              </button>
-            </div>
-          </div>
-        </div>
+              </Link>
+            </>
+          }
+        />
 
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
