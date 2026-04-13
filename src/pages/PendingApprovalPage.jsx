@@ -1,10 +1,17 @@
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 function PendingApprovalPage() {
+  const navigate = useNavigate()
+
+  const handleCheckStatus = () => {
+    navigate('/register')
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-md items-center justify-center md:min-h-[calc(100vh-3rem)]">
-        <div className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-6 relative">
+      <div className="fixed inset-0 bg-black/30 pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
             <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
@@ -46,21 +53,22 @@ function PendingApprovalPage() {
             <p>Selepas diluluskan, anda boleh log masuk semula seperti biasa.</p>
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Link
-              to="/login"
-              className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="flex-1 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
             >
               Kembali ke Login
-            </Link>
-            <Link
-              to="/register"
-              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            </button>
+            <button
+              type="button"
+              onClick={handleCheckStatus}
+              className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"
             >
               Semak Pendaftaran
-            </Link>
+            </button>
           </div>
-        </div>
       </div>
     </div>
   )

@@ -101,7 +101,7 @@ function DashboardPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin, school_id')
+      .select('id, full_name, email, role, approval_status, is_active, is_master_admin, is_school_admin, school_id')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -120,8 +120,20 @@ function DashboardPage() {
       return
     }
 
-    if (data.is_school_admin || data.role === 'school_admin' || data.role === 'admin') {
+    const role = String(data?.role || '').trim().toLowerCase()
+    const isApprovedSchoolAdmin =
+      role === 'school_admin' &&
+      data?.approval_status === 'approved' &&
+      data?.is_active === true
+
+    if (isApprovedSchoolAdmin) {
       navigate('/dashboard', { replace: true })
+      return
+    }
+
+    if (data.is_active !== true) {
+      await supabase.auth.signOut()
+      navigate('/login', { replace: true })
       return
     }
 

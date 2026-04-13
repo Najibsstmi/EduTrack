@@ -126,17 +126,35 @@ export default function MasterAdminDashboard() {
         return
       }
 
+      if (myProfile.is_active !== true) {
+        await supabase.auth.signOut()
+        navigate('/login', { replace: true })
+        return
+      }
+
+      if (myProfile.approval_status !== 'approved') {
+        await supabase.auth.signOut()
+        navigate('/pending', { replace: true })
+        return
+      }
+
       setCurrentUser(myProfile)
 
       const isMasterAdmin = myProfile.is_master_admin === true || myProfile.role === 'master_admin'
       if (!isMasterAdmin) {
-        if (myProfile.approval_status === 'pending') {
-          navigate('/pending', { replace: true })
-        } else if (myProfile.approval_status === 'approved') {
+        const role = String(myProfile?.role || '').trim().toLowerCase()
+        const isApprovedSchoolAdmin =
+          role === 'school_admin' &&
+          myProfile?.approval_status === 'approved' &&
+          myProfile?.is_active === true
+
+        if (isApprovedSchoolAdmin) {
           navigate('/dashboard', { replace: true })
-        } else {
-          navigate('/login', { replace: true })
+          return
         }
+
+        await supabase.auth.signOut()
+        navigate('/login', { replace: true })
         return
       }
 

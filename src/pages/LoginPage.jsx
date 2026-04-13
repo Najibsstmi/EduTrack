@@ -12,57 +12,66 @@ function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    await supabase.auth.signOut().catch(() => {})
+    try {
+      await supabase.auth.signOut().catch(() => {})
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+      const { data: authData, error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      alert(error.message)
-      setLoading(false)
-      return
-    }
+      if (loginError) {
+        alert(loginError.message)
+        return
+      }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+      const user = authData?.user
+      if (!user) return
 
-    if (userError || !user) {
-      alert('Gagal dapatkan maklumat pengguna')
-      setLoading(false)
-      return
-    }
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, email, role, approval_status, is_master_admin, is_school_admin')
-      .eq('id', user.id)
-      .maybeSingle()
+      if (profileError || !profile) {
+        await supabase.auth.signOut()
+        alert('Profil pengguna tidak ditemui.')
+        return
+      }
 
-    if (profileError || !profile) {
-      alert('Profil pengguna tidak ditemui')
-      setLoading(false)
-      return
-    }
+      if (profile.is_active !== true) {
+        await supabase.auth.signOut()
+        alert('Akaun anda telah dinyahaktifkan. Sila hubungi pentadbir.')
+        return
+      }
 
-    alert('Login berjaya')
+      if (profile.approval_status !== 'approved') {
+        await supabase.auth.signOut()
+        navigate('/pending')
+        return
+      }
 
-    if (profile?.is_master_admin) {
-      navigate('/master-admin')
-    } else if ((profile?.is_school_admin === true || profile?.role === 'school_admin') && profile?.approval_status === 'approved') {
-      navigate('/dashboard')
-    } else if (profile?.approval_status === 'pending') {
-      navigate('/pending')
-    } else if (profile?.approval_status === 'approved') {
+      const role = String(profile?.role || '').trim().toLowerCase()
+      const isApprovedSchoolAdmin =
+        role === 'school_admin' &&
+        profile?.approval_status === 'approved' &&
+        profile?.is_active === true
+
+      if (profile?.is_master_admin === true || role === 'master_admin') {
+        navigate('/master-admin')
+        return
+      }
+
+      if (isApprovedSchoolAdmin) {
+        navigate('/dashboard')
+        return
+      }
+
       navigate('/home')
-    } else {
-      navigate('/login')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
