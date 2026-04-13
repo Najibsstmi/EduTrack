@@ -55,6 +55,7 @@ export default function SchoolAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [hoveredNav, setHoveredNav] = useState('')
   const [showMobileSettings, setShowMobileSettings] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
@@ -653,6 +654,19 @@ export default function SchoolAdminDashboard() {
       : styles.mobilePrimaryButton
   }
 
+  const getNavButtonStyle = (pathKey) => {
+    const isHovered = hoveredNav === pathKey
+    const isActivePage =
+      location.pathname === pathKey || location.pathname.startsWith(`${pathKey}/`)
+
+    const shouldBlue = isMobileView ? isActivePage : isHovered
+
+    return {
+      ...styles.navButton,
+      ...(shouldBlue ? styles.navButtonHover : {}),
+    }
+  }
+
   const getStatusText = (status) => {
     if (status === 'approved') return 'Approved'
     if (status === 'pending') return 'Pending'
@@ -874,16 +888,22 @@ export default function SchoolAdminDashboard() {
         ) : (
           <div style={styles.topActions}>
             <button
+              type="button"
               onClick={() => navigate('/scores')}
-              style={styles.primaryTopButton}
+              onMouseEnter={() => setHoveredNav('/scores')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/scores')}
             >
               Input Markah
             </button>
 
             <button
+              type="button"
               onClick={() => navigate('/students')}
+              onMouseEnter={() => setHoveredNav('/students')}
+              onMouseLeave={() => setHoveredNav('')}
               style={{
-                ...styles.secondaryTopButton,
+                ...getNavButtonStyle('/students'),
                 ...(!isSchoolAdmin ? styles.disabledTopButton : {}),
               }}
               disabled={!isSchoolAdmin}
@@ -895,10 +915,13 @@ export default function SchoolAdminDashboard() {
             {isSchoolAdmin && (
               <div style={{ position: 'relative' }} ref={settingsMenuRef}>
                 <button
+                  type="button"
                   onClick={() => setShowSettingsMenu((prev) => !prev)}
-                  style={styles.secondaryTopButton}
+                  onMouseEnter={() => setHoveredNav('/settings')}
+                  onMouseLeave={() => setHoveredNav('')}
+                  style={getNavButtonStyle('/settings')}
                 >
-                  Tetapan ▾
+                  Tetapan
                 </button>
 
                 {showSettingsMenu && (
@@ -919,22 +942,29 @@ export default function SchoolAdminDashboard() {
             )}
 
             <button
-              onClick={() => navigate('/analysis')}
-              style={styles.secondaryTopButton}
-            >
-              Analisis
-            </button>
-
-            <button
-              onClick={() => navigate('/targets')}
-              style={styles.secondaryTopButton}
+              type="button"
+              onClick={() => navigate('/academic-targets')}
+              onMouseEnter={() => setHoveredNav('/academic-targets')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/academic-targets')}
             >
               Sasaran Akademik
             </button>
 
             <button
+              type="button"
+              onClick={() => navigate('/analysis')}
+              onMouseEnter={() => setHoveredNav('/analysis')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/analysis')}
+            >
+              Analisis
+            </button>
+
+            <button
+              type="button"
               onClick={handleLogout}
-              style={styles.darkTopButton}
+              style={styles.logoutButton}
             >
               Logout
             </button>
@@ -1429,39 +1459,33 @@ const styles = {
     gap: 10,
     flexWrap: 'wrap',
   },
-  primaryTopButton: {
-    padding: '14px 22px',
-    borderRadius: 16,
-    border: 'none',
-    background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)',
-    color: '#fff',
-    fontWeight: 800,
-    cursor: 'pointer',
-    fontSize: 15,
-    boxShadow: '0 12px 24px rgba(37, 99, 235, 0.32)',
-  },
-  secondaryTopButton: {
-    padding: '14px 22px',
-    borderRadius: 16,
+  navButton: {
     border: '1px solid rgba(255,255,255,0.14)',
+    borderRadius: '18px',
     background: 'rgba(255,255,255,0.04)',
-    color: '#fff',
+    color: '#ffffff',
+    padding: '14px 26px',
+    fontSize: '15px',
     fontWeight: 700,
     cursor: 'pointer',
-    fontSize: 15,
-    minWidth: 120,
-    backdropFilter: 'blur(6px)',
+    transition: 'all 0.2s ease',
   },
-  darkTopButton: {
-    padding: '14px 22px',
-    borderRadius: 16,
-    border: '1px solid rgba(255,255,255,0.15)',
+  navButtonHover: {
+    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+    color: '#ffffff',
+    boxShadow: '0 10px 25px rgba(37, 99, 235, 0.35)',
+    border: '1px solid rgba(255,255,255,0.18)',
+  },
+  logoutButton: {
+    border: '1px solid rgba(255,255,255,0.14)',
+    borderRadius: '18px',
     background: 'rgba(255,255,255,0.04)',
-    color: '#fff',
+    color: '#ffffff',
+    padding: '14px 26px',
+    fontSize: '15px',
     fontWeight: 700,
     cursor: 'pointer',
-    fontSize: 15,
-    backdropFilter: 'blur(6px)',
+    transition: 'all 0.2s ease',
   },
   disabledTopButton: {
     opacity: 0.5,

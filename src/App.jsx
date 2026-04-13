@@ -46,6 +46,7 @@ function App() {
       <Route path="/classes" element={<ClassesPage />} />
       <Route path="/manage-subject-students" element={<ManageSubjectStudentsPage />} />
       <Route path="/targets" element={<TargetsPage />} />
+      <Route path="/academic-targets" element={<TargetsPage />} />
       <Route path="/analysis" element={<AnalysisHubPage />} />
       <Route path="/analysis/class" element={<AnalysisPage />} />
       <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />

@@ -10,7 +10,7 @@ function SignupPage() {
   const [schoolType, setSchoolType] = useState('')
   const [state, setState] = useState('')
   const [district, setDistrict] = useState('')
-  const [schoolId, setSchoolId] = useState('')
+  const [selectedSchoolId, setSelectedSchoolId] = useState('')
 
   const [schoolTypes, setSchoolTypes] = useState([])
   const [states, setStates] = useState([])
@@ -98,7 +98,7 @@ function SignupPage() {
     setSchoolType(value)
     setState('')
     setDistrict('')
-    setSchoolId('')
+    setSelectedSchoolId('')
     setStates([])
     setDistricts([])
     setSchools([])
@@ -111,7 +111,7 @@ function SignupPage() {
   const handleStateChange = async (value) => {
     setState(value)
     setDistrict('')
-    setSchoolId('')
+    setSelectedSchoolId('')
     setDistricts([])
     setSchools([])
 
@@ -122,7 +122,7 @@ function SignupPage() {
 
   const handleDistrictChange = async (value) => {
     setDistrict(value)
-    setSchoolId('')
+    setSelectedSchoolId('')
     setSchools([])
 
     if (value) {
@@ -139,11 +139,13 @@ function SignupPage() {
       const trimmedDesignation = designation.trim()
       const normalizedEmail = String(email || '').trim().toLowerCase()
 
-      if (!trimmedFullName || !trimmedDesignation || !normalizedEmail || !password || !schoolId) {
+      if (!trimmedFullName || !trimmedDesignation || !normalizedEmail || !password || !selectedSchoolId) {
         alert('Sila lengkapkan semua maklumat termasuk sekolah dan designation.')
         setLoading(false)
         return
       }
+
+      console.log('Selected school ID:', selectedSchoolId)
 
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
@@ -185,7 +187,7 @@ function SignupPage() {
             full_name: trimmedFullName,
             designation: trimmedDesignation,
             email: normalizedEmail,
-            school_id: schoolId,
+            school_id: selectedSchoolId,
             role: 'teacher',
             is_school_admin: false,
             approval_status: 'pending',
@@ -203,7 +205,7 @@ function SignupPage() {
             full_name: trimmedFullName,
             designation: trimmedDesignation,
             email: normalizedEmail,
-            school_id: schoolId,
+            school_id: selectedSchoolId,
             role: 'teacher',
             is_school_admin: false,
             approval_status: 'pending',
@@ -376,8 +378,8 @@ function SignupPage() {
               Nama sekolah
             </label>
             <select
-              value={schoolId}
-              onChange={(e) => setSchoolId(e.target.value)}
+              value={selectedSchoolId}
+              onChange={(e) => setSelectedSchoolId(e.target.value)}
               disabled={!district}
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:bg-slate-100"
               required
