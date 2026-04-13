@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { forceCleanLogout, isAuthSessionError } from '../lib/authSession'
 import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
@@ -44,9 +45,11 @@ export default function SchoolAdminDashboard() {
 
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const [adminProfile, setAdminProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
+  const [hasAcademicSetup, setHasAcademicSetup] = useState(true)
   const [users, setUsers] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
   const [classCount, setClassCount] = useState(0)
@@ -72,8 +75,34 @@ export default function SchoolAdminDashboard() {
   )
 
   useEffect(() => {
-    checkAccessAndFetch()
-  }, [])
+    let isMounted = true
+
+    const loadPage = async () => {
+      try {
+        setLoading(true)
+        setErrorMessage('')
+        await checkAccessAndFetch()
+      } catch (error) {
+        if (isAuthSessionError(error)) {
+          await forceCleanLogout()
+          return
+        }
+
+        console.error('Load page error:', error)
+        if (isMounted) {
+          setErrorMessage('Sesi anda tamat. Sila log masuk semula.')
+        }
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadPage()
+
+    return () => {
+      isMounted = false
+    }
+  }, [navigate])
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -106,14 +135,16 @@ export default function SchoolAdminDashboard() {
   }, [selectedExamKey])
 
   const checkAccessAndFetch = async () => {
-    setLoading(true)
-
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
+    if (userError) {
+      throw userError
+    }
+
+    if (!user) {
       navigate('/login', { replace: true })
       return
     }
@@ -124,7 +155,11 @@ export default function SchoolAdminDashboard() {
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profileError || !profile) {
+    if (profileError) {
+      throw profileError
+    }
+
+    if (!profile) {
       navigate('/login', { replace: true })
       return
     }
@@ -153,11 +188,12 @@ export default function SchoolAdminDashboard() {
     if (setupError) console.error(setupError)
 
     if (!setupData) {
-      navigate('/school-setup', { replace: true })
-      return
+      setHasAcademicSetup(false)
+    } else {
+      setHasAcademicSetup(true)
     }
 
-    setSetupConfig(setupData)
+    setSetupConfig(setupData || null)
 
     const { count: classTotal, error: classCountError } = await supabase
       .from('classes')
@@ -188,8 +224,6 @@ export default function SchoolAdminDashboard() {
       fetchSchoolData(profile.school_id),
       fetchScoreCompletionMatrix(profile.school_id, setupData),
     ])
-
-    setLoading(false)
   }
 
   const fetchSchoolData = async (schoolId) => {
@@ -973,6 +1007,33 @@ export default function SchoolAdminDashboard() {
       </header>
 
       <main style={{ ...styles.container, ...(isMobileView ? styles.containerMobile : {}) }}>
+        {errorMessage ? (
+          <div style={styles.setupAlertCard}>
+            <div style={styles.setupAlertTitle}>Sesi Tidak Sah</div>
+            <div style={styles.setupAlertText}>{errorMessage}</div>
+          </div>
+        ) : null}
+
+        {!hasAcademicSetup && (
+          <div style={styles.setupAlertCard}>
+            <div style={styles.setupAlertTitle}>Tetapan akademik belum lengkap</div>
+            <div style={styles.setupAlertText}>
+              Sekolah ini belum mempunyai tetapan akademik asas. Lengkapkan dahulu
+              struktur akademik, peperiksaan, gred, subjek, kelas dan input murid.
+            </div>
+
+            <div style={styles.setupAlertActions}>
+              <button
+                type="button"
+                onClick={() => navigate('/school-setup')}
+                style={styles.setupPrimaryButton}
+              >
+                Lengkapkan Tetapan Akademik
+              </button>
+            </div>
+          </div>
+        )}
+
         <section style={styles.heroCard}>
           <div style={styles.heroGlow} />
           <div style={styles.heroGlowSecondary} />
@@ -1571,6 +1632,40 @@ const styles = {
     fontWeight: 600,
     padding: '10px 12px',
     textAlign: 'left',
+    cursor: 'pointer',
+  },
+  setupAlertCard: {
+    marginBottom: '24px',
+    background: '#fff7ed',
+    border: '1px solid #fdba74',
+    borderRadius: '20px',
+    padding: '20px',
+  },
+  setupAlertTitle: {
+    fontSize: '20px',
+    fontWeight: 800,
+    color: '#9a3412',
+    marginBottom: '8px',
+  },
+  setupAlertText: {
+    fontSize: '14px',
+    lineHeight: 1.7,
+    color: '#7c2d12',
+  },
+  setupAlertActions: {
+    marginTop: '16px',
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+  },
+  setupPrimaryButton: {
+    border: 'none',
+    borderRadius: '14px',
+    background: '#ea580c',
+    color: '#ffffff',
+    padding: '12px 18px',
+    fontSize: '14px',
+    fontWeight: 700,
     cursor: 'pointer',
   },
   container: { maxWidth: '1240px', margin: '0 auto', padding: '24px', display: 'grid', gap: '20px' },

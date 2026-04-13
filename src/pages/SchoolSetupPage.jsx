@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { forceCleanLogout, isAuthSessionError } from '../lib/authSession'
 import {
   buildDefaultOtrPercentagesByGrade,
   getOtrSettings,
@@ -11,6 +12,7 @@ export default function SchoolSetupPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const [profile, setProfile] = useState(null)
   const [school, setSchool] = useState(null)
@@ -46,8 +48,34 @@ export default function SchoolSetupPage() {
   ]
 
   useEffect(() => {
-    initPage()
-  }, [])
+    let isMounted = true
+
+    const loadPage = async () => {
+      try {
+        setLoading(true)
+        setErrorMessage('')
+        await initPage()
+      } catch (error) {
+        if (isAuthSessionError(error)) {
+          await forceCleanLogout()
+          return
+        }
+
+        console.error('Load page error:', error)
+        if (isMounted) {
+          setErrorMessage('Sesi anda tamat. Sila log masuk semula.')
+        }
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadPage()
+
+    return () => {
+      isMounted = false
+    }
+  }, [navigate])
 
   const ensureOtrConfigDefaults = async (schoolId, setupData) => {
     if (!setupData?.id) return setupData
@@ -96,14 +124,16 @@ export default function SchoolSetupPage() {
   }
 
   const initPage = async () => {
-    setLoading(true)
-
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
+    if (userError) {
+      throw userError
+    }
+
+    if (!user) {
       navigate('/login', { replace: true })
       return
     }
@@ -114,7 +144,11 @@ export default function SchoolSetupPage() {
       .eq('id', user.id)
       .maybeSingle()
 
-    if (profileError || !profileData) {
+    if (profileError) {
+      throw profileError
+    }
+
+    if (!profileData) {
       navigate('/login', { replace: true })
       return
     }
@@ -171,7 +205,6 @@ export default function SchoolSetupPage() {
     if (setupError) {
       console.error(setupError)
       alert('Gagal membaca setup sekolah.')
-      setLoading(false)
       return
     }
 
@@ -187,8 +220,6 @@ export default function SchoolSetupPage() {
     }
 
     await loadSetupStatus(profileData.school_id, normalizedSetupData)
-
-    setLoading(false)
   }
 
   const loadSetupStatus = async (schoolId, setupData) => {
@@ -360,6 +391,12 @@ export default function SchoolSetupPage() {
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
+        {errorMessage ? (
+          <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
+            {errorMessage}
+          </div>
+        ) : null}
+
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

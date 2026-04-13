@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import { forceCleanLogout, isAuthSessionError } from '../lib/authSession'
 import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
@@ -27,6 +28,7 @@ function DashboardPage() {
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
   const [profile, setProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
@@ -49,7 +51,33 @@ function DashboardPage() {
   })
 
   useEffect(() => {
-    loadProfile()
+    let isMounted = true
+
+    const loadPage = async () => {
+      try {
+        setLoading(true)
+        setErrorMessage('')
+        await loadProfile()
+      } catch (error) {
+        if (isAuthSessionError(error)) {
+          await forceCleanLogout()
+          return
+        }
+
+        console.error('Load page error:', error)
+        if (isMounted) {
+          setErrorMessage('Sesi anda tamat. Sila log masuk semula.')
+        }
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    loadPage()
+
+    return () => {
+      isMounted = false
+    }
   }, [navigate])
 
   useEffect(() => {
@@ -59,14 +87,16 @@ function DashboardPage() {
   }, [selectedExamKey, profile?.school_id, setupConfig])
 
   const loadProfile = async () => {
-    setLoading(true)
-
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
 
-    if (userError || !user) {
+    if (userError) {
+      throw userError
+    }
+
+    if (!user) {
       navigate('/login', { replace: true })
       return
     }
@@ -77,7 +107,11 @@ function DashboardPage() {
       .eq('id', user.id)
       .maybeSingle()
 
-    if (error || !data) {
+    if (error) {
+      throw error
+    }
+
+    if (!data) {
       alert('Profil pengguna tidak ditemui')
       navigate('/login', { replace: true })
       return
@@ -112,7 +146,6 @@ function DashboardPage() {
     setSchoolInfo(schoolData || null)
     const loadedSetupConfig = await loadSetupStatus(data.school_id)
     setSetupConfig(loadedSetupConfig || null)
-    setLoading(false)
   }
 
   const loadSetupStatus = async (schoolId) => {
@@ -477,6 +510,13 @@ function DashboardPage() {
       </header>
 
       <main style={styles.container}>
+        {errorMessage ? (
+          <section style={styles.sectionCard}>
+            <h2 style={styles.cardTitle}>Sesi Tidak Sah</h2>
+            <p style={styles.helperText}>{errorMessage}</p>
+          </section>
+        ) : null}
+
         <section style={styles.heroCard}>
           <div style={styles.heroGlow} />
           <div style={styles.heroGlowSecondary} />
