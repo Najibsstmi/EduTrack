@@ -3,6 +3,26 @@ import { supabase } from '../lib/supabaseClient'
 
 const DEFAULT_GRADE_KEYS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
 
+function normaliseExamKey(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function createEmptyGradeCounts() {
+  return {
+    'A+': 0,
+    'A': 0,
+    'A-': 0,
+    'B+': 0,
+    'B': 0,
+    'C+': 0,
+    'C': 0,
+    'D': 0,
+    'E': 0,
+    'TH': 0,
+    'G': 0,
+  }
+}
+
 function getExamOptionsForGrade(setupConfig, gradeLabel) {
   if (!setupConfig || !gradeLabel) return []
 
@@ -26,34 +46,9 @@ function getExamOptionsForGrade(setupConfig, gradeLabel) {
 
       const label = item?.label || item?.value || item?.code || item?.exam_key || value
 
-      return value
-        ? {
-            value,
-            label,
-          }
-        : null
+      return value ? { value, label } : null
     })
     .filter(Boolean)
-}
-
-function normaliseExamKey(value) {
-  return String(value || '').trim().toUpperCase()
-}
-
-function createEmptyGradeCounts() {
-  return {
-    'A+': 0,
-    'A': 0,
-    'A-': 0,
-    'B+': 0,
-    'B': 0,
-    'C+': 0,
-    'C': 0,
-    'D': 0,
-    'E': 0,
-    'TH': 0,
-    'G': 0,
-  }
 }
 
 export default function ClassSubjectAnalysisPanel({
@@ -82,31 +77,47 @@ export default function ClassSubjectAnalysisPanel({
       setError('')
 
       try {
-        const [{ data: enrollments, error: enrollmentsError }, { data: scores, error: scoresError }] =
-          await Promise.all([
-            supabase
-              .from('student_enrollments')
-              .select('id')
-              .eq('school_id', schoolId)
-              .eq('class_id', classId),
+        // 1) Ambil semua kelas dalam tingkatan yang sama
+        const { data: allClasses, error: classesError } = await supabase
+          .from('classes')
+          .select('id, class_name, tingkatan')
+          .eq('school_id', schoolId)
+          .eq('tingkatan', gradeLabel)
 
-            supabase
-              .from('student_scores')
-              .select(
-                'student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, school_id, class_id, subject_id'
-              )
-              .eq('school_id', schoolId)
-              .eq('class_id', classId)
-              .eq('subject_id', subjectId),
-          ])
+        if (classesError) throw classesError
+
+        const classIds = (allClasses || []).map((cls) => cls.id)
+
+        if (classIds.length === 0) {
+          setRows([])
+          setLoading(false)
+          return
+        }
+
+        // 2) Ambil semua enrollment dalam semua kelas tingkatan itu
+        const { data: enrollments, error: enrollmentsError } = await supabase
+          .from('student_enrollments')
+          .select('id, class_id')
+          .eq('school_id', schoolId)
+          .in('class_id', classIds)
 
         if (enrollmentsError) throw enrollmentsError
-        if (scoresError) throw scoresError
 
         const enrollmentRows = enrollments || []
         const totalStudents = enrollmentRows.length
-
         const validEnrollmentIds = new Set(enrollmentRows.map((item) => item.id))
+
+        // 3) Ambil semua score subjek semasa untuk semua kelas tingkatan itu
+        const { data: scores, error: scoresError } = await supabase
+          .from('student_scores')
+          .select(
+            'student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, school_id, class_id, subject_id'
+          )
+          .eq('school_id', schoolId)
+          .eq('subject_id', subjectId)
+          .in('class_id', classIds)
+
+        if (scoresError) throw scoresError
 
         const scoreMap = {}
         ;(scores || []).forEach((row) => {
@@ -145,7 +156,6 @@ export default function ClassSubjectAnalysisPanel({
             }
 
             const markValue = scoreEntry.mark
-
             if (markValue === null || markValue === '' || Number.isNaN(Number(markValue))) {
               return
             }
@@ -197,7 +207,7 @@ export default function ClassSubjectAnalysisPanel({
     loadAnalysis()
   }, [schoolId, classId, subjectId, gradeLabel, setupConfig, examOptions])
 
-  if (!schoolId || !classId || !subjectId) return null
+  if (!schoolId || !classId || !subjectId || !gradeLabel) return null
 
   return (
     <div style={styles.card}>
@@ -205,7 +215,7 @@ export default function ClassSubjectAnalysisPanel({
         <div>
           <h3 style={styles.title}>Analisis Subjek Semasa</h3>
           <p style={styles.subtitle}>
-            Ringkasan analisis bagi subjek yang sedang dipilih sahaja.
+            Ringkasan analisis bagi semua kelas dalam {gradeLabel} untuk subjek yang sedang dipilih.
           </p>
         </div>
       </div>
@@ -307,8 +317,8 @@ const styles = {
   },
   table: {
     width: '100%',
-    borderCollapse: 'collapse',
     minWidth: '1200px',
+    borderCollapse: 'collapse',
   },
   th: {
     textAlign: 'left',
@@ -344,3 +354,4 @@ const styles = {
     color: '#dc2626',
   },
 }
+
