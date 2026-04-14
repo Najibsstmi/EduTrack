@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
+import ClassSubjectAnalysisPanel from '../components/ClassSubjectAnalysisPanel'
 import {
   findMatchingConfigEntry,
   getExamStructureForGrade,
@@ -2154,6 +2155,14 @@ export default function StudentScoresPage() {
             {saving ? 'Menyimpan...' : 'Simpan Markah'}
           </button>
         </div>
+
+        <ClassSubjectAnalysisPanel
+          schoolId={profile?.school_id}
+          classId={selectedClass}
+          subjectId={selectedSubject}
+          gradeLabel={selectedGradeLabel}
+          setupConfig={setupConfig}
+        />
       </div>
     </div>
   )
