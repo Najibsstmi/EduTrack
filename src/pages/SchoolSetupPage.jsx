@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import AppHeader from '../components/AppHeader'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
@@ -408,16 +408,23 @@ export default function SchoolSetupPage() {
 
         <AppHeader
           title="Tetapan Akademik Sekolah"
-          subtitle="Tetapkan tingkatan / tahun aktif, bilangan kelas, bilangan AR, dan bilangan OTR."
-          actions={
-            <>
-              <Link to="/dashboard" className="btn-secondary">
-                Dashboard
-              </Link>
-              <Link to="/school-setup/exams" className="btn-secondary">
-                Tetapan Peperiksaan →
-              </Link>
-            </>
+          actionLeft={
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard')}
+              className="rounded-xl border border-slate-300 px-4 py-2 font-medium"
+            >
+              Dashboard
+            </button>
+          }
+          actionRight={
+            <button
+              type="button"
+              onClick={() => navigate('/school-setup/exams')}
+              className="rounded-xl border border-slate-300 px-4 py-2 font-medium"
+            >
+              Tetapan Peperiksaan →
+            </button>
           }
         />
 

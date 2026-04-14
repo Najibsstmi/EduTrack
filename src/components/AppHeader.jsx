@@ -1,59 +1,45 @@
-import { Link } from 'react-router-dom'
-
 /**
  * AppHeader — Global page header with EduTrack branding.
  *
  * Props:
- *   title    {string}        — Main page title (required)
- *   subtitle {string}        — Optional subtitle below the title
- *   actions  {ReactNode}     — Right-side slot: pass <Link> / <button> elements
+ *   title       {string}      — Main page title (required)
+ *   actionLeft  {ReactNode}   — Optional left-side action button
+ *   actionRight {ReactNode}   — Optional right-side action button
  *
  * Usage:
  *   <AppHeader
  *     title="Tetapan Akademik Sekolah"
- *     subtitle="Langkah 1 daripada 5"
- *     actions={
- *       <>
- *         <Link to="/school-dashboard" className="btn-secondary">Dashboard</Link>
- *         <Link to="/school-setup/exams" className="btn-secondary">Tetapan Peperiksaan →</Link>
- *       </>
- *     }
+ *     actionLeft={<button onClick={() => navigate('/dashboard')}>Dashboard</button>}
+ *     actionRight={<button onClick={() => navigate('/school-setup/exams')}>Tetapan Peperiksaan →</button>}
  *   />
  */
-export default function AppHeader({ title, subtitle, actions }) {
+export default function AppHeader({ title, actionLeft, actionRight }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 flex items-center justify-between gap-3">
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6 flex items-center justify-between">
 
-      {/* LEFT — logo + text */}
-      <div className="flex items-center gap-3 min-w-0">
-
-        {/* Logo */}
+      {/* LEFT */}
+      <div className="flex items-center gap-3">
         <img
           src="/edutrack-logo.png"
           alt="EduTrack"
-          className="w-10 h-10 object-contain rounded-xl bg-blue-50 p-1 shrink-0"
+          className="w-10 h-10 object-contain rounded-lg bg-slate-50 p-1"
         />
 
-        {/* Text */}
-        <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            EduTrack
+        <div>
+          <div className="text-xs tracking-[0.2em] text-slate-500">
+            EDUTRACK
           </div>
-          <div className="text-lg font-semibold text-gray-800 leading-tight truncate">
+          <h1 className="text-2xl font-bold text-slate-900">
             {title}
-          </div>
-          {subtitle && (
-            <div className="text-sm text-gray-500 truncate">
-              {subtitle}
-            </div>
-          )}
+          </h1>
         </div>
       </div>
 
-      {/* RIGHT — action buttons slot */}
-      {actions && (
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-          {actions}
+      {/* RIGHT */}
+      {(actionLeft || actionRight) && (
+        <div className="flex gap-3">
+          {actionLeft}
+          {actionRight}
         </div>
       )}
     </div>
