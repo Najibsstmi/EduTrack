@@ -2160,8 +2160,6 @@ export default function StudentScoresPage() {
           schoolId={profile?.school_id}
           classId={selectedClass}
           subjectId={selectedSubject}
-          gradeLabel={selectedGradeLabel}
-          setupConfig={setupConfig}
         />
       </div>
     </div>

@@ -3,8 +3,67 @@ import { supabase } from '../lib/supabaseClient'
 
 const DEFAULT_GRADE_KEYS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
 
-function normaliseExamKey(value) {
+function normaliseText(value) {
   return String(value || '').trim().toUpperCase()
+}
+
+function normaliseExamKey(value) {
+  return normaliseText(value)
+}
+
+function getFlexibleExamOptions(setupConfig, actualTingkatan) {
+  if (!setupConfig || !actualTingkatan) return []
+
+  const examStructure = setupConfig.exam_structure || {}
+  const keys = Object.keys(examStructure)
+
+  if (!keys.length) return []
+
+  const target = normaliseText(actualTingkatan)
+
+  // Cuba match exact dulu
+  let matchedKey = keys.find((key) => normaliseText(key) === target)
+
+  // Kalau tak jumpa, cuba match nombor tingkatan
+  if (!matchedKey) {
+    const targetNumber = target.replace(/[^0-9]/g, '')
+    matchedKey = keys.find((key) => {
+      const keyNumber = normaliseText(key).replace(/[^0-9]/g, '')
+      return keyNumber && targetNumber && keyNumber === targetNumber
+    })
+  }
+
+  // Fallback: kalau actualTingkatan = "TINGKATAN 5", tapi key simpan "5" atau sebaliknya
+  if (!matchedKey) {
+    matchedKey = keys.find((key) => {
+      const a = normaliseText(key).replace('TINGKATAN', '').trim()
+      const b = target.replace('TINGKATAN', '').trim()
+      return a === b
+    })
+  }
+
+  if (!matchedKey) return []
+
+  const rawOptions = examStructure[matchedKey] || []
+  if (!Array.isArray(rawOptions)) return []
+
+  return rawOptions
+    .map((item) => {
+      if (typeof item === 'string') {
+        return {
+          value: normaliseExamKey(item),
+          label: item,
+        }
+      }
+
+      const value = normaliseExamKey(
+        item?.value || item?.code || item?.exam_key || item?.label || ''
+      )
+      const label = item?.label || item?.value || item?.code || item?.exam_key || value
+
+      return value ? { value, label } : null
+    })
+    .filter(Boolean)
 }
 
 function createEmptyGradeCounts() {
@@ -23,53 +82,23 @@ function createEmptyGradeCounts() {
   }
 }
 
-function getExamOptionsForGrade(setupConfig, gradeLabel) {
-  if (!setupConfig || !gradeLabel) return []
-
-  const examStructure = setupConfig.exam_structure || {}
-  const rawOptions = examStructure[gradeLabel] || []
-
-  if (!Array.isArray(rawOptions)) return []
-
-  return rawOptions
-    .map((item) => {
-      if (typeof item === 'string') {
-        return {
-          value: String(item).trim().toUpperCase(),
-          label: item,
-        }
-      }
-
-      const value = String(item?.value || item?.code || item?.exam_key || item?.label || '')
-        .trim()
-        .toUpperCase()
-
-      const label = item?.label || item?.value || item?.code || item?.exam_key || value
-
-      return value ? { value, label } : null
-    })
-    .filter(Boolean)
-}
-
 export default function ClassSubjectAnalysisPanel({
   schoolId,
   classId,
   subjectId,
-  gradeLabel,
-  setupConfig,
 }) {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
-
-  const examOptions = useMemo(() => {
-    return getExamOptionsForGrade(setupConfig, gradeLabel)
-  }, [setupConfig, gradeLabel])
+  const [actualTingkatan, setActualTingkatan] = useState('')
+  const [examOptions, setExamOptions] = useState([])
 
   useEffect(() => {
     const loadAnalysis = async () => {
-      if (!schoolId || !classId || !subjectId || !gradeLabel) {
+      if (!schoolId || !classId || !subjectId) {
         setRows([])
+        setActualTingkatan('')
+        setExamOptions([])
         return
       }
 
@@ -77,24 +106,62 @@ export default function ClassSubjectAnalysisPanel({
       setError('')
 
       try {
-        // 1) Ambil semua kelas dalam tingkatan yang sama
+        // 1. Ambil class semasa dulu untuk tahu tingkatan sebenar
+        const { data: currentClass, error: currentClassError } = await supabase
+          .from('classes')
+          .select('id, class_name, tingkatan')
+          .eq('school_id', schoolId)
+          .eq('id', classId)
+          .single()
+
+        if (currentClassError) throw currentClassError
+
+        const currentTingkatan = currentClass?.tingkatan || ''
+        setActualTingkatan(currentTingkatan)
+
+        if (!currentTingkatan) {
+          setRows([])
+          setExamOptions([])
+          setLoading(false)
+          return
+        }
+
+        // 2. Ambil exam dari DB sebenar
+        const { data: examConfigs, error: examError } = await supabase
+          .from('exam_configs')
+          .select('exam_key, exam_name, exam_order')
+          .eq('school_id', schoolId)
+          .eq('grade_label', currentTingkatan)
+          .eq('is_active', true)
+          .order('exam_order', { ascending: true })
+
+        if (examError) throw examError
+
+        const examList = (examConfigs || []).map((item) => ({
+          value: String(item.exam_key).toUpperCase(),
+          label: item.exam_name || item.exam_key,
+        }))
+
+        setExamOptions(examList)
+
+        // 3. Ambil semua kelas dalam tingkatan yang sama
         const { data: allClasses, error: classesError } = await supabase
           .from('classes')
           .select('id, class_name, tingkatan')
           .eq('school_id', schoolId)
-          .eq('tingkatan', gradeLabel)
+          .eq('tingkatan', currentTingkatan)
 
         if (classesError) throw classesError
 
         const classIds = (allClasses || []).map((cls) => cls.id)
 
-        if (classIds.length === 0) {
+        if (!classIds.length) {
           setRows([])
           setLoading(false)
           return
         }
 
-        // 2) Ambil semua enrollment dalam semua kelas tingkatan itu
+        // 3. Ambil semua enrollment dalam semua kelas tingkatan itu
         const { data: enrollments, error: enrollmentsError } = await supabase
           .from('student_enrollments')
           .select('id, class_id')
@@ -105,14 +172,19 @@ export default function ClassSubjectAnalysisPanel({
 
         const enrollmentRows = enrollments || []
         const totalStudents = enrollmentRows.length
+
+        if (!totalStudents) {
+          setRows([])
+          setLoading(false)
+          return
+        }
+
         const validEnrollmentIds = new Set(enrollmentRows.map((item) => item.id))
 
-        // 3) Ambil semua score subjek semasa untuk semua kelas tingkatan itu
+        // 4. Ambil semua score subjek semasa untuk semua kelas tingkatan itu
         const { data: scores, error: scoresError } = await supabase
           .from('student_scores')
-          .select(
-            'student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, school_id, class_id, subject_id'
-          )
+          .select('student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, class_id')
           .eq('school_id', schoolId)
           .eq('subject_id', subjectId)
           .in('class_id', classIds)
@@ -132,6 +204,12 @@ export default function ClassSubjectAnalysisPanel({
 
           scoreMap[row.student_enrollment_id][examKey] = row
         })
+
+        if (!examOptions.length) {
+          setRows([])
+          setLoading(false)
+          return
+        }
 
         const summaryRows = examOptions.map((exam) => {
           const examKey = normaliseExamKey(exam.value)
@@ -162,7 +240,7 @@ export default function ClassSubjectAnalysisPanel({
 
             hadir += 1
 
-            const rawGrade = String(scoreEntry.grade_name || '').trim().toUpperCase()
+            const rawGrade = normaliseText(scoreEntry.grade_name)
             const gradeKey = DEFAULT_GRADE_KEYS.includes(rawGrade) ? rawGrade : 'G'
 
             gradeCounts[gradeKey] += 1
@@ -197,6 +275,7 @@ export default function ClassSubjectAnalysisPanel({
 
         setRows(summaryRows)
       } catch (err) {
+        console.error('ClassSubjectAnalysisPanel error:', err)
         setError(err.message || 'Gagal memuatkan analisis.')
         setRows([])
       } finally {
@@ -205,9 +284,9 @@ export default function ClassSubjectAnalysisPanel({
     }
 
     loadAnalysis()
-  }, [schoolId, classId, subjectId, gradeLabel, setupConfig, examOptions])
+  }, [schoolId, classId, subjectId])
 
-  if (!schoolId || !classId || !subjectId || !gradeLabel) return null
+  if (!schoolId || !classId || !subjectId) return null
 
   return (
     <div style={styles.card}>
@@ -215,7 +294,7 @@ export default function ClassSubjectAnalysisPanel({
         <div>
           <h3 style={styles.title}>Analisis Subjek Semasa</h3>
           <p style={styles.subtitle}>
-            Ringkasan analisis bagi semua kelas dalam {gradeLabel} untuk subjek yang sedang dipilih.
+            Ringkasan analisis bagi semua kelas dalam {actualTingkatan || '-'} untuk subjek yang sedang dipilih.
           </p>
         </div>
       </div>
