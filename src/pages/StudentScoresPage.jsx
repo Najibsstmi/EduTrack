@@ -367,10 +367,12 @@ export default function StudentScoresPage() {
 
     if (error) throw error
 
-    return (data || []).map((item) => ({
-      key: String(item.exam_key || '').trim().toUpperCase(),
-      name: item.exam_name || item.exam_key,
-    }))
+    return (data || [])
+      .map((item) => ({
+        key: normalizeExamKey(item.exam_key),
+        name: item.exam_name || item.exam_key,
+      }))
+      .filter((item) => isAllowedExamKey(item.key))
   }
 
   const ensureExamIsActive = async ({ schoolId, gradeLabel, examKey }) => {
@@ -1465,6 +1467,19 @@ export default function StudentScoresPage() {
           continue
         }
 
+        const isExamActive = await ensureExamIsActive({
+          schoolId: profile.school_id,
+          gradeLabel: matchedClass.tingkatan,
+          examKey,
+        })
+
+        if (!isExamActive) {
+          errors.push(
+            `Baris ${rowNumber}: peperiksaan '${examKey}' belum dibuka untuk ${matchedClass.tingkatan}`
+          )
+          continue
+        }
+
         if (Number.isNaN(mark) || mark < 0 || mark > 100) {
           errors.push(
             `Baris ${rowNumber}: markah '${row.markah}' mesti antara 0 hingga 100`
@@ -1588,24 +1603,26 @@ export default function StudentScoresPage() {
   const handleSave = async () => {
     if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
 
+    setSaving(true)
+
     try {
-      const isExamStillActive = await ensureExamIsActive({
+      const examStillActive = await ensureExamIsActive({
         schoolId: profile.school_id,
         gradeLabel: selectedGradeLabel,
         examKey: selectedExam,
       })
 
-      if (!isExamStillActive) {
+      if (!examStillActive) {
+        setSaving(false)
         alert('Peperiksaan ini belum dibuka atau telah ditutup oleh admin sekolah.')
         return
       }
     } catch (error) {
+      setSaving(false)
       console.error('ensureExamIsActive error:', error)
       alert('Gagal menyemak status peperiksaan.')
       return
     }
-
-    setSaving(true)
 
     const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
     const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
@@ -2171,7 +2188,7 @@ export default function StudentScoresPage() {
 
           <button
             onClick={handleSave}
-            disabled={saving || !selectedClass || !selectedSubject || !selectedExam || activeExamOptions.length === 0}
+            disabled={saving || !selectedExam || activeExamOptions.length === 0}
             className="mt-5 rounded-xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
           >
             {saving ? 'Menyimpan...' : 'Simpan Markah'}

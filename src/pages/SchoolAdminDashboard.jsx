@@ -887,6 +887,32 @@ export default function SchoolAdminDashboard() {
     }))
   }, [completionRows])
 
+  const EXAM_MATRIX_KEYS = ['TOV', 'AR1', 'AR2', 'ETR']
+
+  const groupedExamAccessRows = useMemo(() => {
+    const grouped = {}
+
+    for (const row of examAccessRows || []) {
+      const gradeLabel = String(row.grade_label || '').trim()
+      const examKey = String(row.exam_key || '').trim().toUpperCase()
+
+      if (!EXAM_MATRIX_KEYS.includes(examKey)) continue
+
+      if (!grouped[gradeLabel]) {
+        grouped[gradeLabel] = {
+          grade_label: gradeLabel,
+          exams: {},
+        }
+      }
+
+      grouped[gradeLabel].exams[examKey] = row
+    }
+
+    return Object.values(grouped).sort((a, b) =>
+      a.grade_label.localeCompare(b.grade_label, 'ms', { numeric: true })
+    )
+  }, [examAccessRows])
+
   const toggleCompletionGrade = (grade) => {
     setExpandedCompletionGrades((prev) => ({
       ...prev,
@@ -1430,39 +1456,53 @@ export default function SchoolAdminDashboard() {
 
             {examAccessLoading ? (
               <div style={styles.infoText}>Sedang memuat status peperiksaan...</div>
-            ) : examAccessRows.length === 0 ? (
+            ) : groupedExamAccessRows.length === 0 ? (
               <div style={styles.infoText}>Tiada konfigurasi peperiksaan ditemui.</div>
             ) : (
               <div style={styles.tableWrap}>
-                <table style={styles.examAccessTable}>
+                <table style={styles.table}>
                   <thead>
                     <tr>
-                      <th style={styles.examAccessTh}>Tingkatan</th>
-                      <th style={styles.examAccessTh}>Kod</th>
-                      <th style={styles.examAccessTh}>Nama</th>
-                      <th style={styles.examAccessTh}>Status</th>
+                      <th style={styles.th}>Tingkatan</th>
+                      <th style={styles.thCenter}>TOV</th>
+                      <th style={styles.thCenter}>AR1 / PPT</th>
+                      <th style={styles.thCenter}>AR2 / PPC</th>
+                      <th style={styles.thCenter}>ETR</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {examAccessRows.map((row) => (
-                      <tr key={row.id}>
-                        <td style={styles.examAccessTd}>{row.grade_label}</td>
-                        <td style={styles.examAccessTdStrong}>{row.exam_key}</td>
-                        <td style={styles.examAccessTd}>{row.exam_name || row.exam_key}</td>
-                        <td style={styles.examAccessTd}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleExamAccess(row.id, !row.is_active)}
-                            disabled={examAccessSavingId === row.id}
-                            style={{
-                              ...styles.toggleButton,
-                              ...(row.is_active ? styles.toggleOn : styles.toggleOff),
-                              ...(examAccessSavingId === row.id ? styles.toggleDisabled : {}),
-                            }}
-                          >
-                            {row.is_active ? 'Dibuka' : 'Ditutup'}
-                          </button>
-                        </td>
+                    {groupedExamAccessRows.map((group) => (
+                      <tr key={group.grade_label}>
+                        <td style={styles.tdStrong}>{group.grade_label}</td>
+
+                        {EXAM_MATRIX_KEYS.map((examKey) => {
+                          const row = group.exams[examKey]
+
+                          if (!row) {
+                            return (
+                              <td key={examKey} style={styles.tdCenter}>
+                                <span style={styles.mutedDash}>—</span>
+                              </td>
+                            )
+                          }
+
+                          return (
+                            <td key={examKey} style={styles.tdCenter}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleExamAccess(row.id, !row.is_active)}
+                                disabled={examAccessSavingId === row.id}
+                                style={{
+                                  ...styles.matrixToggleButton,
+                                  ...(row.is_active ? styles.matrixToggleOn : styles.matrixToggleOff),
+                                  ...(examAccessSavingId === row.id ? styles.toggleDisabled : {}),
+                                }}
+                              >
+                                {row.is_active ? 'Dibuka' : 'Ditutup'}
+                              </button>
+                            </td>
+                          )
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -1992,10 +2032,19 @@ const styles = {
   searchRow: { marginBottom: '16px' },
   searchInput: { width: '100%', maxWidth: '360px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px 14px', outline: 'none', fontSize: '14px' },
   tableWrap: { overflowX: 'auto' },
-  examAccessTable: { width: '100%', borderCollapse: 'collapse' },
   table: { width: '100%', borderCollapse: 'collapse', minWidth: '900px' },
-  examAccessTh: {
-    textAlign: 'left',
+  th: { textAlign: 'left', padding: '12px 14px', fontSize: '13px', color: '#64748b', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' },
+  td: { padding: '14px', borderBottom: '1px solid #eef2f7', verticalAlign: 'top', fontSize: '14px', color: '#0f172a' },
+  tdStrong: {
+    padding: '12px 10px',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#0f172a',
+    borderBottom: '1px solid #f1f5f9',
+    whiteSpace: 'nowrap',
+  },
+  thCenter: {
+    textAlign: 'center',
     fontSize: '12px',
     fontWeight: 700,
     color: '#475569',
@@ -2004,23 +2053,14 @@ const styles = {
     borderBottom: '1px solid #e2e8f0',
     whiteSpace: 'nowrap',
   },
-  th: { textAlign: 'left', padding: '12px 14px', fontSize: '13px', color: '#64748b', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' },
-  examAccessTd: {
+  tdCenter: {
     padding: '12px 10px',
     fontSize: '13px',
     color: '#0f172a',
     borderBottom: '1px solid #f1f5f9',
+    textAlign: 'center',
     whiteSpace: 'nowrap',
   },
-  examAccessTdStrong: {
-    padding: '12px 10px',
-    fontSize: '13px',
-    fontWeight: 700,
-    color: '#0f172a',
-    borderBottom: '1px solid #f1f5f9',
-    whiteSpace: 'nowrap',
-  },
-  td: { padding: '14px', borderBottom: '1px solid #eef2f7', verticalAlign: 'top', fontSize: '14px', color: '#0f172a' },
   toggleButton: {
     border: 'none',
     borderRadius: '999px',
@@ -2040,6 +2080,27 @@ const styles = {
   toggleOff: {
     background: '#fee2e2',
     color: '#991b1b',
+  },
+  matrixToggleButton: {
+    border: 'none',
+    borderRadius: '999px',
+    minWidth: '92px',
+    padding: '8px 14px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  matrixToggleOn: {
+    background: '#dcfce7',
+    color: '#166534',
+  },
+  matrixToggleOff: {
+    background: '#fee2e2',
+    color: '#991b1b',
+  },
+  mutedDash: {
+    color: '#94a3b8',
+    fontWeight: 700,
   },
   badge: { display: 'inline-flex', alignItems: 'center', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 700 },
   actionRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
