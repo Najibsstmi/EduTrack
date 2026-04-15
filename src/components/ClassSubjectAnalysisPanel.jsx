@@ -138,11 +138,13 @@ export default function ClassSubjectAnalysisPanel({
         if (examError) throw examError
 
         const examList = (examConfigs || []).map((item) => ({
-          value: String(item.exam_key).toUpperCase(),
+          value: String(item.exam_key || '').trim().toUpperCase(),
           label: item.exam_name || item.exam_key,
         }))
 
         setExamOptions(examList)
+        console.log(examList)
+        console.log('examOptions:', examList)
 
         // 3. Ambil semua kelas dalam tingkatan yang sama
         const { data: allClasses, error: classesError } = await supabase
@@ -205,13 +207,11 @@ export default function ClassSubjectAnalysisPanel({
           scoreMap[row.student_enrollment_id][examKey] = row
         })
 
-        if (!examOptions.length) {
-          setRows([])
-          setLoading(false)
-          return
-        }
+        console.log(scores || [])
+        console.log('scores sample:', (scores || []).slice(0, 5))
+        console.log('totalStudents:', totalStudents)
 
-        const summaryRows = examOptions.map((exam) => {
+        const summaryRows = examList.map((exam) => {
           const examKey = normaliseExamKey(exam.value)
           const gradeCounts = createEmptyGradeCounts()
 

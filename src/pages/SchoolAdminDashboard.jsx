@@ -67,6 +67,9 @@ export default function SchoolAdminDashboard() {
   const [completionSubjects, setCompletionSubjects] = useState([])
   const [selectedExamKey, setSelectedExamKey] = useState('TOV')
   const [examOptions, setExamOptions] = useState([])
+  const [examAccessRows, setExamAccessRows] = useState([])
+  const [examAccessLoading, setExamAccessLoading] = useState(false)
+  const [examAccessSavingId, setExamAccessSavingId] = useState('')
   const [expandedCompletionGrades, setExpandedCompletionGrades] = useState(() =>
     COMPLETION_GRADE_GROUPS.reduce((acc, grade) => {
       acc[grade] = grade === 'Tingkatan 1'
@@ -134,6 +137,12 @@ export default function SchoolAdminDashboard() {
 
     fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig)
   }, [selectedExamKey])
+
+  useEffect(() => {
+    if (!adminProfile?.school_id) return
+
+    loadExamAccessRows(adminProfile.school_id)
+  }, [adminProfile?.school_id])
 
   const checkAccessAndFetch = async () => {
     const {
@@ -230,6 +239,29 @@ export default function SchoolAdminDashboard() {
       fetchSchoolData(profile.school_id),
       fetchScoreCompletionMatrix(profile.school_id, setupData),
     ])
+  }
+
+  const loadExamAccessRows = async (schoolId = adminProfile?.school_id) => {
+    if (!schoolId) return
+
+    setExamAccessLoading(true)
+
+    try {
+      const { data, error } = await supabase
+        .from('exam_configs')
+        .select('id, school_id, grade_label, exam_key, exam_name, exam_order, is_active')
+        .eq('school_id', schoolId)
+        .order('grade_label', { ascending: true })
+        .order('exam_order', { ascending: true })
+
+      if (error) throw error
+
+      setExamAccessRows(data || [])
+    } catch (err) {
+      console.error('loadExamAccessRows error:', err)
+    } finally {
+      setExamAccessLoading(false)
+    }
   }
 
   const fetchSchoolData = async (schoolId) => {
@@ -491,7 +523,35 @@ export default function SchoolAdminDashboard() {
     await Promise.all([
       fetchSchoolData(adminProfile.school_id),
       fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig),
+      loadExamAccessRows(adminProfile.school_id),
     ])
+  }
+
+  const handleToggleExamAccess = async (rowId, nextValue) => {
+    if (!adminProfile?.school_id || !rowId) return
+
+    setExamAccessSavingId(rowId)
+
+    try {
+      const { error } = await supabase
+        .from('exam_configs')
+        .update({ is_active: nextValue })
+        .eq('id', rowId)
+        .eq('school_id', adminProfile.school_id)
+
+      if (error) throw error
+
+      setExamAccessRows((prev) =>
+        prev.map((row) =>
+          row.id === rowId ? { ...row, is_active: nextValue } : row
+        )
+      )
+    } catch (err) {
+      console.error('handleToggleExamAccess error:', err)
+      alert('Gagal mengemaskini status peperiksaan.')
+    } finally {
+      setExamAccessSavingId('')
+    }
   }
 
   const updateUser = async (userId, payload, successMessage) => {
@@ -1359,6 +1419,61 @@ export default function SchoolAdminDashboard() {
 
         {isSchoolAdmin && (
           <section style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <div>
+                <h3 style={styles.sectionTitle}>Status Input Peperiksaan</h3>
+                <p style={styles.sectionDesc}>
+                  School admin boleh buka atau tutup peperiksaan yang dibenarkan untuk input markah guru.
+                </p>
+              </div>
+            </div>
+
+            {examAccessLoading ? (
+              <div style={styles.infoText}>Sedang memuat status peperiksaan...</div>
+            ) : examAccessRows.length === 0 ? (
+              <div style={styles.infoText}>Tiada konfigurasi peperiksaan ditemui.</div>
+            ) : (
+              <div style={styles.tableWrap}>
+                <table style={styles.examAccessTable}>
+                  <thead>
+                    <tr>
+                      <th style={styles.examAccessTh}>Tingkatan</th>
+                      <th style={styles.examAccessTh}>Kod</th>
+                      <th style={styles.examAccessTh}>Nama</th>
+                      <th style={styles.examAccessTh}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {examAccessRows.map((row) => (
+                      <tr key={row.id}>
+                        <td style={styles.examAccessTd}>{row.grade_label}</td>
+                        <td style={styles.examAccessTdStrong}>{row.exam_key}</td>
+                        <td style={styles.examAccessTd}>{row.exam_name || row.exam_key}</td>
+                        <td style={styles.examAccessTd}>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleExamAccess(row.id, !row.is_active)}
+                            disabled={examAccessSavingId === row.id}
+                            style={{
+                              ...styles.toggleButton,
+                              ...(row.is_active ? styles.toggleOn : styles.toggleOff),
+                              ...(examAccessSavingId === row.id ? styles.toggleDisabled : {}),
+                            }}
+                          >
+                            {row.is_active ? 'Dibuka' : 'Ditutup'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {isSchoolAdmin && (
+          <section style={styles.sectionCard}>
             <div style={styles.sectionHeaderResponsive}>
               <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
               <div style={styles.filterWrap}>
@@ -1799,8 +1914,28 @@ const styles = {
     fontWeight: 600,
   },
   primaryButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' },
-  sectionHeader: { marginBottom: '14px' },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+  },
   sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
+  sectionTitle: {
+    margin: 0,
+    fontSize: '20px',
+    fontWeight: 800,
+    color: '#0f172a',
+  },
+  sectionDesc: {
+    margin: '6px 0 0',
+    fontSize: '13px',
+    color: '#64748b',
+  },
+  infoText: {
+    fontSize: '14px',
+    color: '#64748b',
+  },
   quickActionGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -1857,9 +1992,55 @@ const styles = {
   searchRow: { marginBottom: '16px' },
   searchInput: { width: '100%', maxWidth: '360px', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '12px 14px', outline: 'none', fontSize: '14px' },
   tableWrap: { overflowX: 'auto' },
+  examAccessTable: { width: '100%', borderCollapse: 'collapse' },
   table: { width: '100%', borderCollapse: 'collapse', minWidth: '900px' },
+  examAccessTh: {
+    textAlign: 'left',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#475569',
+    background: '#f8fafc',
+    padding: '12px 10px',
+    borderBottom: '1px solid #e2e8f0',
+    whiteSpace: 'nowrap',
+  },
   th: { textAlign: 'left', padding: '12px 14px', fontSize: '13px', color: '#64748b', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' },
+  examAccessTd: {
+    padding: '12px 10px',
+    fontSize: '13px',
+    color: '#0f172a',
+    borderBottom: '1px solid #f1f5f9',
+    whiteSpace: 'nowrap',
+  },
+  examAccessTdStrong: {
+    padding: '12px 10px',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: '#0f172a',
+    borderBottom: '1px solid #f1f5f9',
+    whiteSpace: 'nowrap',
+  },
   td: { padding: '14px', borderBottom: '1px solid #eef2f7', verticalAlign: 'top', fontSize: '14px', color: '#0f172a' },
+  toggleButton: {
+    border: 'none',
+    borderRadius: '999px',
+    padding: '8px 14px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  toggleDisabled: {
+    opacity: 0.6,
+    cursor: 'not-allowed',
+  },
+  toggleOn: {
+    background: '#dcfce7',
+    color: '#166534',
+  },
+  toggleOff: {
+    background: '#fee2e2',
+    color: '#991b1b',
+  },
   badge: { display: 'inline-flex', alignItems: 'center', borderRadius: '999px', padding: '6px 10px', fontSize: '12px', fontWeight: 700 },
   actionRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
   successButton: { background: '#16a34a', color: '#ffffff', border: 'none', borderRadius: '10px', padding: '8px 12px', cursor: 'pointer', fontWeight: 600 },

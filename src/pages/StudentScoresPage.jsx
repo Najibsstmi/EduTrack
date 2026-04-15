@@ -4,8 +4,6 @@ import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
 import ClassSubjectAnalysisPanel from '../components/ClassSubjectAnalysisPanel'
 import {
-  findMatchingConfigEntry,
-  getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
 import {
@@ -99,66 +97,6 @@ const isAllowedExamKey = (value) => {
 
   // OTR tak perlu import manual sebab sistem jana automatik
   return false
-}
-
-const buildManualExamOptions = (structuredExams = [], arCount = 0, otrCount = 0) => {
-  let highestArIndex = 0
-  let highestOtrIndex = 0
-
-  ;(structuredExams || []).forEach((exam) => {
-    const key = String(exam?.key || '').toUpperCase()
-
-    const arMatch = key.match(/^AR(\d+)$/)
-    if (arMatch) {
-      highestArIndex = Math.max(highestArIndex, Number(arMatch[1]))
-    }
-
-    const otrMatch = key.match(/^OTR(\d+)$/)
-    if (otrMatch) {
-      highestOtrIndex = Math.max(highestOtrIndex, Number(otrMatch[1]))
-    }
-  })
-
-  const normalizedArCount = Math.max(0, Number(arCount) || 0)
-  const normalizedOtrCount = Math.max(0, Number(otrCount) || 0)
-  const stageCount = Math.max(
-    normalizedArCount,
-    normalizedOtrCount,
-    highestArIndex,
-    highestOtrIndex
-  )
-
-  const manualOptions = [
-    { key: 'TOV', name: 'TOV' },
-  ]
-
-  for (let i = 1; i <= stageCount; i++) {
-    manualOptions.push({
-      key: `AR${i}`,
-      name: `AR${i}`,
-    })
-  }
-
-  manualOptions.push({
-    key: 'ETR',
-    name: 'ETR',
-  })
-
-  return manualOptions
-}
-
-const getExamOptionsForGrade = (setupConfig, gradeLabel) => {
-  if (!String(gradeLabel || '').trim()) return []
-
-  const arCountByGrade = setupConfig?.ar_count_by_grade || {}
-  const otrCountByGrade = setupConfig?.otr_count_by_grade || {}
-  const matchedArCountEntry = findMatchingConfigEntry(arCountByGrade, gradeLabel)
-  const matchedOtrCountEntry = findMatchingConfigEntry(otrCountByGrade, gradeLabel)
-  const arCount = Number(matchedArCountEntry?.[1] || 0)
-  const otrCount = Number(matchedOtrCountEntry?.[1] || 0)
-  const structuredExams = getExamStructureForGrade(setupConfig, gradeLabel)
-
-  return buildManualExamOptions(structuredExams, arCount, otrCount)
 }
 
 const parseCsvLine = (line) => {
@@ -356,6 +294,7 @@ export default function StudentScoresPage() {
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
   const [selectedExam, setSelectedExam] = useState('')
+  const [activeExamOptions, setActiveExamOptions] = useState([])
 
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
@@ -414,6 +353,40 @@ export default function StudentScoresPage() {
     const classLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
     return getGradeLabelFromClassName(classLabel)
   }, [selectedClassData])
+
+  const loadActiveExamOptions = async (schoolId, gradeLabel) => {
+    if (!schoolId || !gradeLabel) return []
+
+    const { data, error } = await supabase
+      .from('exam_configs')
+      .select('exam_key, exam_name, exam_order')
+      .eq('school_id', schoolId)
+      .eq('grade_label', gradeLabel)
+      .eq('is_active', true)
+      .order('exam_order', { ascending: true })
+
+    if (error) throw error
+
+    return (data || []).map((item) => ({
+      key: String(item.exam_key || '').trim().toUpperCase(),
+      name: item.exam_name || item.exam_key,
+    }))
+  }
+
+  const ensureExamIsActive = async ({ schoolId, gradeLabel, examKey }) => {
+    const { data, error } = await supabase
+      .from('exam_configs')
+      .select('id')
+      .eq('school_id', schoolId)
+      .eq('grade_label', gradeLabel)
+      .eq('exam_key', normalizeExamKey(examKey))
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error) throw error
+
+    return !!data
+  }
 
   const selectedSubjectData = useMemo(
     () => subjects.find((item) => String(item.id) === String(selectedSubject)) || null,
@@ -522,28 +495,10 @@ export default function StudentScoresPage() {
   }
 
   const allowedExamKeysForSelectedGrade = useMemo(() => {
-    const gradeLabel = selectedClassData?.tingkatan || ''
-    const options = getExamOptionsForGrade(setupConfig, gradeLabel)
-
     return new Set(
-      (options || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
+      (activeExamOptions || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
     )
-  }, [setupConfig, selectedClassData])
-
-  const getAllowedExamSetForGrade = (gradeLabel) => {
-    const options = getExamOptionsForGrade(setupConfig, gradeLabel)
-    return new Set(
-      (options || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
-    )
-  }
-
-  const uniqueExamOptions = useMemo(() => {
-    const examsForSelectedGrade = getExamOptionsForGrade(setupConfig, selectedGradeLabel)
-
-    return examsForSelectedGrade.filter(
-      (exam, index, arr) => index === arr.findIndex((item) => item.key === exam.key)
-    )
-  }, [setupConfig, selectedGradeLabel])
+  }, [activeExamOptions])
 
   useEffect(() => {
     if (!prefillClassId || !classes.length) return
@@ -555,16 +510,49 @@ export default function StudentScoresPage() {
   }, [prefillClassId, classes])
 
   useEffect(() => {
-    if (!selectedExam || !uniqueExamOptions.length) return
+    if (!selectedExam || !activeExamOptions.length) return
 
-    const examStillValid = uniqueExamOptions.some(
+    const examStillValid = activeExamOptions.some(
       (exam) => String(exam.key) === String(selectedExam)
     )
 
     if (!examStillValid) {
       setSelectedExam('')
     }
-  }, [uniqueExamOptions, selectedExam])
+  }, [activeExamOptions, selectedExam])
+
+  useEffect(() => {
+    const run = async () => {
+      if (!profile?.school_id || !selectedGradeLabel) {
+        setActiveExamOptions([])
+        setSelectedExam('')
+        return
+      }
+
+      try {
+        const rows = await loadActiveExamOptions(
+          profile.school_id,
+          selectedGradeLabel
+        )
+
+        setActiveExamOptions(rows)
+
+        const currentSelectedStillValid = rows.some(
+          (item) => item.key === normalizeExamKey(selectedExam)
+        )
+
+        if (!currentSelectedStillValid) {
+          setSelectedExam(rows[0]?.key || '')
+        }
+      } catch (err) {
+        console.error('loadActiveExamOptions error:', err)
+        setActiveExamOptions([])
+        setSelectedExam('')
+      }
+    }
+
+    run()
+  }, [profile?.school_id, selectedGradeLabel])
 
   useEffect(() => {
     if (!prefillExamKey) return
@@ -1418,6 +1406,7 @@ export default function StudentScoresPage() {
       const errors = []
       const validRows = []
       const scoreRowsToUpsert = []
+      const allowedExamSetCache = new Map()
 
       for (const row of bulkPreviewRows) {
         const rowNumber = row.__rowNumber
@@ -1454,7 +1443,20 @@ export default function StudentScoresPage() {
           continue
         }
 
-        const allowedExamSet = getAllowedExamSetForGrade(matchedClass.tingkatan)
+        let allowedExamSet = allowedExamSetCache.get(matchedClass.tingkatan)
+
+        if (!allowedExamSet) {
+          const activeExamOptions = await loadActiveExamOptions(
+            profile.school_id,
+            matchedClass.tingkatan
+          )
+
+          allowedExamSet = new Set(
+            activeExamOptions.map((item) => normalizeExamKey(item.key))
+          )
+
+          allowedExamSetCache.set(matchedClass.tingkatan, allowedExamSet)
+        }
 
         if (!allowedExamSet.has(examKey)) {
           errors.push(
@@ -1586,6 +1588,23 @@ export default function StudentScoresPage() {
   const handleSave = async () => {
     if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
 
+    try {
+      const isExamStillActive = await ensureExamIsActive({
+        schoolId: profile.school_id,
+        gradeLabel: selectedGradeLabel,
+        examKey: selectedExam,
+      })
+
+      if (!isExamStillActive) {
+        alert('Peperiksaan ini belum dibuka atau telah ditutup oleh admin sekolah.')
+        return
+      }
+    } catch (error) {
+      console.error('ensureExamIsActive error:', error)
+      alert('Gagal menyemak status peperiksaan.')
+      return
+    }
+
     setSaving(true)
 
     const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
@@ -1708,12 +1727,15 @@ export default function StudentScoresPage() {
               onChange={(e) => setSelectedExam(e.target.value)}
               className="rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
             >
-              <option value="">Pilih Peperiksaan</option>
-              {uniqueExamOptions.map((exam) => (
-                <option key={exam.key} value={exam.key}>
-                  {exam.name}
-                </option>
-              ))}
+              {activeExamOptions.length === 0 ? (
+                <option value="">Tiada peperiksaan dibuka</option>
+              ) : (
+                activeExamOptions.map((exam) => (
+                  <option key={exam.key} value={exam.key}>
+                    {exam.name}
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>
@@ -2149,7 +2171,7 @@ export default function StudentScoresPage() {
 
           <button
             onClick={handleSave}
-            disabled={saving || !selectedClass || !selectedSubject || !selectedExam}
+            disabled={saving || !selectedClass || !selectedSubject || !selectedExam || activeExamOptions.length === 0}
             className="mt-5 rounded-xl bg-green-600 px-5 py-3 font-semibold text-white hover:bg-green-700 disabled:opacity-60"
           >
             {saving ? 'Menyimpan...' : 'Simpan Markah'}
