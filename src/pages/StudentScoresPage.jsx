@@ -83,6 +83,20 @@ const normalizeCsvHeader = (value) => {
 const normalizeExamKey = (value) =>
   String(value || '').trim().toUpperCase()
 
+const getGuideExamKey = (examKey) => {
+  const normalized = normalizeExamKey(examKey)
+
+  if (normalized === 'ETR') return 'TOV'
+  if (normalized === 'TOV') return 'ETR'
+
+  return ''
+}
+
+const getGuideLabel = (examKey) => {
+  const guideKey = getGuideExamKey(examKey)
+  return guideKey || 'Panduan'
+}
+
 const normalizeSubjectType = (value) =>
   String(value || '').trim().toLowerCase()
 
@@ -298,6 +312,7 @@ export default function StudentScoresPage() {
 
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
+  const [guideMarks, setGuideMarks] = useState({})
   const [saving, setSaving] = useState(false)
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
   const [editingStudentId, setEditingStudentId] = useState(null)
@@ -580,6 +595,58 @@ export default function StudentScoresPage() {
       })
     })
   }, [visibleStudents])
+
+  useEffect(() => {
+    const loadGuideMarks = async () => {
+      const guideExamKey = getGuideExamKey(selectedExam)
+
+      if (
+        !profile?.school_id ||
+        !selectedClass ||
+        !selectedSubject ||
+        !guideExamKey ||
+        !Array.isArray(sortedStudents) ||
+        sortedStudents.length === 0
+      ) {
+        setGuideMarks({})
+        return
+      }
+
+      try {
+        const enrollmentIds = sortedStudents
+          .map((student) => student.student_enrollment_id || student.enrollment_id || student.id)
+          .filter(Boolean)
+
+        if (enrollmentIds.length === 0) {
+          setGuideMarks({})
+          return
+        }
+
+        const { data, error } = await supabase
+          .from('student_scores')
+          .select('student_enrollment_id, exam_key, mark')
+          .eq('school_id', profile.school_id)
+          .eq('class_id', selectedClass)
+          .eq('subject_id', selectedSubject)
+          .eq('exam_key', guideExamKey)
+          .in('student_enrollment_id', enrollmentIds)
+
+        if (error) throw error
+
+        const mapped = {}
+        ;(data || []).forEach((row) => {
+          mapped[row.student_enrollment_id] = row.mark
+        })
+
+        setGuideMarks(mapped)
+      } catch (err) {
+        console.error('loadGuideMarks error:', err)
+        setGuideMarks({})
+      }
+    }
+
+    loadGuideMarks()
+  }, [profile?.school_id, selectedClass, selectedSubject, selectedExam, sortedStudents])
 
   const uniqueSubjects = useMemo(() => {
     const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
@@ -2144,6 +2211,16 @@ export default function StudentScoresPage() {
                 <tbody>
                   {sortedStudents.map((student, index) => {
                     const isIncomplete = incompleteStudentIds.includes(student.enrollment_id)
+                    const currentExamKey = normalizeExamKey(selectedExam)
+                    const guideExamKey = getGuideExamKey(currentExamKey)
+                    const guideLabel = getGuideLabel(currentExamKey)
+                    const enrollmentId =
+                      student.student_enrollment_id || student.enrollment_id || student.id
+                    const guideMark = guideMarks[enrollmentId]
+                    const guideText =
+                      guideMark === null || guideMark === undefined || guideMark === ''
+                        ? `${guideLabel} belum diisi`
+                        : `${guideLabel}: ${guideMark}`
 
                     return (
                     <tr
@@ -2168,16 +2245,31 @@ export default function StudentScoresPage() {
                       <td className="px-3 py-3 text-slate-700">{student.ic_number}</td>
 
                       <td className="px-3 py-3">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={scores[student.student_id]?.mark ?? ''}
-                          onFocus={() => setEditingStudentId(student.student_id)}
-                          onBlur={() => setEditingStudentId(null)}
-                          onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
-                          className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          {currentExamKey === 'ETR' && (
+                            <div className="min-w-[108px] rounded-[10px] border border-slate-300 bg-slate-50 px-[10px] py-2 text-center text-xs font-bold leading-tight text-slate-600">
+                              {guideText}
+                            </div>
+                          )}
+
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={scores[student.student_id]?.mark ?? ''}
+                            onFocus={() => setEditingStudentId(student.student_id)}
+                            onBlur={() => setEditingStudentId(null)}
+                            onChange={(e) => handleScoreChange(student.student_id, e.target.value)}
+                            className="w-28 rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                          />
+
+                          {currentExamKey === 'TOV' && (
+                            <div className="min-w-[108px] rounded-[10px] border border-emerald-200 bg-emerald-50 px-[10px] py-2 text-center text-xs font-bold leading-tight text-emerald-700">
+                              {guideText}
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )})}
