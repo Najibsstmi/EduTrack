@@ -167,14 +167,42 @@ export default function ClassSubjectAnalysisPanel({
         // 3. Ambil semua enrollment dalam semua kelas tingkatan itu
         const { data: enrollments, error: enrollmentsError } = await supabase
           .from('student_enrollments')
-          .select('id, class_id')
+          .select('id, class_id, student_profile_id')
           .eq('school_id', schoolId)
+          .eq('is_active', true)
           .in('class_id', classIds)
 
         if (enrollmentsError) throw enrollmentsError
 
         const enrollmentRows = enrollments || []
-        const totalStudents = enrollmentRows.length
+        const enrollmentIds = enrollmentRows.map((item) => item.id)
+
+        if (!enrollmentIds.length) {
+          setRows([])
+          setLoading(false)
+          return
+        }
+
+        // 4. Ambil murid yang benar-benar mengambil subjek ini
+        const { data: subjectEnrollments, error: subjectEnrollmentsError } = await supabase
+          .from('student_subject_enrollments')
+          .select('student_enrollment_id')
+          .eq('school_id', schoolId)
+          .eq('subject_id', subjectId)
+          .eq('is_active', true)
+          .in('student_enrollment_id', enrollmentIds)
+
+        if (subjectEnrollmentsError) throw subjectEnrollmentsError
+
+        const allowedEnrollmentIdSet = new Set(
+          (subjectEnrollments || []).map((item) => item.student_enrollment_id)
+        )
+
+        const filteredEnrollmentRows = enrollmentRows.filter((item) =>
+          allowedEnrollmentIdSet.has(item.id)
+        )
+
+        const totalStudents = filteredEnrollmentRows.length
 
         if (!totalStudents) {
           setRows([])
@@ -182,9 +210,9 @@ export default function ClassSubjectAnalysisPanel({
           return
         }
 
-        const validEnrollmentIds = new Set(enrollmentRows.map((item) => item.id))
+        const validEnrollmentIds = new Set(filteredEnrollmentRows.map((item) => item.id))
 
-        // 4. Ambil semua score subjek semasa untuk semua kelas tingkatan itu
+        // 5. Ambil semua score subjek semasa untuk semua kelas tingkatan itu
         const { data: scores, error: scoresError } = await supabase
           .from('student_scores')
           .select('student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, class_id')
@@ -223,7 +251,7 @@ export default function ClassSubjectAnalysisPanel({
           let gpmpTotal = 0
           let gpmpCount = 0
 
-          enrollmentRows.forEach((enrollment) => {
+          filteredEnrollmentRows.forEach((enrollment) => {
             const scoreEntry = scoreMap[enrollment.id]?.[examKey]
 
             if (!scoreEntry) return
