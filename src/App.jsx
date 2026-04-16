@@ -21,6 +21,7 @@ import AnalysisHubPage from './pages/AnalysisHubPage'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
+import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { supabase } from './lib/supabaseClient'
 import { forceCleanLogout } from './lib/authSession'
 
@@ -51,6 +52,7 @@ function App() {
   return (
     <>
       <AuthSessionWatcher />
+      <InstallEduTrackButton />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/signup" element={<SignupPage />} />
