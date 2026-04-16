@@ -86,7 +86,7 @@ export default function ClassSubjectAnalysisPanel({
   schoolId,
   classId,
   subjectId,
-  refreshKey,
+  refreshKey = 0,
 }) {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState([])

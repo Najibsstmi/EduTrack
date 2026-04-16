@@ -327,6 +327,7 @@ export default function StudentScoresPage() {
   const [guideMarks, setGuideMarks] = useState({})
   const [saving, setSaving] = useState(false)
   const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0)
+  const [scoresRefreshKey, setScoresRefreshKey] = useState(0)
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
   const [editingStudentId, setEditingStudentId] = useState(null)
 
@@ -919,16 +920,14 @@ export default function StudentScoresPage() {
 
   useEffect(() => {
     loadStudentsAndScores()
-  }, [selectedClass, selectedSubject, selectedExam, profile?.school_id])
+  }, [selectedClass, selectedSubject, selectedExam, profile?.school_id, scoresRefreshKey])
 
-  const refreshCurrentPageData = async () => {
-    if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
-
+  const refreshCurrentMarksAndAnalysis = async () => {
     try {
-      await loadStudentsAndScores()
+      setScoresRefreshKey((prev) => prev + 1)
       setAnalysisRefreshKey((prev) => prev + 1)
     } catch (err) {
-      console.error('refreshCurrentPageData error:', err)
+      console.error('refreshCurrentMarksAndAnalysis error:', err)
     }
   }
 
@@ -1702,7 +1701,7 @@ export default function StudentScoresPage() {
         successCount: scoreRowsToUpsert.length,
       })
 
-      await refreshCurrentPageData()
+      await refreshCurrentMarksAndAnalysis()
       setBulkImportErrors([])
       setBulkPreviewRows([])
       setBulkCsvFile(null)
@@ -1806,6 +1805,7 @@ export default function StudentScoresPage() {
       return
     }
 
+    await refreshCurrentMarksAndAnalysis()
     alert('Markah berjaya disimpan')
   }
 
