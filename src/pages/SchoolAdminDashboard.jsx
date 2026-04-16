@@ -974,6 +974,14 @@ export default function SchoolAdminDashboard() {
                 Analisis
               </button>
 
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/academic-targets')}
+                style={getMobileNavButtonStyle('/academic-targets')}
+              >
+                Sasaran Akademik
+              </button>
+
               {isSchoolAdmin && (
                 <button
                   type="button"
@@ -987,13 +995,15 @@ export default function SchoolAdminDashboard() {
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={styles.mobileLogoutButton}
-              >
-                Logout
-              </button>
+              <div style={styles.mobileLogoutWrap}>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={styles.mobileLogoutButton}
+                >
+                  Logout
+                </button>
+              </div>
             </div>
 
             {showMobileSettings && isSchoolAdmin && (
@@ -1747,6 +1757,9 @@ const styles = {
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gap: '10px',
   },
+  mobileLogoutWrap: {
+    gridColumn: '1 / -1',
+  },
   mobilePrimaryButton: {
     minHeight: '46px',
     borderRadius: 12,
@@ -1764,6 +1777,7 @@ const styles = {
     border: '1px solid #0f172a',
   },
   mobileLogoutButton: {
+    width: '100%',
     minHeight: '46px',
     borderRadius: '12px',
     border: '1px solid #fecaca',
