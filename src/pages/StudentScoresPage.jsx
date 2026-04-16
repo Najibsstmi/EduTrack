@@ -307,6 +307,7 @@ const generateOtrRows = ({
 export default function StudentScoresPage() {
   const navigate = useNavigate()
   const studentListRef = useRef(null)
+  const bulkImportResultRef = useRef(null)
 
   const [profile, setProfile] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
@@ -356,6 +357,16 @@ export default function StudentScoresPage() {
   useEffect(() => {
     init()
   }, [])
+
+  useEffect(() => {
+    if (importMode !== 'bulk_admin') return
+    if (!bulkImportSummary && bulkImportErrors.length === 0) return
+
+    bulkImportResultRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }, [bulkImportSummary, bulkImportErrors, importMode])
 
   const getGradeLabelFromClassName = (className = '') => {
     const text = className.toLowerCase()
@@ -1703,7 +1714,7 @@ export default function StudentScoresPage() {
         setBulkCsvFile(null)
         alert('Import pukal admin berjaya disimpan.')
       } else if (savedCount > 0 && errors.length > 0) {
-        alert(`Import pukal admin selesai. ${savedCount} baris berjaya disimpan, ${errors.length} baris gagal.`)
+        alert(`Import pukal admin selesai. ${savedCount} baris berjaya disimpan dan ${errors.length} baris gagal.`)
       } else {
         alert('Import pukal admin gagal. Tiada baris berjaya disimpan.')
       }
@@ -2135,30 +2146,55 @@ export default function StudentScoresPage() {
                 )}
               </div>
 
-              {bulkImportErrors.length > 0 && (
-                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-                  <p className="text-sm font-semibold text-red-700">Ralat Import</p>
-                  <ul className="mt-2 list-disc pl-5 text-sm text-red-700">
-                    {bulkImportErrors.slice(0, 20).map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                  {bulkImportErrors.length > 20 && (
-                    <p className="mt-2 text-xs text-red-600">
-                      Dan {bulkImportErrors.length - 20} ralat lagi...
-                    </p>
-                  )}
-                </div>
-              )}
+              <div ref={bulkImportResultRef}>
+                {bulkImportSummary && (
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="mb-3 text-base font-extrabold text-emerald-800">Ringkasan Import</div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div className="mb-1.5 text-xs text-slate-500">Jumlah baris CSV</div>
+                        <div className="text-2xl font-extrabold text-slate-900">{bulkImportSummary.totalRows}</div>
+                      </div>
 
-              {bulkImportSummary && (
-                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  <div>Jumlah baris CSV: {bulkImportSummary.totalRows}</div>
-                  <div>Baris valid: {bulkImportSummary.validRows}</div>
-                  <div>Baris berjaya simpan: {bulkImportSummary.successCount}</div>
-                  <div>Jumlah ralat: {bulkImportSummary.errorCount}</div>
-                </div>
-              )}
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div className="mb-1.5 text-xs text-slate-500">Baris valid</div>
+                        <div className="text-2xl font-extrabold text-emerald-700">{bulkImportSummary.validRows}</div>
+                      </div>
+
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div className="mb-1.5 text-xs text-slate-500">Berjaya disimpan</div>
+                        <div className="text-2xl font-extrabold text-emerald-700">{bulkImportSummary.savedRows ?? bulkImportSummary.successCount}</div>
+                      </div>
+
+                      <div className="rounded-xl border border-emerald-100 bg-white p-3">
+                        <div className="mb-1.5 text-xs text-slate-500">Jumlah ralat</div>
+                        <div className="text-2xl font-extrabold text-red-700">{bulkImportSummary.errorRows ?? bulkImportSummary.errorCount}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {bulkImportErrors.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                    <div className="mb-1 text-base font-extrabold text-red-800">Ralat Import</div>
+                    <div className="mb-3 text-sm text-red-900">
+                      Baris berikut tidak disimpan. Sila semak dan betulkan CSV jika perlu.
+                    </div>
+
+                    <ul className="m-0 list-disc space-y-1.5 pl-5 text-sm text-red-700">
+                      {bulkImportErrors.slice(0, 20).map((item, index) => (
+                        <li key={`${item}-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+
+                    {bulkImportErrors.length > 20 && (
+                      <div className="mt-2 text-sm font-bold text-red-900">
+                        Dan {bulkImportErrors.length - 20} ralat lagi...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {bulkPreviewRows.length > 0 && (
                 <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
