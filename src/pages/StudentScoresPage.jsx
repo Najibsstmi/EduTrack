@@ -1548,7 +1548,7 @@ export default function StudentScoresPage() {
           matchedBundle = candidates[0]
         }
 
-        const matchedEnrollment = matchedBundle.enrollment
+        const matchedStudentEnrollment = matchedBundle.enrollment
         const matchedClass = matchedBundle.classRow
         const matchedStudentProfile = matchedBundle.studentProfile
         const resolvedClassName = kelas || matchedClass.class_name || ''
@@ -1612,7 +1612,7 @@ export default function StudentScoresPage() {
           const existsInSubjectEnrollment = (studentSubjectEnrollments || []).some(
             (row) =>
               String(row.subject_id) === String(matchedSubject.id) &&
-              String(row.student_enrollment_id) === String(matchedEnrollment.enrollment_id) &&
+              String(row.student_enrollment_id) === String(matchedStudentEnrollment.id) &&
               Number(row.academic_year) === Number(currentAcademicYear) &&
               row.is_active === true
           )
@@ -1643,7 +1643,7 @@ export default function StudentScoresPage() {
           kelas: resolvedClassName,
           __matchedClass: matchedClass,
           __matchedSubject: matchedSubject,
-          __matchedEnrollment: matchedEnrollment,
+          __matchedEnrollment: matchedStudentEnrollment,
           __matchedStudentProfile: matchedStudentProfile,
         })
 
@@ -1651,8 +1651,8 @@ export default function StudentScoresPage() {
           school_id: profile.school_id,
           academic_year: currentAcademicYear,
           class_id: matchedClass.id,
-          student_enrollment_id: matchedEnrollment.id,
-          student_profile_id: matchedEnrollment.student_profile_id,
+          student_enrollment_id: matchedStudentEnrollment.id,
+          student_profile_id: matchedStudentEnrollment.student_profile_id,
           subject_id: matchedSubject.id,
           exam_config_id: null,
           exam_key: examKey,
