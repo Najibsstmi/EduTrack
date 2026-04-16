@@ -28,6 +28,8 @@ const getGenderRank = (gender = '') => {
   return 3
 }
 
+const normalizeCompareText = (value = '') => String(value || '').trim().toUpperCase()
+
 export default function StudentsPage() {
   const navigate = useNavigate()
 
@@ -159,6 +161,7 @@ export default function StudentsPage() {
         academic_year,
         class_id,
         student_profile_id,
+        is_active,
         classes (
           id,
           tingkatan,
@@ -173,6 +176,7 @@ export default function StudentsPage() {
       `)
       .eq('school_id', schoolId)
       .eq('academic_year', academicYear)
+      .eq('is_active', true)
       .order('id', { ascending: true })
 
     if (error) {
@@ -363,8 +367,10 @@ export default function StudentsPage() {
   }
 
   const handleDelete = async (enrollmentId) => {
-    const confirmDelete = window.confirm('Padam pendaftaran murid ini untuk tahun semasa?')
-    if (!confirmDelete) return
+    const confirmed = window.confirm(
+      'Adakah anda pasti mahu singkirkan murid ini daripada kelas semasa? Murid ini tidak akan muncul lagi dalam input markah, analisis, dan sasaran akademik semasa.'
+    )
+    if (!confirmed) return
 
     const { error } = await supabase
       .from('student_enrollments')
@@ -383,12 +389,22 @@ export default function StudentsPage() {
   const filteredStudents = useMemo(() => {
     let result = [...students]
 
-    if (selectedTingkatan) {
-      result = result.filter((student) => student.tingkatan === selectedTingkatan)
+    const normalizedSelectedTingkatan = normalizeCompareText(selectedTingkatan)
+    const normalizedSelectedClass = normalizeCompareText(selectedClassFilter)
+
+    if (normalizedSelectedTingkatan) {
+      result = result.filter(
+        (student) => normalizeCompareText(student.tingkatan) === normalizedSelectedTingkatan
+      )
     }
 
-    if (selectedClassFilter && selectedClassFilter !== 'Semua Kelas') {
-      result = result.filter((student) => student.class_name === selectedClassFilter)
+    if (
+      normalizedSelectedClass &&
+      normalizedSelectedClass !== normalizeCompareText('Semua Kelas')
+    ) {
+      result = result.filter(
+        (student) => normalizeCompareText(student.class_name) === normalizedSelectedClass
+      )
     }
 
     const keyword = String(searchTerm || '').trim().toLowerCase()
@@ -397,7 +413,12 @@ export default function StudentsPage() {
         const name = String(student.full_name || '').toLowerCase()
         const ic = String(student.ic_number || '').toLowerCase()
         const kelas = String(student.class_name || '').toLowerCase()
-        return name.includes(keyword) || ic.includes(keyword) || kelas.includes(keyword)
+
+        return (
+          name.includes(keyword) ||
+          ic.includes(keyword) ||
+          kelas.includes(keyword)
+        )
       })
     }
 
@@ -578,6 +599,10 @@ export default function StudentsPage() {
             </div>
           </div>
 
+          <p className="mb-4 mt-2 text-[13px] text-slate-500">
+            Murid yang disingkirkan tidak akan dipaparkan dalam input markah, analisis, dan sasaran akademik semasa.
+          </p>
+
           <div className="mt-6">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">
               {selectedTingkatan}
@@ -618,7 +643,7 @@ export default function StudentsPage() {
 
                   <tbody>
                     {filteredStudents.map((student, index) => (
-                      <tr key={student.enrollment_id || student.id} className="border-b border-slate-100">
+                      <tr key={student.enrollment_id} className="border-b border-slate-100">
                         <td className="px-4 py-3 text-sm">{index + 1}</td>
                         <td className="px-4 py-3 text-sm font-medium text-slate-800">
                           {student.full_name}
@@ -640,7 +665,7 @@ export default function StudentsPage() {
                             onClick={() => handleDeleteStudent(student)}
                             className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
                           >
-                            Padam
+                            Singkir
                           </button>
                         </td>
                       </tr>

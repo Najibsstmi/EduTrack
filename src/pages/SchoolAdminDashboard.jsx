@@ -963,7 +963,7 @@ export default function SchoolAdminDashboard() {
                 disabled={!isSchoolAdmin}
                 title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
               >
-                Input Murid
+                Urus Murid
               </button>
 
               <button
@@ -1045,7 +1045,7 @@ export default function SchoolAdminDashboard() {
               disabled={!isSchoolAdmin}
               title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
             >
-              Input Murid
+              Urus Murid
             </button>
 
             {isSchoolAdmin && (
