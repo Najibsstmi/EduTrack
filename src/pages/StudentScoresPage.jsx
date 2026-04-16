@@ -23,6 +23,15 @@ const REQUIRED_HEADERS = [
 
 const BULK_REQUIRED_HEADERS = [
   'tingkatan',
+  'no_ic',
+  'nama_murid',
+  'subjek',
+  'jenis_peperiksaan',
+  'markah',
+]
+
+const BULK_TEMPLATE_HEADERS = [
+  'tingkatan',
   'kelas',
   'no_ic',
   'nama_murid',
@@ -51,6 +60,9 @@ const buildSubjectLookupKey = (subjectName, tingkatan) =>
 
 const buildClassLookupKey = (tingkatan, kelas) =>
   `${normalizeCompareText(tingkatan)}__${normalizeCompareText(kelas)}`
+
+const buildGradeIcLookupKey = (tingkatan, noIc) =>
+  `${normalizeCompareText(tingkatan)}__${normalizeIC(noIc)}`
 
 function normalizeIC(ic) {
   return String(ic || '')
@@ -469,40 +481,6 @@ export default function StudentScoresPage() {
 
     return lookup
   }, [subjects])
-
-  const classLookup = useMemo(() => {
-    const map = new Map()
-
-    ;(classes || []).forEach((item) => {
-      const key = buildClassLookupKey(item.tingkatan, item.class_name)
-      if (!map.has(key)) {
-        map.set(key, item)
-      }
-    })
-
-    return map
-  }, [classes])
-
-  const enrollmentLookupByClassAndIc = useMemo(() => {
-    const map = new Map()
-
-    ;(allEnrollments || []).forEach((row) => {
-      const ic = normalizeIC(row.student_profiles?.ic_number)
-      if (!ic) return
-
-      const key = `${row.class_id}__${ic}`
-
-      if (!map.has(key)) {
-        map.set(key, {
-          enrollment_id: row.id,
-          student_profile_id: row.student_profile_id,
-          full_name: row.student_profiles?.full_name || '',
-        })
-      }
-    })
-
-    return map
-  }, [allEnrollments])
 
   const resolveSubjectFromCsvRow = (csvSubjectName) => {
     const gradeLabel = selectedClassData?.tingkatan || ''
@@ -955,7 +933,7 @@ export default function StudentScoresPage() {
   const downloadTemplateCsv = () => {
     const isBulkAdmin = importMode === 'bulk_admin'
 
-    const headers = isBulkAdmin ? BULK_REQUIRED_HEADERS : REQUIRED_HEADERS
+    const headers = isBulkAdmin ? BULK_TEMPLATE_HEADERS : REQUIRED_HEADERS
 
     const sampleRows = isBulkAdmin
       ? [
@@ -1476,30 +1454,93 @@ export default function StudentScoresPage() {
       const validRows = []
       const scoreRowsToUpsert = []
       const allowedExamSetCache = new Map()
+      const classById = new Map(
+        (classes || []).map((item) => [String(item.id), item])
+      )
+      const enrollmentByClassAndIc = new Map()
+      const enrollmentByGradeAndIc = new Map()
+
+      ;(allEnrollments || []).forEach((enrollment) => {
+        const classRow = classById.get(String(enrollment.class_id))
+        const studentProfile = enrollment.student_profiles
+
+        if (!classRow || !studentProfile) return
+
+        const tingkatan = classRow.tingkatan
+        const kelas = classRow.class_name
+        const normalizedIc = normalizeIC(studentProfile.ic_number)
+
+        if (!tingkatan || !kelas || !normalizedIc) return
+
+        const classIcKey = `${buildClassLookupKey(tingkatan, kelas)}__${normalizedIc}`
+        enrollmentByClassAndIc.set(classIcKey, {
+          enrollment,
+          classRow,
+          studentProfile,
+        })
+
+        const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
+        if (!enrollmentByGradeAndIc.has(gradeIcKey)) {
+          enrollmentByGradeAndIc.set(gradeIcKey, [])
+        }
+
+        enrollmentByGradeAndIc.get(gradeIcKey).push({
+          enrollment,
+          classRow,
+          studentProfile,
+        })
+      })
 
       for (const row of bulkPreviewRows) {
         const rowNumber = row.__rowNumber
 
-        const tingkatan = String(row.tingkatan || '').trim()
-        const kelas = String(row.kelas || '').trim()
+        const tingkatan = normalizeText(row.tingkatan)
+        const kelas = normalizeText(row.kelas)
         const csvSubject = String(row.subjek || '').trim()
         const examKey = normalizeExamKey(row.jenis_peperiksaan)
         const mark = Number(row.markah)
-        const ic = normalizeIC(row.no_ic)
+        const normalizedIc = normalizeIC(row.no_ic)
+        let matchedBundle = null
 
-        if (!tingkatan || !kelas) {
-          errors.push(`Baris ${rowNumber}: tingkatan atau kelas kosong`)
+        if (!tingkatan) {
+          errors.push(`Baris ${rowNumber}: tingkatan kosong`)
           continue
         }
 
-        const matchedClass = classLookup.get(buildClassLookupKey(tingkatan, kelas))
-
-        if (!matchedClass) {
-          errors.push(
-            `Baris ${rowNumber}: kelas '${kelas}' bagi '${tingkatan}' tidak dijumpai`
-          )
+        if (!normalizedIc) {
+          errors.push(`Baris ${rowNumber}: no_ic kosong`)
           continue
         }
+
+        if (kelas) {
+          const classIcKey = `${buildClassLookupKey(tingkatan, kelas)}__${normalizedIc}`
+          matchedBundle = enrollmentByClassAndIc.get(classIcKey) || null
+
+          if (!matchedBundle) {
+            errors.push(`Baris ${rowNumber}: murid tidak ditemui untuk tingkatan, kelas dan no_ic yang diberi`)
+            continue
+          }
+        } else {
+          const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
+          const candidates = enrollmentByGradeAndIc.get(gradeIcKey) || []
+
+          if (candidates.length === 0) {
+            errors.push(`Baris ${rowNumber}: murid tidak ditemui berdasarkan tingkatan dan no_ic`)
+            continue
+          }
+
+          if (candidates.length > 1) {
+            errors.push(`Baris ${rowNumber}: padanan no_ic tidak unik. Sila isi kelas.`)
+            continue
+          }
+
+          matchedBundle = candidates[0]
+        }
+
+        const matchedEnrollment = matchedBundle.enrollment
+        const matchedClass = matchedBundle.classRow
+        const matchedStudentProfile = matchedBundle.studentProfile
+        const resolvedClassName = kelas || matchedClass.class_name || ''
 
         const matchedSubject = subjectLookupByGrade.get(
           buildSubjectLookupKey(csvSubject, matchedClass.tingkatan)
@@ -1554,17 +1595,6 @@ export default function StudentScoresPage() {
           continue
         }
 
-        const matchedEnrollment = enrollmentLookupByClassAndIc.get(
-          `${matchedClass.id}__${ic}`
-        )
-
-        if (!matchedEnrollment) {
-          errors.push(
-            `Baris ${rowNumber}: murid IC '${ic}' tidak dijumpai dalam kelas '${kelas}'`
-          )
-          continue
-        }
-
         const isSelective = isSelectiveSubject(matchedSubject)
 
         if (isSelective) {
@@ -1578,7 +1608,7 @@ export default function StudentScoresPage() {
 
           if (!existsInSubjectEnrollment) {
             errors.push(
-              `Baris ${rowNumber}: murid IC '${ic}' tidak didaftarkan untuk subjek '${matchedSubject.subject_name}'`
+              `Baris ${rowNumber}: murid IC '${normalizedIc}' tidak didaftarkan untuk subjek '${matchedSubject.subject_name}'`
             )
             continue
           }
@@ -1599,16 +1629,18 @@ export default function StudentScoresPage() {
 
         validRows.push({
           ...row,
+          kelas: resolvedClassName,
           __matchedClass: matchedClass,
           __matchedSubject: matchedSubject,
           __matchedEnrollment: matchedEnrollment,
+          __matchedStudentProfile: matchedStudentProfile,
         })
 
         scoreRowsToUpsert.push({
           school_id: profile.school_id,
           academic_year: currentAcademicYear,
           class_id: matchedClass.id,
-          student_enrollment_id: matchedEnrollment.enrollment_id,
+          student_enrollment_id: matchedEnrollment.id,
           student_profile_id: matchedEnrollment.student_profile_id,
           subject_id: matchedSubject.id,
           exam_config_id: null,
@@ -2068,7 +2100,7 @@ export default function StudentScoresPage() {
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 Muat naik markah bagi banyak kelas dan tingkatan serentak.
-                Format CSV wajib: tingkatan, kelas, no_ic, nama_murid, subjek,
+                Format CSV: tingkatan, kelas (optional), no_ic (wajib), nama_murid, subjek,
                 jenis_peperiksaan, markah
               </p>
 
