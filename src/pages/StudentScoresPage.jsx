@@ -1668,45 +1668,45 @@ export default function StudentScoresPage() {
         })
       }
 
-      if (errors.length > 0) {
-        setBulkImportErrors(errors)
-        setBulkImportSummary({
-          totalRows: bulkPreviewRows.length,
-          validRows: validRows.length,
-          errorCount: errors.length,
-          successCount: 0,
-        })
-        return
+      let savedCount = 0
+
+      if (scoreRowsToUpsert.length > 0) {
+        const { error: upsertError } = await supabase
+          .from('student_scores')
+          .upsert(scoreRowsToUpsert, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
+          })
+
+        if (upsertError) {
+          throw upsertError
+        }
+
+        savedCount = scoreRowsToUpsert.length
       }
 
-      if (!scoreRowsToUpsert.length) {
-        alert('Tiada data valid untuk disimpan.')
-        return
-      }
-
-      const { error: upsertError } = await supabase
-        .from('student_scores')
-        .upsert(scoreRowsToUpsert, {
-          onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
-        })
-
-      if (upsertError) {
-        throw upsertError
-      }
-
+      setBulkImportErrors(errors)
       setBulkImportSummary({
         totalRows: bulkPreviewRows.length,
-        validRows: validRows.length,
-        errorCount: 0,
-        successCount: scoreRowsToUpsert.length,
+        validRows: scoreRowsToUpsert.length,
+        savedRows: savedCount,
+        successCount: savedCount,
+        errorRows: errors.length,
+        errorCount: errors.length,
       })
 
-      await refreshCurrentMarksAndAnalysis()
-      setBulkImportErrors([])
-      setBulkPreviewRows([])
-      setBulkCsvFile(null)
+      if (savedCount > 0) {
+        await refreshCurrentMarksAndAnalysis()
+      }
 
-      alert('Import pukal admin berjaya disimpan.')
+      if (savedCount > 0 && errors.length === 0) {
+        setBulkPreviewRows([])
+        setBulkCsvFile(null)
+        alert('Import pukal admin berjaya disimpan.')
+      } else if (savedCount > 0 && errors.length > 0) {
+        alert(`Import pukal admin selesai. ${savedCount} baris berjaya disimpan, ${errors.length} baris gagal.`)
+      } else {
+        alert('Import pukal admin gagal. Tiada baris berjaya disimpan.')
+      }
     } catch (error) {
       console.error(error)
       alert(`Import pukal admin gagal: ${error.message}`)
