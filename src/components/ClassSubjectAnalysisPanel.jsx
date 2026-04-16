@@ -86,6 +86,7 @@ export default function ClassSubjectAnalysisPanel({
   schoolId,
   classId,
   subjectId,
+  refreshKey,
 }) {
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState([])
@@ -284,7 +285,7 @@ export default function ClassSubjectAnalysisPanel({
     }
 
     loadAnalysis()
-  }, [schoolId, classId, subjectId])
+  }, [schoolId, classId, subjectId, refreshKey])
 
   if (!schoolId || !classId || !subjectId) return null
 

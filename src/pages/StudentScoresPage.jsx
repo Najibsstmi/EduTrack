@@ -326,6 +326,7 @@ export default function StudentScoresPage() {
   const [scores, setScores] = useState({})
   const [guideMarks, setGuideMarks] = useState({})
   const [saving, setSaving] = useState(false)
+  const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0)
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
   const [editingStudentId, setEditingStudentId] = useState(null)
 
@@ -919,6 +920,17 @@ export default function StudentScoresPage() {
   useEffect(() => {
     loadStudentsAndScores()
   }, [selectedClass, selectedSubject, selectedExam, profile?.school_id])
+
+  const refreshCurrentPageData = async () => {
+    if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
+
+    try {
+      await loadStudentsAndScores()
+      setAnalysisRefreshKey((prev) => prev + 1)
+    } catch (err) {
+      console.error('refreshCurrentPageData error:', err)
+    }
+  }
 
   const handleScoreChange = (studentId, value) => {
     setScores((prev) => ({
@@ -1690,6 +1702,11 @@ export default function StudentScoresPage() {
         successCount: scoreRowsToUpsert.length,
       })
 
+      await refreshCurrentPageData()
+      setBulkImportErrors([])
+      setBulkPreviewRows([])
+      setBulkCsvFile(null)
+
       alert('Import pukal admin berjaya disimpan.')
     } catch (error) {
       console.error(error)
@@ -2323,6 +2340,7 @@ export default function StudentScoresPage() {
           schoolId={profile?.school_id}
           classId={selectedClass}
           subjectId={selectedSubject}
+          refreshKey={analysisRefreshKey}
         />
       </div>
     </div>
