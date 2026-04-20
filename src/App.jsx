@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import SignupPage from './pages/SignupPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import PendingApprovalPage from './pages/PendingApprovalPage.jsx'
 import MasterAdminDashboard from './pages/MasterAdminDashboard.jsx'
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import SchoolAdminDashboard from './pages/SchoolAdminDashboard.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import SchoolSetupPage from './pages/SchoolSetupPage.jsx'
@@ -58,6 +60,8 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/register" element={<SignupPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/dashboard" element={<SchoolAdminDashboard />} />
         <Route path="/home" element={<DashboardPage />} />
         <Route path="/master-admin" element={<MasterAdminDashboard />} />

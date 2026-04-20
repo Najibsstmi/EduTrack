@@ -121,6 +121,15 @@ function LoginPage() {
             />
           </div>
 
+          <div className="mt-3 text-right">
+            <Link
+              to="/forgot-password"
+              className="text-sm font-semibold text-slate-600 hover:text-slate-900"
+            >
+              Lupa Kata Laluan?
+            </Link>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
