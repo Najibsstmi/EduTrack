@@ -1,12 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 
 function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('edutrack_last_email')
+    if (savedEmail) {
+      setEmail(savedEmail)
+    }
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -27,6 +35,12 @@ function LoginPage() {
 
       const user = authData?.user
       if (!user) return
+
+      if (rememberMe) {
+        localStorage.setItem('edutrack_last_email', email)
+      } else {
+        localStorage.removeItem('edutrack_last_email')
+      }
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -101,6 +115,8 @@ function LoginPage() {
             <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
             <input
               type="email"
+              name="email"
+              autoComplete="username"
               placeholder="nama@sekolah.edu.my"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -113,6 +129,8 @@ function LoginPage() {
             <label className="mb-1 block text-sm font-medium text-slate-700">Kata Laluan</label>
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               placeholder="Masukkan kata laluan"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -121,7 +139,16 @@ function LoginPage() {
             />
           </div>
 
-          <div className="mt-3 text-right">
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              Ingat saya
+            </label>
+
             <Link
               to="/forgot-password"
               className="text-sm font-semibold text-slate-600 hover:text-slate-900"
