@@ -271,6 +271,63 @@ const getMatchedExamConfig = (examConfigs = [], gradeLabel, examKey) =>
       item?.is_active !== false
   ) || null
 
+const applySmartExamScoreFilter = (query, examKey, examConfigId) => {
+  const normalizedExamKey = normalizeExamKey(examKey)
+
+  if (!normalizedExamKey) return query
+
+  if (examConfigId) {
+    return query.or(`exam_config_id.eq.${examConfigId},exam_key.eq.${normalizedExamKey}`)
+  }
+
+  return query.eq('exam_key', normalizedExamKey)
+}
+
+const ensureExamConfigRecord = async ({
+  schoolId,
+  academicYear,
+  gradeLabel,
+  examKey,
+}) => {
+  const normalizedExamKey = normalizeExamKey(examKey)
+
+  if (!schoolId || !academicYear || !gradeLabel || !normalizedExamKey) {
+    return null
+  }
+
+  const { data: existingExamConfig, error: existingExamConfigError } = await supabase
+    .from('exam_configs')
+    .select('id, school_id, academic_year, grade_label, exam_key, exam_name, is_active')
+    .eq('school_id', schoolId)
+    .eq('academic_year', academicYear)
+    .eq('grade_label', gradeLabel)
+    .eq('exam_key', normalizedExamKey)
+    .maybeSingle()
+
+  if (existingExamConfigError) throw existingExamConfigError
+
+  if (existingExamConfig) {
+    return existingExamConfig
+  }
+
+  const { data: newExam, error: newExamError } = await supabase
+    .from('exam_configs')
+    .insert({
+      school_id: schoolId,
+      academic_year: academicYear,
+      grade_label: gradeLabel,
+      exam_key: normalizedExamKey,
+      exam_name: normalizedExamKey,
+      is_active: true,
+    })
+    .select('id, school_id, academic_year, grade_label, exam_key, exam_name, is_active')
+    .single()
+
+  if (newExamError) throw newExamError
+
+  return newExam
+}
+
 const generateOtrRows = ({
   schoolId,
   academicYear,
@@ -621,6 +678,10 @@ export default function StudentScoresPage() {
   useEffect(() => {
     const loadGuideMarks = async () => {
       const guideExamKey = getGuideExamKey(selectedExam)
+      const guideExamConfigId =
+        activeExamOptions.find(
+          (exam) => normalizeExamKey(exam?.key) === normalizeExamKey(guideExamKey)
+        )?.id || null
 
       if (
         !profile?.school_id ||
@@ -644,14 +705,21 @@ export default function StudentScoresPage() {
           return
         }
 
-        const { data, error } = await supabase
+        let scoreQuery = supabase
           .from('student_scores')
-          .select('student_enrollment_id, exam_key, mark')
+          .select('student_enrollment_id, exam_key, exam_config_id, mark')
           .eq('school_id', profile.school_id)
           .eq('class_id', selectedClass)
           .eq('subject_id', selectedSubject)
-          .eq('exam_key', guideExamKey)
           .in('student_enrollment_id', enrollmentIds)
+
+        scoreQuery = applySmartExamScoreFilter(
+          scoreQuery,
+          guideExamKey,
+          guideExamConfigId
+        )
+
+        const { data, error } = await scoreQuery
 
         if (error) throw error
 
@@ -668,7 +736,7 @@ export default function StudentScoresPage() {
     }
 
     loadGuideMarks()
-  }, [profile?.school_id, selectedClass, selectedSubject, selectedExam, sortedStudents])
+  }, [profile?.school_id, selectedClass, selectedSubject, selectedExam, sortedStudents, activeExamOptions])
 
   const uniqueSubjects = useMemo(() => {
     const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
@@ -950,10 +1018,15 @@ export default function StudentScoresPage() {
       .select('*')
       .eq('class_id', selectedClass)
       .eq('subject_id', selectedSubject)
-      .eq('exam_key', selectedExam)
       .eq('school_id', profile.school_id)
 
     scoreQuery = scoreQuery.eq('academic_year', currentYear)
+
+    scoreQuery = applySmartExamScoreFilter(
+      scoreQuery,
+      selectedExam,
+      selectedExamConfig?.id || null
+    )
 
     const { data: scoreData } = await scoreQuery
 
@@ -1798,34 +1871,33 @@ export default function StudentScoresPage() {
 
     setSaving(true)
 
-    try {
-      const currentAcademicYear =
-        setupConfig?.current_academic_year || new Date().getFullYear()
+    const schoolId = profile.school_id
+    const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+    let selectedExamConfigId = null
 
-      const examStillActive = await ensureExamIsActive({
-        schoolId: profile.school_id,
-        academicYear: currentAcademicYear,
+    try {
+      let examConfig = await ensureExamConfigRecord({
+        schoolId,
+        academicYear: currentYear,
         gradeLabel: selectedGradeLabel,
         examKey: selectedExam,
       })
 
-      if (!examStillActive) {
+      if (!examConfig) {
+        console.warn('exam_config tak jumpa -> fallback guna exam_key sahaja')
+      }
+
+      if (examConfig?.is_active === false) {
         setSaving(false)
         alert('Peperiksaan ini belum dibuka atau telah ditutup oleh admin sekolah.')
         return
       }
+
+      selectedExamConfigId = examConfig?.id || null
     } catch (error) {
       setSaving(false)
-      console.error('ensureExamIsActive error:', error)
+      console.error('ensureExamConfigRecord error:', error)
       alert('Gagal menyemak status peperiksaan.')
-      return
-    }
-
-    const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
-
-    if (!selectedExamConfig?.id) {
-      setSaving(false)
-      alert('Konfigurasi peperiksaan tidak ditemui. Sila semak tetapan exam untuk tahap ini.')
       return
     }
 
@@ -1858,7 +1930,7 @@ export default function StudentScoresPage() {
           student_profile_id: student.student_id,
           class_id: selectedClass,
           subject_id: selectedSubject,
-          exam_config_id: selectedExamConfig.id,
+          exam_config_id: selectedExamConfigId,
           exam_key: selectedExam,
           mark,
           grade_name: gradeInfo.grade_name,
