@@ -12,6 +12,11 @@ import {
   shouldAutoRecalculateOtrs,
 } from '../lib/otrGeneration'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayClassLabel,
+  getDisplayLevel,
+} from '../lib/levelLabels'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -258,6 +263,14 @@ const findGradeFromMark = (mark, gradeScales = []) => {
   }
 }
 
+const getMatchedExamConfig = (examConfigs = [], gradeLabel, examKey) =>
+  (examConfigs || []).find(
+    (item) =>
+      normalizeGradeLabel(item?.grade_label) === normalizeGradeLabel(gradeLabel) &&
+      normalizeExamKey(item?.exam_key) === normalizeExamKey(examKey) &&
+      item?.is_active !== false
+  ) || null
+
 const generateOtrRows = ({
   schoolId,
   academicYear,
@@ -312,6 +325,7 @@ export default function StudentScoresPage() {
   const [profile, setProfile] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [gradeScales, setGradeScales] = useState([])
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -394,13 +408,22 @@ export default function StudentScoresPage() {
     return getGradeLabelFromClassName(classLabel)
   }, [selectedClassData])
 
-  const loadActiveExamOptions = async (schoolId, gradeLabel) => {
-    if (!schoolId || !gradeLabel) return []
+  const selectedExamConfig = useMemo(
+    () =>
+      activeExamOptions.find(
+        (item) => normalizeExamKey(item?.key) === normalizeExamKey(selectedExam)
+      ) || null,
+    [activeExamOptions, selectedExam]
+  )
+
+  const loadActiveExamOptions = async (schoolId, gradeLabel, academicYear) => {
+    if (!schoolId || !gradeLabel || !academicYear) return []
 
     const { data, error } = await supabase
       .from('exam_configs')
-      .select('exam_key, exam_name, exam_order')
+      .select('id, exam_key, exam_name, exam_order, grade_label, academic_year, is_active')
       .eq('school_id', schoolId)
+      .eq('academic_year', academicYear)
       .eq('grade_label', gradeLabel)
       .eq('is_active', true)
       .order('exam_order', { ascending: true })
@@ -409,17 +432,20 @@ export default function StudentScoresPage() {
 
     return (data || [])
       .map((item) => ({
+        id: item.id,
         key: normalizeExamKey(item.exam_key),
         name: item.exam_name || item.exam_key,
+        grade_label: item.grade_label,
       }))
       .filter((item) => isAllowedExamKey(item.key))
   }
 
-  const ensureExamIsActive = async ({ schoolId, gradeLabel, examKey }) => {
+  const ensureExamIsActive = async ({ schoolId, academicYear, gradeLabel, examKey }) => {
     const { data, error } = await supabase
       .from('exam_configs')
       .select('id')
       .eq('school_id', schoolId)
+      .eq('academic_year', academicYear)
       .eq('grade_label', gradeLabel)
       .eq('exam_key', normalizeExamKey(examKey))
       .eq('is_active', true)
@@ -435,7 +461,11 @@ export default function StudentScoresPage() {
     [subjects, selectedSubject]
   )
 
-  const selectedClassLabel = `${selectedClassData?.tingkatan || ''} ${selectedClassData?.class_name || ''}`.trim()
+  const selectedClassLabel = getDisplayClassLabel(
+    selectedClassData?.tingkatan,
+    selectedClassData?.class_name,
+    levelMappings
+  )
   const selectedSubjectLabel = String(selectedSubjectData?.subject_name || '').trim()
 
   const displayedStudents = useMemo(() => {
@@ -540,7 +570,8 @@ export default function StudentScoresPage() {
       try {
         const rows = await loadActiveExamOptions(
           profile.school_id,
-          selectedGradeLabel
+          selectedGradeLabel,
+          setupConfig?.current_academic_year || new Date().getFullYear()
         )
 
         setActiveExamOptions(rows)
@@ -560,7 +591,7 @@ export default function StudentScoresPage() {
     }
 
     run()
-  }, [profile?.school_id, selectedGradeLabel])
+  }, [profile?.school_id, selectedGradeLabel, setupConfig?.current_academic_year, selectedExam])
 
   useEffect(() => {
     if (!prefillExamKey) return
@@ -758,9 +789,14 @@ export default function StudentScoresPage() {
 
     const currentYear = setupRows?.[0]?.current_academic_year || new Date().getFullYear()
 
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId: profileData.school_id,
+      academicYear: currentYear,
+    })
+
     const { data: examConfigRows, error: examConfigError } = await supabase
       .from('exam_configs')
-      .select('grade_label, exam_key, exam_name, exam_order, is_active')
+      .select('id, grade_label, exam_key, exam_name, exam_order, is_active')
       .eq('school_id', profileData.school_id)
       .eq('academic_year', currentYear)
 
@@ -774,6 +810,7 @@ export default function StudentScoresPage() {
     )
 
     setSetupConfig(setupData || null)
+    setLevelMappings(loadedLevelMappings)
 
     await loadInitialData(profileData, setupData)
   }
@@ -1251,6 +1288,17 @@ export default function StudentScoresPage() {
 
         const classId = selectedClassData.id
         const tingkatan = selectedClassData.tingkatan || ''
+        const matchedExamConfig = getMatchedExamConfig(examConfigData || [], tingkatan, examKey)
+
+        if ((examKey === 'TOV' || /^AR\d+$/.test(examKey)) && !matchedExamConfig?.id) {
+          const message = `Baris ${rowNumber}: konfigurasi peperiksaan '${examKey}' tidak ditemui untuk ${tingkatan}`
+          if (csvImportPolicy === 'strict') {
+            importErrors.push(message)
+          } else {
+            skippedRows.push(message)
+          }
+          continue
+        }
 
         if (examKey === 'ETR') {
           targetRows.push({
@@ -1306,7 +1354,7 @@ export default function StudentScoresPage() {
             student_enrollment_id: matchedStudent.enrollment_id,
             class_id: classId,
             subject_id: subject.id,
-            exam_config_id: null,
+            exam_config_id: matchedExamConfig.id,
             exam_key: examKey,
             mark,
             grade_name: gradeInfo.grade_name,
@@ -1576,18 +1624,26 @@ export default function StudentScoresPage() {
         }
 
         let allowedExamSet = allowedExamSetCache.get(matchedClass.tingkatan)
+        let activeExamRows = []
 
         if (!allowedExamSet) {
-          const activeExamOptions = await loadActiveExamOptions(
+          activeExamRows = await loadActiveExamOptions(
             profile.school_id,
-            matchedClass.tingkatan
+            matchedClass.tingkatan,
+            currentAcademicYear
           )
 
           allowedExamSet = new Set(
-            activeExamOptions.map((item) => normalizeExamKey(item.key))
+            activeExamRows.map((item) => normalizeExamKey(item.key))
           )
 
-          allowedExamSetCache.set(matchedClass.tingkatan, allowedExamSet)
+          allowedExamSetCache.set(matchedClass.tingkatan, {
+            allowedExamSet,
+            activeExamRows,
+          })
+        } else {
+          activeExamRows = allowedExamSetCache.get(matchedClass.tingkatan)?.activeExamRows || []
+          allowedExamSet = allowedExamSetCache.get(matchedClass.tingkatan)?.allowedExamSet || new Set()
         }
 
         if (!allowedExamSet.has(examKey)) {
@@ -1599,6 +1655,7 @@ export default function StudentScoresPage() {
 
         const isExamActive = await ensureExamIsActive({
           schoolId: profile.school_id,
+          academicYear: currentAcademicYear,
           gradeLabel: matchedClass.tingkatan,
           examKey,
         })
@@ -1648,6 +1705,16 @@ export default function StudentScoresPage() {
         })
 
         const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+        const matchedExamConfig = activeExamRows.find(
+          (item) => normalizeExamKey(item.key) === normalizeExamKey(examKey)
+        )
+
+        if (!matchedExamConfig?.id) {
+          errors.push(
+            `Baris ${rowNumber}: konfigurasi peperiksaan '${examKey}' tidak ditemui untuk ${matchedClass.tingkatan}`
+          )
+          continue
+        }
 
         validRows.push({
           ...row,
@@ -1665,7 +1732,7 @@ export default function StudentScoresPage() {
           student_enrollment_id: matchedStudentEnrollment.id,
           student_profile_id: matchedStudentEnrollment.student_profile_id,
           subject_id: matchedSubject.id,
-          exam_config_id: null,
+          exam_config_id: matchedExamConfig.id,
           exam_key: examKey,
           mark,
           grade_name: gradeInfo.grade_name,
@@ -1732,8 +1799,12 @@ export default function StudentScoresPage() {
     setSaving(true)
 
     try {
+      const currentAcademicYear =
+        setupConfig?.current_academic_year || new Date().getFullYear()
+
       const examStillActive = await ensureExamIsActive({
         schoolId: profile.school_id,
+        academicYear: currentAcademicYear,
         gradeLabel: selectedGradeLabel,
         examKey: selectedExam,
       })
@@ -1751,6 +1822,13 @@ export default function StudentScoresPage() {
     }
 
     const currentYear = setupConfig?.current_academic_year || new Date().getFullYear()
+
+    if (!selectedExamConfig?.id) {
+      setSaving(false)
+      alert('Konfigurasi peperiksaan tidak ditemui. Sila semak tetapan exam untuk tahap ini.')
+      return
+    }
+
     const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
       const label =
         grade.tingkatan ??
@@ -1780,7 +1858,7 @@ export default function StudentScoresPage() {
           student_profile_id: student.student_id,
           class_id: selectedClass,
           subject_id: selectedSubject,
-          exam_config_id: null,
+          exam_config_id: selectedExamConfig.id,
           exam_key: selectedExam,
           mark,
           grade_name: gradeInfo.grade_name,
@@ -1849,7 +1927,9 @@ export default function StudentScoresPage() {
             >
               <option value="">Pilih Kelas</option>
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>{`${c.tingkatan || ''} ${c.class_name}`.trim()}</option>
+                <option key={c.id} value={c.id}>
+                  {getDisplayClassLabel(c.tingkatan, c.class_name, levelMappings)}
+                </option>
               ))}
             </select>
 
@@ -2213,7 +2293,7 @@ export default function StudentScoresPage() {
                     <tbody>
                       {bulkPreviewRows.slice(0, 20).map((row) => (
                         <tr key={row.__rowNumber} className="border-t border-slate-100">
-                          <td className="px-3 py-2">{row.tingkatan}</td>
+                          <td className="px-3 py-2">{getDisplayLevel(row.tingkatan, levelMappings)}</td>
                           <td className="px-3 py-2">{row.kelas}</td>
                           <td className="px-3 py-2">{row.no_ic}</td>
                           <td className="px-3 py-2">{row.nama_murid}</td>

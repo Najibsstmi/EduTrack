@@ -6,6 +6,11 @@ import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayLevel,
+  sortLevelsByDisplayOrder,
+} from '../lib/levelLabels'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,6 +84,7 @@ export default function AnalysisPage() {
   const [targets, setTargets] = useState([])
   const [gradeScales, setGradeScales] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('all')
@@ -210,6 +216,11 @@ export default function AnalysisPage() {
       .eq('school_id', schoolId)
       .eq('academic_year', currentAcademicYear)
 
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId,
+      academicYear: currentAcademicYear,
+    })
+
     if (examConfigError) console.error(examConfigError)
 
     const mappedStudents = (enrollmentsData || []).map((row) => ({
@@ -229,12 +240,15 @@ export default function AnalysisPage() {
     setScores(scoresData || [])
     setTargets(targetsData || [])
     setGradeScales(gradeScalesData || [])
+    setLevelMappings(loadedLevelMappings)
     setSetupConfig(
       normalizeSetupConfigWithExamConfigs(setupConfigRows?.[0] || null, examConfigRows || [])
     )
 
-    const availableTingkatan = [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))]
-      .sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
+    const availableTingkatan = sortLevelsByDisplayOrder(
+      [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))],
+      loadedLevelMappings
+    )
 
     if (availableTingkatan.length > 0) {
       setSelectedTingkatan(availableTingkatan[0])
@@ -244,9 +258,11 @@ export default function AnalysisPage() {
   }
 
   const availableTingkatan = useMemo(() => {
-    return [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))]
-      .sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
-  }, [classes])
+    return sortLevelsByDisplayOrder(
+      [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))],
+      levelMappings
+    )
+  }, [classes, levelMappings])
 
   const availableClasses = useMemo(() => {
     return classes
@@ -547,7 +563,7 @@ export default function AnalysisPage() {
             >
               {availableTingkatan.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {getDisplayLevel(item, levelMappings)}
                 </option>
               ))}
             </select>

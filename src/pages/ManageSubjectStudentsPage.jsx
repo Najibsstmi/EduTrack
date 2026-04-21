@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayClassLabel,
+} from '../lib/levelLabels'
 
 const styles = {
   page: {
@@ -186,6 +190,7 @@ export default function ManageSubjectStudentsPage() {
 
   const [profile, setProfile] = useState(null)
   const [currentAcademicYear, setCurrentAcademicYear] = useState(new Date().getFullYear())
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -236,6 +241,12 @@ export default function ManageSubjectStudentsPage() {
         setupData?.current_academic_year || new Date().getFullYear()
 
       setCurrentAcademicYear(academicYear)
+
+      const loadedLevelMappings = await fetchSchoolLevelLabels({
+        schoolId: profileData.school_id,
+        academicYear,
+      })
+      setLevelMappings(loadedLevelMappings)
 
       const [
         { data: classData, error: classError },
@@ -470,7 +481,7 @@ export default function ManageSubjectStudentsPage() {
                 <option value="">Pilih Kelas</option>
                 {classes.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.tingkatan} {item.class_name}
+                    {getDisplayClassLabel(item.tingkatan, item.class_name, levelMappings)}
                   </option>
                 ))}
               </select>
@@ -520,7 +531,12 @@ export default function ManageSubjectStudentsPage() {
                   Senarai Murid — {selectedSubjectData.subject_name}
                 </h2>
                 <div style={styles.statusText}>
-                  {selectedClassData.tingkatan} {selectedClassData.class_name} •{' '}
+                  {getDisplayClassLabel(
+                    selectedClassData.tingkatan,
+                    selectedClassData.class_name,
+                    levelMappings
+                  )}{' '}
+                  •{' '}
                   {selectedEnrollmentIds.size}/{studentsInClass.length} murid dipilih
                 </div>
               </div>

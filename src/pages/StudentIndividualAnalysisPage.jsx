@@ -6,6 +6,11 @@ import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayLevel,
+  sortLevelsByDisplayOrder,
+} from '../lib/levelLabels'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,6 +222,7 @@ export default function StudentIndividualAnalysisPage() {
   const [scores, setScores] = useState([])
   const [targets, setTargets] = useState([])
   const [gradeScales, setGradeScales] = useState([])
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [selectedTingkatan, setSelectedTingkatan] = useState(
     location.state?.selectedTingkatan || ''
@@ -299,6 +305,11 @@ export default function StudentIndividualAnalysisPage() {
     }
 
     const currentYear = setupRows?.[0]?.current_academic_year || new Date().getFullYear()
+
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId,
+      academicYear: currentYear,
+    })
 
     const { data: examConfigRows, error: examConfigError } = await supabase
       .from('exam_configs')
@@ -399,9 +410,12 @@ export default function StudentIndividualAnalysisPage() {
     setScores(scoresData || [])
     setTargets(targetsData || [])
     setGradeScales(gradeScalesData || [])
+    setLevelMappings(loadedLevelMappings)
 
-    const availableTingkatan = [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))]
-      .sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
+    const availableTingkatan = sortLevelsByDisplayOrder(
+      [...new Set((classesData || []).map((c) => c.tingkatan).filter(Boolean))],
+      loadedLevelMappings
+    )
 
     if (!location.state?.selectedTingkatan && availableTingkatan.length > 0) {
       setSelectedTingkatan(availableTingkatan[0])
@@ -411,9 +425,11 @@ export default function StudentIndividualAnalysisPage() {
   }
 
   const availableTingkatan = useMemo(() => {
-    return [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))]
-      .sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
-  }, [classes])
+    return sortLevelsByDisplayOrder(
+      [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))],
+      levelMappings
+    )
+  }, [classes, levelMappings])
 
   const availableClasses = useMemo(() => {
     return classes
@@ -612,7 +628,7 @@ export default function StudentIndividualAnalysisPage() {
               <option value="">Pilih Tingkatan</option>
               {availableTingkatan.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {getDisplayLevel(item, levelMappings)}
                 </option>
               ))}
             </select>
@@ -673,7 +689,9 @@ export default function StudentIndividualAnalysisPage() {
               </div>
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 md:p-5">
                 <div className="text-sm text-amber-600 font-medium">Tingkatan</div>
-                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">{selectedStudent.tingkatan}</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">
+                  {getDisplayLevel(selectedStudent.tingkatan, levelMappings)}
+                </div>
               </div>
               <div className="rounded-lg bg-purple-50 border border-purple-200 p-4 md:p-5">
                 <div className="text-sm text-purple-600 font-medium">Kelas</div>

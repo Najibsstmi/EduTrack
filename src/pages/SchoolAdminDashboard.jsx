@@ -10,6 +10,11 @@ import {
   buildStudentExamMap,
   getRelevantEnrollmentIds,
 } from '../lib/completionMatrix'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayClassLabel,
+  getDisplayLevel,
+} from '../lib/levelLabels'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 const COMPLETION_GRADE_GROUPS = [
@@ -70,6 +75,7 @@ export default function SchoolAdminDashboard() {
   const [examAccessRows, setExamAccessRows] = useState([])
   const [examAccessLoading, setExamAccessLoading] = useState(false)
   const [examAccessSavingId, setExamAccessSavingId] = useState('')
+  const [levelMappings, setLevelMappings] = useState([])
   const [expandedCompletionGrades, setExpandedCompletionGrades] = useState(() =>
     COMPLETION_GRADE_GROUPS.reduce((acc, grade) => {
       acc[grade] = grade === 'Tingkatan 1'
@@ -209,6 +215,14 @@ export default function SchoolAdminDashboard() {
     }
 
     setSetupConfig(setupData || null)
+
+    const mappingAcademicYear =
+      setupData?.current_academic_year || new Date().getFullYear()
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId: profile.school_id,
+      academicYear: mappingAcademicYear,
+    })
+    setLevelMappings(loadedLevelMappings)
 
     const { count: classTotal, error: classCountError } = await supabase
       .from('classes')
@@ -1341,7 +1355,7 @@ export default function SchoolAdminDashboard() {
                         style={styles.matrixGroupToggle}
                       >
                         <div>
-                          <div style={styles.matrixGroupTitle}>{grade}</div>
+                          <div style={styles.matrixGroupTitle}>{getDisplayLevel(grade, levelMappings)}</div>
                           <div style={styles.matrixGroupMeta}>{rows.length} kelas</div>
                         </div>
                         <span style={styles.matrixGroupChevron}>{isExpanded ? '▲' : '▼'}</span>
@@ -1349,7 +1363,9 @@ export default function SchoolAdminDashboard() {
 
                       {isExpanded && (
                         rows.length === 0 ? (
-                          <div style={styles.matrixGroupEmpty}>Tiada kelas untuk tingkatan ini.</div>
+                          <div style={styles.matrixGroupEmpty}>
+                            {`Tiada kelas untuk ${getDisplayLevel(grade, levelMappings)}.`}
+                          </div>
                         ) : (
                           <div style={{ width: '100%', overflow: 'hidden' }}>
                             <div style={styles.matrixWrap}>
@@ -1370,7 +1386,7 @@ export default function SchoolAdminDashboard() {
                                   {rows.map((row) => (
                                     <tr key={row.id}>
                                       <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
-                                        {row.label}
+                                        {getDisplayClassLabel(row.tingkatan, row.class_name, levelMappings)}
                                       </td>
 
                                       {completionSubjects.map((subjectName) => {
@@ -1483,7 +1499,7 @@ export default function SchoolAdminDashboard() {
                   <tbody>
                     {groupedExamAccessRows.map((group) => (
                       <tr key={group.grade_label}>
-                        <td style={styles.tdStrong}>{group.grade_label}</td>
+                        <td style={styles.tdStrong}>{getDisplayLevel(group.grade_label, levelMappings)}</td>
 
                         {EXAM_MATRIX_KEYS.map((examKey) => {
                           const row = group.exams[examKey]

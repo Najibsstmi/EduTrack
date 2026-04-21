@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import {
+  fetchSchoolLevelLabels,
+  getDisplayLevel,
+  sortLevelsByDisplayOrder,
+} from '../lib/levelLabels'
 
 const ChevronLeftIcon = () => (
   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,6 +44,7 @@ export default function StudentsPage() {
   const [profile, setProfile] = useState(null)
   const [school, setSchool] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
@@ -115,6 +121,12 @@ export default function StudentsPage() {
     }
 
     setSetupConfig(configData)
+
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId: profileData.school_id,
+      academicYear: configData.current_academic_year || new Date().getFullYear(),
+    })
+    setLevelMappings(loadedLevelMappings)
 
     const { data: classData, error: classError } = await supabase
       .from('classes')
@@ -206,8 +218,8 @@ export default function StudentsPage() {
 
   const availableTingkatan = useMemo(() => {
     const raw = [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))]
-    return raw.sort((a, b) => getTingkatanRank(a) - getTingkatanRank(b))
-  }, [classes])
+    return sortLevelsByDisplayOrder(raw, levelMappings)
+  }, [classes, levelMappings])
 
   const availableClassesForSelectedTingkatan = useMemo(() => {
     return classes
@@ -524,7 +536,7 @@ export default function StudentsPage() {
             >
               {availableTingkatan.map((label) => (
                 <option key={label} value={label}>
-                  {label}
+                  {getDisplayLevel(label, levelMappings)}
                 </option>
               ))}
             </select>
@@ -571,7 +583,7 @@ export default function StudentsPage() {
               >
                 {availableTingkatan.map((tingkatan) => (
                   <option key={tingkatan} value={tingkatan}>
-                    {tingkatan}
+                    {getDisplayLevel(tingkatan, levelMappings)}
                   </option>
                 ))}
               </select>
@@ -605,12 +617,12 @@ export default function StudentsPage() {
 
           <div className="mt-6">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">
-              {selectedTingkatan}
+              {getDisplayLevel(selectedTingkatan, levelMappings)}
             </h3>
 
             {filteredStudents.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-                Tiada murid untuk {selectedTingkatan}.
+                Tiada murid untuk {getDisplayLevel(selectedTingkatan, levelMappings)}.
               </div>
             ) : (
               <div className="overflow-x-auto">

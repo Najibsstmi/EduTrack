@@ -10,6 +10,7 @@ import {
   buildStudentExamMap,
   getRelevantEnrollmentIds,
 } from '../lib/completionMatrix'
+import { fetchSchoolLevelLabels, getDisplayClassLabel } from '../lib/levelLabels'
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase()
 
@@ -37,6 +38,7 @@ function DashboardPage() {
   const [completionSubjects, setCompletionSubjects] = useState([])
   const [selectedExamKey, setSelectedExamKey] = useState('TOV')
   const [examOptions, setExamOptions] = useState([])
+  const [levelMappings, setLevelMappings] = useState([])
 
   const [setupStatus, setSetupStatus] = useState({
     exams: false,
@@ -156,6 +158,14 @@ function DashboardPage() {
     setSchoolInfo(schoolData || null)
     const loadedSetupConfig = await loadSetupStatus(data.school_id)
     setSetupConfig(loadedSetupConfig || null)
+
+    const mappingAcademicYear =
+      loadedSetupConfig?.current_academic_year || new Date().getFullYear()
+    const loadedLevelMappings = await fetchSchoolLevelLabels({
+      schoolId: data.school_id,
+      academicYear: mappingAcademicYear,
+    })
+    setLevelMappings(loadedLevelMappings)
   }
 
   const loadSetupStatus = async (schoolId) => {
@@ -679,7 +689,7 @@ function DashboardPage() {
                     {completionRows.map((row) => (
                       <tr key={row.id}>
                         <td style={{ ...styles.matrixTd, ...styles.matrixStickyCol, ...styles.matrixClassCell }}>
-                          {row.label}
+                          {getDisplayClassLabel(row.tingkatan, row.class_name, levelMappings)}
                         </td>
 
                         {matrixColumns.map((subjectName) => {

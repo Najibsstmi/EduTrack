@@ -8,6 +8,15 @@ const getTingkatanRank = (label) => {
   return Number(match[0])
 }
 
+const normalizeText = (value = '') => String(value || '').trim()
+
+const getDisplayLevel = (originalName, levelLabels = []) => {
+  const found = levelLabels.find(
+    (item) => normalizeText(item.original_name) === normalizeText(originalName)
+  )
+  return found?.display_name || originalName
+}
+
 export default function ClassesPage() {
   const navigate = useNavigate()
 
@@ -18,6 +27,10 @@ export default function ClassesPage() {
   const [school, setSchool] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [classes, setClasses] = useState([])
+  const [levelLabels, setLevelLabels] = useState([])
+  const [renameSaving, setRenameSaving] = useState(false)
+  const [newLevelName, setNewLevelName] = useState('')
+  const [newDisplayName, setNewDisplayName] = useState('')
 
   const [search, setSearch] = useState('')
   const [tingkatanFilter, setTingkatanFilter] = useState('Semua')
@@ -28,14 +41,16 @@ export default function ClassesPage() {
   })
 
   const orderedGrades = useMemo(() => {
-    const labels = setupConfig?.active_grade_labels || []
+    const mapped = levelLabels.map((item) => item.original_name)
+    const fallback = setupConfig?.active_grade_labels || []
+    const source = mapped.length > 0 ? mapped : fallback
 
-    return [...labels].sort((a, b) => {
+    return [...source].sort((a, b) => {
       const rankDiff = getTingkatanRank(a) - getTingkatanRank(b)
       if (rankDiff !== 0) return rankDiff
-      return String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' })
+      return String(a).localeCompare(String(b), 'ms', { numeric: true, sensitivity: 'base' })
     })
-  }, [setupConfig])
+  }, [levelLabels, setupConfig])
 
   useEffect(() => {
     initPage()
@@ -110,6 +125,7 @@ export default function ClassesPage() {
     }
 
     await loadClasses(profileData.school_id)
+    await loadLevelLabels(profileData.school_id, configData.current_academic_year)
     setLoading(false)
   }
 
@@ -128,6 +144,176 @@ export default function ClassesPage() {
     }
 
     setClasses(data || [])
+  }
+
+  const loadLevelLabels = async (schoolId, academicYear) => {
+    const { data, error } = await supabase
+      .from('school_level_labels')
+      .select('*')
+      .eq('school_id', schoolId)
+      .eq('academic_year', academicYear)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('display_name', { ascending: true })
+
+    if (error) {
+      console.error(error)
+      alert(`Gagal load label tahap: ${error.message}`)
+      return
+    }
+
+    setLevelLabels(data || [])
+  }
+
+  const handleDisplayNameChange = (originalName, nextDisplayName) => {
+    setLevelLabels((prev) => {
+      const matchIndex = prev.findIndex(
+        (item) => normalizeText(item.original_name) === normalizeText(originalName)
+      )
+
+      if (matchIndex === -1) {
+        return [
+          ...prev,
+          {
+            id: null,
+            original_name: originalName,
+            display_name: nextDisplayName,
+            sort_order: orderedGrades.indexOf(originalName) + 1,
+            is_active: true,
+            level: school?.level ?? null,
+          },
+        ]
+      }
+
+      return prev.map((item) =>
+        normalizeText(item.original_name) === normalizeText(originalName)
+          ? { ...item, display_name: nextDisplayName }
+          : item
+      )
+    })
+  }
+
+  const handleSortOrderChange = (originalName, nextSortOrder) => {
+    setLevelLabels((prev) => {
+      const matchIndex = prev.findIndex(
+        (item) => normalizeText(item.original_name) === normalizeText(originalName)
+      )
+
+      if (matchIndex === -1) {
+        return [
+          ...prev,
+          {
+            id: null,
+            original_name: originalName,
+            display_name: getDisplayLevel(originalName, prev),
+            sort_order: nextSortOrder,
+            is_active: true,
+            level: school?.level ?? null,
+          },
+        ]
+      }
+
+      return prev.map((item) =>
+        normalizeText(item.original_name) === normalizeText(originalName)
+          ? { ...item, sort_order: nextSortOrder }
+          : item
+      )
+    })
+  }
+
+  const handleSaveLevelLabels = async () => {
+    if (!profile?.school_id || !setupConfig?.current_academic_year) return
+
+    setRenameSaving(true)
+
+    try {
+      const payload = orderedGrades.map((originalName, index) => {
+        const existing =
+          levelLabels.find(
+            (item) => normalizeText(item.original_name) === normalizeText(originalName)
+          ) || null
+
+        return {
+          id: existing?.id || undefined,
+          school_id: profile.school_id,
+          academic_year: setupConfig.current_academic_year,
+          level: existing?.level ?? school?.level ?? null,
+          original_name: originalName,
+          display_name: normalizeText(existing?.display_name) || originalName,
+          sort_order: existing?.sort_order ?? index + 1,
+          is_active: existing?.is_active ?? true,
+        }
+      })
+
+      const { error } = await supabase
+        .from('school_level_labels')
+        .upsert(payload, { onConflict: 'id' })
+
+      if (error) throw error
+
+      await loadLevelLabels(profile.school_id, setupConfig.current_academic_year)
+      alert('Nama paparan tahap berjaya dikemaskini.')
+    } catch (err) {
+      console.error(err)
+      alert(`Gagal simpan rename tahap: ${err.message}`)
+    } finally {
+      setRenameSaving(false)
+    }
+  }
+
+  const handleAddLevel = async () => {
+    if (!newLevelName.trim()) {
+      alert('Sila masukkan nama tahap')
+      return
+    }
+
+    if (!profile?.school_id || !setupConfig?.current_academic_year) {
+      alert('Maklumat sekolah belum lengkap.')
+      return
+    }
+
+    const originalName = newLevelName.trim()
+    const displayName = newDisplayName.trim() || originalName
+
+    try {
+      const exist = levelLabels.find(
+        (item) => normalizeText(item.original_name) === normalizeText(originalName)
+      )
+
+      if (exist) {
+        alert('Tahap ini sudah wujud')
+        return
+      }
+
+      const nextOrder =
+        levelLabels.length > 0
+          ? Math.max(...levelLabels.map((x) => x.sort_order || 0)) + 1
+          : 1
+
+      const { error } = await supabase
+        .from('school_level_labels')
+        .insert({
+          school_id: profile.school_id,
+          academic_year: setupConfig.current_academic_year,
+          level: school?.level ?? 'Menengah',
+          original_name: originalName,
+          display_name: displayName,
+          sort_order: nextOrder,
+          is_active: true,
+        })
+
+      if (error) throw error
+
+      await loadLevelLabels(profile.school_id, setupConfig.current_academic_year)
+
+      setNewLevelName('')
+      setNewDisplayName('')
+
+      alert('Tahap berjaya ditambah. Sila tambah kelas, subjek dan peperiksaan.')
+    } catch (err) {
+      console.error(err)
+      alert(`Gagal tambah tahap: ${err.message}`)
+    }
   }
 
   const handleAdd = async () => {
@@ -299,6 +485,110 @@ export default function ClassesPage() {
           </div>
         </div>
 
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900">Rename Tahap</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Tukar nama paparan tahap untuk sekolah anda sahaja. Data asal dalam database tidak diubah.
+          </p>
+
+          <div className="mt-5 space-y-3">
+            {orderedGrades.map((originalName, index) => {
+              const mapping =
+                levelLabels.find(
+                  (item) => normalizeText(item.original_name) === normalizeText(originalName)
+                ) || null
+
+              return (
+                <div
+                  key={originalName}
+                  className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-[180px_1fr_120px]"
+                >
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Nama Asal
+                    </div>
+                    <div className="mt-1 font-semibold text-slate-900">{originalName}</div>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Nama Paparan
+                    </label>
+                    <input
+                      type="text"
+                      value={mapping?.display_name || originalName}
+                      onChange={(e) => handleDisplayNameChange(originalName, e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                      placeholder="Contoh: Form 1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Susunan
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={mapping?.sort_order ?? index + 1}
+                      onChange={(e) => {
+                        const nextValue = Number(e.target.value || index + 1)
+                        handleSortOrderChange(originalName, nextValue)
+                      }}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={handleSaveLevelLabels}
+              disabled={renameSaving}
+              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {renameSaving ? 'Menyimpan...' : 'Simpan Rename Tahap'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900">Tambah Tahap Baru</h2>
+
+          <p className="mt-2 text-sm text-slate-600">
+            Contoh: Tingkatan 6. Selepas tambah, sila tambah kelas, subjek dan peperiksaan untuk tahap ini.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <input
+              type="text"
+              placeholder="Contoh: Tingkatan 6"
+              value={newLevelName}
+              onChange={(e) => setNewLevelName(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2"
+            />
+
+            <input
+              type="text"
+              placeholder="Nama Paparan (optional)"
+              value={newDisplayName}
+              onChange={(e) => setNewDisplayName(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2"
+            />
+
+            <button
+              type="button"
+              onClick={handleAddLevel}
+              className="rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+            >
+              Tambah Tahap
+            </button>
+          </div>
+        </div>
+
         <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold text-slate-900">Tambah Kelas</h2>
 
@@ -310,7 +600,7 @@ export default function ClassesPage() {
             >
               {orderedGrades.map((label) => (
                 <option key={label} value={label}>
-                  {label}
+                  {getDisplayLevel(label, levelLabels)}
                 </option>
               ))}
             </select>
@@ -347,7 +637,7 @@ export default function ClassesPage() {
                 <option value="Semua">Semua Tingkatan</option>
                 {orderedGrades.map((label) => (
                   <option key={label} value={label}>
-                    {label}
+                    {getDisplayLevel(label, levelLabels)}
                   </option>
                 ))}
               </select>
@@ -365,11 +655,13 @@ export default function ClassesPage() {
           <div className="space-y-6">
             {groupedClasses.map(({ tingkatan, items }) => (
               <div key={tingkatan}>
-                <h3 className="mb-3 text-lg font-semibold text-slate-800">{tingkatan}</h3>
+                <h3 className="mb-3 text-lg font-semibold text-slate-800">
+                  {getDisplayLevel(tingkatan, levelLabels)}
+                </h3>
 
                 {items.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
-                    Tiada kelas untuk {tingkatan}.
+                    Tiada kelas untuk {getDisplayLevel(tingkatan, levelLabels)}.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
