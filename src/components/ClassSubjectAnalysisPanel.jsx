@@ -183,24 +183,40 @@ export default function ClassSubjectAnalysisPanel({
           return
         }
 
-        // 4. Ambil murid yang benar-benar mengambil subjek ini
-        const { data: subjectEnrollments, error: subjectEnrollmentsError } = await supabase
-          .from('student_subject_enrollments')
-          .select('student_enrollment_id')
+        // 4. Tentukan sama ada subjek ini selective atau core.
+        const { data: subjectRow, error: subjectError } = await supabase
+          .from('subjects')
+          .select('id, subject_type, is_core')
           .eq('school_id', schoolId)
-          .eq('subject_id', subjectId)
-          .eq('is_active', true)
-          .in('student_enrollment_id', enrollmentIds)
+          .eq('id', subjectId)
+          .single()
 
-        if (subjectEnrollmentsError) throw subjectEnrollmentsError
+        if (subjectError) throw subjectError
 
-        const allowedEnrollmentIdSet = new Set(
-          (subjectEnrollments || []).map((item) => item.student_enrollment_id)
-        )
+        const isSelective =
+          String(subjectRow?.subject_type || '').trim().toLowerCase() === 'selective'
 
-        const filteredEnrollmentRows = enrollmentRows.filter((item) =>
-          allowedEnrollmentIdSet.has(item.id)
-        )
+        let filteredEnrollmentRows = enrollmentRows
+
+        if (isSelective) {
+          const { data: subjectEnrollments, error: subjectEnrollmentsError } = await supabase
+            .from('student_subject_enrollments')
+            .select('student_enrollment_id')
+            .eq('school_id', schoolId)
+            .eq('subject_id', subjectId)
+            .eq('is_active', true)
+            .in('student_enrollment_id', enrollmentIds)
+
+          if (subjectEnrollmentsError) throw subjectEnrollmentsError
+
+          const allowedEnrollmentIdSet = new Set(
+            (subjectEnrollments || []).map((item) => item.student_enrollment_id)
+          )
+
+          filteredEnrollmentRows = enrollmentRows.filter((item) =>
+            allowedEnrollmentIdSet.has(item.id)
+          )
+        }
 
         const totalStudents = filteredEnrollmentRows.length
 
