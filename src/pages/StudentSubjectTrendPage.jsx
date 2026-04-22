@@ -588,9 +588,52 @@ export default function StudentSubjectTrendPage() {
 }
 
 function TrendPerformanceChart({ rows }) {
+  const formatAxisLabelLines = (value, maxCharsPerLine = 12, maxLines = 2) => {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean)
+
+    if (!words.length) {
+      return ['-']
+    }
+
+    const lines = []
+    let currentLine = ''
+
+    words.forEach((word) => {
+      const nextLine = currentLine ? `${currentLine} ${word}` : word
+
+      if (nextLine.length <= maxCharsPerLine) {
+        currentLine = nextLine
+        return
+      }
+
+      if (currentLine) {
+        lines.push(currentLine)
+        currentLine = word
+        return
+      }
+
+      lines.push(word.slice(0, maxCharsPerLine))
+      currentLine = word.slice(maxCharsPerLine)
+    })
+
+    if (currentLine) {
+      lines.push(currentLine)
+    }
+
+    const visibleLines = lines.slice(0, maxLines)
+    const hasOverflow = lines.length > maxLines || words.join(' ').length > visibleLines.join(' ').length
+
+    if (hasOverflow && visibleLines.length) {
+      const lastIndex = visibleLines.length - 1
+      visibleLines[lastIndex] = `${visibleLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`
+    }
+
+    return visibleLines
+  }
+
   const chartWidth = 920
   const chartHeight = 320
-  const padding = { top: 24, right: 24, bottom: 64, left: 48 }
+  const padding = { top: 24, right: 24, bottom: 86, left: 48 }
   const numericRows = rows.filter((row) => row.numericMark !== null)
 
   if (!rows.length) {
@@ -686,6 +729,8 @@ function TrendPerformanceChart({ rows }) {
             const x = getX(row.index)
             const hasMark = row.numericMark !== null
             const y = hasMark ? getY(row.numericMark) : chartHeight - padding.bottom
+            const examLabelLines = formatAxisLabelLines(row.examLabel, 12, 2)
+            const gradeLabelLines = formatAxisLabelLines(row.grade_name || '-', 12, 1)
 
             return (
               <g key={row.examKey}>
@@ -717,22 +762,30 @@ function TrendPerformanceChart({ rows }) {
 
                 <text
                   x={x}
-                  y={chartHeight - padding.bottom + 22}
+                  y={chartHeight - padding.bottom + 20}
                   textAnchor="middle"
                   fontSize="12"
                   fill="#475569"
                 >
-                  {row.examLabel}
+                  {examLabelLines.map((line, index) => (
+                    <tspan key={`${row.examKey}-exam-${index}`} x={x} dy={index === 0 ? 0 : 13}>
+                      {line}
+                    </tspan>
+                  ))}
                 </text>
 
                 <text
                   x={x}
-                  y={chartHeight - padding.bottom + 40}
+                  y={chartHeight - padding.bottom + 50}
                   textAnchor="middle"
                   fontSize="11"
                   fill="#94a3b8"
                 >
-                  {row.grade_name || '-'}
+                  {gradeLabelLines.map((line, index) => (
+                    <tspan key={`${row.examKey}-grade-${index}`} x={x} dy={index === 0 ? 0 : 12}>
+                      {line}
+                    </tspan>
+                  ))}
                 </text>
               </g>
             )

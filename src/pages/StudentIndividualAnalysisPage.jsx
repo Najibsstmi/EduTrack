@@ -65,6 +65,49 @@ const getBarColors = (index, total) => {
   return colors[index % colors.length]
 }
 
+const formatChartLabelLines = (value, maxCharsPerLine = 12, maxLines = 2) => {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean)
+
+  if (!words.length) {
+    return ['-']
+  }
+
+  const lines = []
+  let currentLine = ''
+
+  words.forEach((word) => {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word
+
+    if (nextLine.length <= maxCharsPerLine) {
+      currentLine = nextLine
+      return
+    }
+
+    if (currentLine) {
+      lines.push(currentLine)
+      currentLine = word
+      return
+    }
+
+    lines.push(word.slice(0, maxCharsPerLine))
+    currentLine = word.slice(maxCharsPerLine)
+  })
+
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+
+  const visibleLines = lines.slice(0, maxLines)
+  const hasOverflow = lines.length > maxLines || words.join(' ').length > visibleLines.join(' ').length
+
+  if (hasOverflow && visibleLines.length) {
+    const lastIndex = visibleLines.length - 1
+    visibleLines[lastIndex] = `${visibleLines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1)).trimEnd()}…`
+  }
+
+  return visibleLines
+}
+
 const BarChart = ({ rows, height = 300 }) => {
   if (!rows.length) {
     return (
@@ -93,7 +136,7 @@ const BarChart = ({ rows, height = 300 }) => {
   const maxMark = Math.max(...numericRows.map((r) => r.numericMark), 100)
   const chartWidth = Math.max(600, numericRows.length * 80)
   const chartHeight = height
-  const padding = { top: 20, right: 20, bottom: 60, left: 60 }
+  const padding = { top: 20, right: 20, bottom: 84, left: 60 }
   const plotWidth = chartWidth - padding.left - padding.right
   const plotHeight = chartHeight - padding.top - padding.bottom
   const barWidth = plotWidth / numericRows.length * 0.7
@@ -170,6 +213,7 @@ const BarChart = ({ rows, height = 300 }) => {
           const barHeight = (row.numericMark / maxMark) * plotHeight
           const barY = chartHeight - padding.bottom - barHeight
           const color = getBarColors(row.index, numericRows.length)
+          const labelLines = formatChartLabelLines(row.subject_name, 12, 2)
 
           return (
             <g key={row.subject_id}>
@@ -193,12 +237,20 @@ const BarChart = ({ rows, height = 300 }) => {
               </text>
               <text
                 x={barX + barWidth / 2}
-                y={chartHeight - padding.bottom + 20}
+                y={chartHeight - padding.bottom + 18}
                 textAnchor="middle"
                 fontSize="11"
                 fill="#475569"
               >
-                {row.subject_name.substring(0, 15)}
+                {labelLines.map((line, index) => (
+                  <tspan
+                    key={`${row.subject_id}-label-${index}`}
+                    x={barX + barWidth / 2}
+                    dy={index === 0 ? 0 : 13}
+                  >
+                    {line}
+                  </tspan>
+                ))}
               </text>
             </g>
           )
