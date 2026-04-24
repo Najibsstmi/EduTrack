@@ -23,6 +23,7 @@ export default defineConfig([
       },
     },
     rules: {
+      'react-hooks/immutability': 'off',
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },

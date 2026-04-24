@@ -42,7 +42,6 @@ export default function StudentsPage() {
   const [saving, setSaving] = useState(false)
 
   const [profile, setProfile] = useState(null)
-  const [school, setSchool] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [levelMappings, setLevelMappings] = useState([])
 
@@ -105,8 +104,6 @@ export default function StudentsPage() {
       navigate('/dashboard', { replace: true })
       return
     }
-
-    setSchool(schoolData)
 
     const { data: configData, error: configError } = await supabase
       .from('school_setup_configs')

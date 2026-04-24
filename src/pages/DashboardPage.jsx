@@ -10,7 +10,6 @@ function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [profile, setProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
-  const [setupConfig, setSetupConfig] = useState(null)
 
   const [setupStatus, setSetupStatus] = useState({
     exams: false,
@@ -122,8 +121,7 @@ function DashboardPage() {
 
     setProfile(data)
     setSchoolInfo(schoolData || null)
-    const loadedSetupConfig = await loadSetupStatus(data.school_id)
-    setSetupConfig(loadedSetupConfig || null)
+    await loadSetupStatus(data.school_id)
   }
 
   const loadSetupStatus = async (schoolId) => {

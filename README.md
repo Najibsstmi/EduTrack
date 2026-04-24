@@ -1,16 +1,63 @@
-# React + Vite
+# EduTrack
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+EduTrack ialah sistem pemantauan akademik sekolah berasaskan web. Aplikasi ini membantu admin sekolah mengurus tetapan akademik, data murid, kelas, subjek, markah peperiksaan, sasaran akademik, dan analisis prestasi.
 
-Currently, two official plugins are available:
+## Ciri Utama
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Pendaftaran pengguna dengan aliran kelulusan admin
+- Dashboard master admin dan school admin
+- Tetapan sekolah untuk tahun akademik, kelas, subjek, peperiksaan, dan gred
+- Import murid dan markah melalui CSV
+- Pengurusan markah, sasaran TOV/OTR/ETR, dan status akses peperiksaan
+- Analisis kelas, analisis individu murid, dan trend subjek
+- Sokongan PWA untuk pemasangan ke peranti
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React
+- Vite
+- Tailwind CSS
+- Supabase
+- React Router
+- Vite PWA
+- Vercel
 
-## Expanding the ESLint configuration
+## Keperluan
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Node.js 20 atau lebih baharu
+- Akaun dan projek Supabase
+- Environment variables seperti dalam `.env.example`
+
+## Setup Lokal
+
+```bash
+npm ci
+cp .env.example .env
+npm run dev
+```
+
+Isi nilai Supabase dalam `.env` sebelum menjalankan aplikasi.
+
+## Skrip
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run preview
+```
+
+## Environment Variables
+
+```bash
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
+
+## Deployment
+
+Repo ini disediakan untuk deploy ke Vercel. Pastikan environment variables Supabase ditetapkan di dashboard Vercel sebelum deploy production.
+
+## Status Projek
+
+EduTrack masih aktif dibangunkan. Sebelum release production, semak lint, build, dependency audit, Supabase RLS policies, dan aliran authorization untuk setiap role.

@@ -9,7 +9,6 @@ import {
 import {
   generateOtrMarks,
   getOtrKeysForTingkatan,
-  shouldAutoRecalculateOtrs,
 } from '../lib/otrGeneration'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix'
 import {
@@ -2449,7 +2448,6 @@ export default function StudentScoresPage() {
                   {sortedStudents.map((student, index) => {
                     const isIncomplete = incompleteStudentIds.includes(student.enrollment_id)
                     const currentExamKey = normalizeExamKey(selectedExam)
-                    const guideExamKey = getGuideExamKey(currentExamKey)
                     const guideLabel = getGuideLabel(currentExamKey)
                     const enrollmentId =
                       student.student_enrollment_id || student.enrollment_id || student.id
