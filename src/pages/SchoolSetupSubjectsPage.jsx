@@ -172,6 +172,7 @@ export default function SchoolSetupSubjectsPage() {
           subject_code: null,
           tingkatan: grade,
           is_core: !!subject.is_core,
+          subject_type: subject.is_core ? 'core' : 'selective',
           is_default: true,
           is_active: true,
         })
@@ -224,6 +225,7 @@ export default function SchoolSetupSubjectsPage() {
         subject_code: form.subject_code.trim() || null,
         tingkatan: form.tingkatan,
         is_core: !!form.is_core,
+        subject_type: form.is_core ? 'core' : 'selective',
         is_active: true,
       })
 

@@ -180,8 +180,14 @@ const styles = {
 const normalizeText = (value) =>
   String(value || '').trim().replace(/\s+/g, ' ').toLowerCase()
 
-const isSelectiveSubject = (subject) =>
-  normalizeText(subject?.subject_type) === 'selective'
+const isSelectiveSubject = (subject) => {
+  const subjectType = normalizeText(subject?.subject_type)
+
+  if (subjectType === 'selective') return true
+  if (subjectType === 'core') return false
+
+  return subject?.is_core === false
+}
 
 export default function ManageSubjectStudentsPage() {
   const navigate = useNavigate()
@@ -263,7 +269,7 @@ export default function ManageSubjectStudentsPage() {
 
         supabase
           .from('subjects')
-          .select('id, subject_name, tingkatan, subject_type, is_active')
+          .select('id, subject_name, tingkatan, subject_type, is_core, is_active')
           .eq('school_id', profileData.school_id)
           .eq('is_active', true)
           .order('tingkatan', { ascending: true })
