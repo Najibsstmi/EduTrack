@@ -14,6 +14,7 @@ export default function InstallEduTrackButton() {
     const userAgent = window.navigator.userAgent.toLowerCase()
     return /iphone|ipad|ipod/.test(userAgent)
   }, [])
+  const shouldShowInstallButton = !isInstalled
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
@@ -45,6 +46,14 @@ export default function InstallEduTrackButton() {
       mediaQuery?.removeEventListener?.('change', handleDisplayModeChange)
     }
   }, [])
+
+  useEffect(() => {
+    document.body.classList.toggle('has-install-prompt', shouldShowInstallButton)
+
+    return () => {
+      document.body.classList.remove('has-install-prompt')
+    }
+  }, [shouldShowInstallButton])
 
   const handleInstall = async () => {
     if (!deferredPrompt) return
@@ -84,16 +93,13 @@ export default function InstallEduTrackButton() {
     buttonLabel = 'Pasang EduTrack'
   }
 
+  if (!shouldShowInstallButton) return null
+
   return (
     <button
       type="button"
       onClick={handleButtonClick}
-      disabled={isInstalled}
-      className={`fixed bottom-4 right-4 z-50 inline-flex items-center rounded-full border px-5 py-3 text-sm font-bold shadow-lg transition ${
-        isInstalled
-          ? 'cursor-default border-slate-200 bg-slate-200 text-slate-600 shadow-slate-200'
-          : 'border-slate-900 bg-slate-900 text-white shadow-slate-300 hover:-translate-y-0.5 hover:bg-slate-800'
-      }`}
+      className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-center text-sm font-bold leading-tight text-white shadow-xl shadow-slate-300/80 transition hover:-translate-y-0.5 hover:bg-slate-800 sm:left-auto sm:right-4 sm:w-auto sm:rounded-full sm:px-5"
     >
       {buttonLabel}
     </button>

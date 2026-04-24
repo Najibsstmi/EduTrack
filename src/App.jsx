@@ -24,7 +24,7 @@ import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
-import { supabase } from './lib/supabaseClient'
+import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
 
 function AuthSessionWatcher() {
@@ -51,6 +51,27 @@ function AuthSessionWatcher() {
 }
 
 function App() {
+  if (!hasSupabaseConfig) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-6 text-slate-900">
+        <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            EduTrack
+          </p>
+          <h1 className="mt-2 text-2xl font-bold">Konfigurasi Supabase diperlukan</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Localhost sudah berjalan, tetapi app memerlukan fail .env dengan
+            VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY untuk sambung ke Supabase.
+          </p>
+          <div className="mt-5 rounded-xl bg-slate-950 p-4 font-mono text-xs text-white">
+            <div>VITE_SUPABASE_URL=...</div>
+            <div>VITE_SUPABASE_ANON_KEY=...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <AuthSessionWatcher />

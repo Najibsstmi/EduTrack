@@ -21,6 +21,10 @@ body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+body.has-install-prompt {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+}
+
 @keyframes logoFloatIn {
   0% {
     opacity: 0;
