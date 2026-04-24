@@ -18,19 +18,6 @@ const ChevronLeftIcon = () => (
   </svg>
 )
 
-const TINGKATAN_ORDER = [
-  'Tingkatan 1',
-  'Tingkatan 2',
-  'Tingkatan 3',
-  'Tingkatan 4',
-  'Tingkatan 5',
-]
-
-const getTingkatanRank = (tingkatan = '') => {
-  const index = TINGKATAN_ORDER.indexOf(String(tingkatan).trim())
-  return index === -1 ? 999 : index
-}
-
 const isTargetKey = (key = '') => {
   const value = String(key).trim().toUpperCase()
   return value.startsWith('OTR') || value === 'ETR'

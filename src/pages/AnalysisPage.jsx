@@ -18,19 +18,6 @@ const ChevronLeftIcon = () => (
   </svg>
 )
 
-const TINGKATAN_ORDER = [
-  'Tingkatan 1',
-  'Tingkatan 2',
-  'Tingkatan 3',
-  'Tingkatan 4',
-  'Tingkatan 5',
-]
-
-const getTingkatanRank = (tingkatan = '') => {
-  const index = TINGKATAN_ORDER.indexOf(String(tingkatan).trim())
-  return index === -1 ? 999 : index
-}
-
 const getExamMetric = (analysis, examKey) => {
   const key = String(examKey || '').toUpperCase()
   return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
@@ -454,11 +441,6 @@ export default function AnalysisPage() {
       const examLabel = exam.name || examKey
 
       const examData = mergedRows.map((row) => getExamMetric(row.analysis, examKey))
-
-      const marks = examData
-        .map((item) => item.mark)
-        .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
-        .map((v) => Number(v))
 
       const grades = examData.map((item) => item.grade_name || null)
 

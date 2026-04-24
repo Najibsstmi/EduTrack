@@ -18,19 +18,6 @@ const ChevronLeftIcon = () => (
   </svg>
 )
 
-const TINGKATAN_ORDER = [
-  'Tingkatan 1',
-  'Tingkatan 2',
-  'Tingkatan 3',
-  'Tingkatan 4',
-  'Tingkatan 5',
-]
-
-const getTingkatanRank = (tingkatan = '') => {
-  const index = TINGKATAN_ORDER.indexOf(String(tingkatan).trim())
-  return index === -1 ? 999 : index
-}
-
 const isTargetKey = (key = '') => {
   const value = String(key).trim().toUpperCase()
   return value.startsWith('OTR') || value === 'ETR'
@@ -57,7 +44,7 @@ const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
     : Number(point)
 }
 
-const getBarColors = (index, total) => {
+const getBarColors = (index) => {
   const colors = [
     '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
     '#06b6d4', '#f97316', '#6366f1', '#84cc16', '#0891b2', '#d946ef',

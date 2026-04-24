@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
 const DEFAULT_GRADE_KEYS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
@@ -9,61 +9,6 @@ function normaliseText(value) {
 
 function normaliseExamKey(value) {
   return normaliseText(value)
-}
-
-function getFlexibleExamOptions(setupConfig, actualTingkatan) {
-  if (!setupConfig || !actualTingkatan) return []
-
-  const examStructure = setupConfig.exam_structure || {}
-  const keys = Object.keys(examStructure)
-
-  if (!keys.length) return []
-
-  const target = normaliseText(actualTingkatan)
-
-  // Cuba match exact dulu
-  let matchedKey = keys.find((key) => normaliseText(key) === target)
-
-  // Kalau tak jumpa, cuba match nombor tingkatan
-  if (!matchedKey) {
-    const targetNumber = target.replace(/[^0-9]/g, '')
-    matchedKey = keys.find((key) => {
-      const keyNumber = normaliseText(key).replace(/[^0-9]/g, '')
-      return keyNumber && targetNumber && keyNumber === targetNumber
-    })
-  }
-
-  // Fallback: kalau actualTingkatan = "TINGKATAN 5", tapi key simpan "5" atau sebaliknya
-  if (!matchedKey) {
-    matchedKey = keys.find((key) => {
-      const a = normaliseText(key).replace('TINGKATAN', '').trim()
-      const b = target.replace('TINGKATAN', '').trim()
-      return a === b
-    })
-  }
-
-  if (!matchedKey) return []
-
-  const rawOptions = examStructure[matchedKey] || []
-  if (!Array.isArray(rawOptions)) return []
-
-  return rawOptions
-    .map((item) => {
-      if (typeof item === 'string') {
-        return {
-          value: normaliseExamKey(item),
-          label: item,
-        }
-      }
-
-      const value = normaliseExamKey(
-        item?.value || item?.code || item?.exam_key || item?.label || ''
-      )
-      const label = item?.label || item?.value || item?.code || item?.exam_key || value
-
-      return value ? { value, label } : null
-    })
-    .filter(Boolean)
 }
 
 function createEmptyGradeCounts() {
@@ -92,14 +37,12 @@ export default function ClassSubjectAnalysisPanel({
   const [rows, setRows] = useState([])
   const [error, setError] = useState('')
   const [actualTingkatan, setActualTingkatan] = useState('')
-  const [examOptions, setExamOptions] = useState([])
 
   useEffect(() => {
     const loadAnalysis = async () => {
       if (!schoolId || !classId || !subjectId) {
         setRows([])
         setActualTingkatan('')
-        setExamOptions([])
         return
       }
 
@@ -122,7 +65,6 @@ export default function ClassSubjectAnalysisPanel({
 
         if (!currentTingkatan) {
           setRows([])
-          setExamOptions([])
           setLoading(false)
           return
         }
@@ -142,10 +84,6 @@ export default function ClassSubjectAnalysisPanel({
           value: String(item.exam_key || '').trim().toUpperCase(),
           label: item.exam_name || item.exam_key,
         }))
-
-        setExamOptions(examList)
-        console.log(examList)
-        console.log('examOptions:', examList)
 
         // 3. Ambil semua kelas dalam tingkatan yang sama
         const { data: allClasses, error: classesError } = await supabase
@@ -251,10 +189,6 @@ export default function ClassSubjectAnalysisPanel({
 
           scoreMap[row.student_enrollment_id][examKey] = row
         })
-
-        console.log(scores || [])
-        console.log('scores sample:', (scores || []).slice(0, 5))
-        console.log('totalStudents:', totalStudents)
 
         const summaryRows = examList.map((exam) => {
           const examKey = normaliseExamKey(exam.value)

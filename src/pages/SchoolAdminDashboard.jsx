@@ -531,16 +531,6 @@ export default function SchoolAdminDashboard() {
     setCompletionLoading(false)
   }
 
-  const refreshData = async () => {
-    if (!adminProfile?.school_id) return
-
-    await Promise.all([
-      fetchSchoolData(adminProfile.school_id),
-      fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig),
-      loadExamAccessRows(adminProfile.school_id),
-    ])
-  }
-
   const handleToggleExamAccess = async (rowId, nextValue) => {
     if (!adminProfile?.school_id || !rowId) return
 
