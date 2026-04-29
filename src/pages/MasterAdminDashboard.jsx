@@ -87,6 +87,7 @@ export default function MasterAdminDashboard() {
   const [currentUser, setCurrentUser] = useState(null)
   const [profiles, setProfiles] = useState([])
   const [schools, setSchools] = useState([])
+  const [pendingUsers, setPendingUsers] = useState([])
   const [expandedSchoolId, setExpandedSchoolId] = useState(null)
   const [search, setSearch] = useState('')
   const [busyId, setBusyId] = useState(null)
@@ -94,7 +95,7 @@ export default function MasterAdminDashboard() {
   const currentUserDisplayName = getDisplayName(currentUser)
 
   useEffect(() => {
-    loadPage()
+    fetchMasterAdminData()
   }, [])
 
   const handleLogout = async () => {
@@ -102,7 +103,7 @@ export default function MasterAdminDashboard() {
     navigate('/login', { replace: true })
   }
 
-  const loadPage = async () => {
+  const fetchMasterAdminData = async () => {
     setLoading(true)
 
     try {
@@ -160,7 +161,11 @@ export default function MasterAdminDashboard() {
         return
       }
 
-      const [{ data: profilesData, error: profilesError }, { data: schoolsData, error: schoolsError }] = await Promise.all([
+      const [
+        { data: profilesData, error: profilesError },
+        { data: schoolsData, error: schoolsError },
+        { data: pendingData, error: pendingError },
+      ] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, role, designation, school_id, approval_status, is_active, created_at, is_master_admin')
@@ -169,13 +174,34 @@ export default function MasterAdminDashboard() {
           .from('schools')
           .select('id, school_name, school_code, school_type, state, district, is_active')
           .order('school_name'),
+        supabase
+          .from('profiles')
+          .select(`
+            id,
+            full_name,
+            email,
+            role,
+            approval_status,
+            school_id,
+            created_at,
+            schools (
+              id,
+              school_name,
+              school_code,
+              state
+            )
+          `)
+          .eq('approval_status', 'pending')
+          .order('created_at', { ascending: false }),
       ])
 
       if (profilesError) throw profilesError
       if (schoolsError) throw schoolsError
+      if (pendingError) throw pendingError
 
       setProfiles(profilesData || [])
       setSchools((schoolsData || []).filter((school) => school.is_active !== false))
+      setPendingUsers(pendingData || [])
     } catch (error) {
       console.error('Load page error:', error)
 
@@ -245,8 +271,23 @@ export default function MasterAdminDashboard() {
       })
     }
 
-    return result.sort((a, b) => a.school.school_name.localeCompare(b.school.school_name, 'ms'))
-  }, [profiles, schoolMap, search])
+    const schoolsWithPendingCount = result.map((item) => {
+      const pendingCount = pendingUsers.filter((user) => user.school_id === item.school.id).length
+
+      return {
+        ...item,
+        pending_count: pendingCount,
+      }
+    })
+
+    return schoolsWithPendingCount.sort((a, b) => {
+      if (b.pending_count !== a.pending_count) {
+        return b.pending_count - a.pending_count
+      }
+
+      return a.school.school_name.localeCompare(b.school.school_name, 'ms')
+    })
+  }, [profiles, schoolMap, search, pendingUsers])
 
   const stats = useMemo(() => {
     const schoolIds = new Set(profiles.filter((profile) => profile.school_id).map((profile) => profile.school_id))
@@ -292,7 +333,7 @@ export default function MasterAdminDashboard() {
 
       if (promoteError) throw promoteError
 
-      await loadPage()
+      await fetchMasterAdminData()
     } catch (error) {
       console.error(error)
       alert(error.message || 'Gagal menukar admin sekolah.')
@@ -317,7 +358,7 @@ export default function MasterAdminDashboard() {
         .eq('id', user.id)
 
       if (error) throw error
-      await loadPage()
+      await fetchMasterAdminData()
     } catch (error) {
       console.error(error)
       alert(error.message || 'Gagal mengemaskini status pengguna.')
@@ -335,7 +376,7 @@ export default function MasterAdminDashboard() {
         .eq('id', user.id)
 
       if (error) throw error
-      await loadPage()
+      await fetchMasterAdminData()
     } catch (error) {
       console.error(error)
       alert(error.message || 'Gagal meluluskan pengguna.')
@@ -356,10 +397,59 @@ export default function MasterAdminDashboard() {
         .eq('id', user.id)
 
       if (error) throw error
-      await loadPage()
+      await fetchMasterAdminData()
     } catch (error) {
       console.error(error)
       alert(error.message || 'Gagal menolak pengguna.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleApproveUser = async (userId) => {
+    setBusyId(userId)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          approval_status: 'approved',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      if (error) {
+        console.error(error)
+        alert('Gagal approve pengguna.')
+        return
+      }
+
+      await fetchMasterAdminData()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleRejectUser = async (userId) => {
+    const confirmReject = window.confirm('Reject pengguna ini?')
+    if (!confirmReject) return
+
+    setBusyId(userId)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          approval_status: 'rejected',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+
+      if (error) {
+        console.error(error)
+        alert('Gagal reject pengguna.')
+        return
+      }
+
+      await fetchMasterAdminData()
     } finally {
       setBusyId(null)
     }
@@ -444,6 +534,64 @@ export default function MasterAdminDashboard() {
           <StatCard title="Pengguna Pending" value={stats.totalPending} icon={Clock3} />
         </div>
 
+        {pendingUsers.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Pengguna Pending Perlu Tindakan</h2>
+                <p className="text-sm text-slate-600">
+                  Semak dan luluskan pengguna baharu sebelum mereka boleh menggunakan sistem.
+                </p>
+              </div>
+
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">
+                {pendingUsers.length} pending
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {pendingUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <div className="font-semibold text-slate-900">{user.full_name || 'Nama belum lengkap'}</div>
+
+                    <div className="text-sm text-slate-600">{user.email}</div>
+
+                    <div className="mt-1 text-sm text-slate-700">
+                      <span className="font-semibold">Sekolah:</span>{' '}
+                      {user.schools?.school_name || 'Belum pilih sekolah'}
+                      {user.schools?.school_code ? ` (${user.schools.school_code})` : ''}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleApproveUser(user.id)}
+                      disabled={busyId === user.id}
+                      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Approve
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRejectUser(user.id)}
+                      disabled={busyId === user.id}
+                      className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-5">
             <h2 className="text-xl font-semibold text-slate-900">Senarai Sekolah & Pengguna</h2>
@@ -469,6 +617,11 @@ export default function MasterAdminDashboard() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-base font-semibold text-slate-900">{item.school.school_name}</h3>
                           <Badge tone="slate">{item.school.school_code}</Badge>
+                          {item.pending_count > 0 && (
+                            <span className="ml-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                              Pending: {item.pending_count}
+                            </span>
+                          )}
                           {item.totalPending > 0 ? <Badge tone="amber">{item.totalPending} Pending</Badge> : null}
                         </div>
 

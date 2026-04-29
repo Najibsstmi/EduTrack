@@ -150,6 +150,13 @@ function SignupPage() {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
+        options: {
+          data: {
+            role: 'user',
+            approval_status: 'pending',
+            status: 'pending',
+          },
+        },
       })
 
       if (signUpError) {
@@ -188,7 +195,7 @@ function SignupPage() {
             designation: trimmedDesignation,
             email: normalizedEmail,
             school_id: selectedSchoolId,
-            role: 'teacher',
+            role: 'user',
             is_school_admin: false,
             approval_status: 'pending',
             is_active: true,
@@ -206,7 +213,7 @@ function SignupPage() {
             designation: trimmedDesignation,
             email: normalizedEmail,
             school_id: selectedSchoolId,
-            role: 'teacher',
+            role: 'user',
             is_school_admin: false,
             approval_status: 'pending',
             is_active: true,
