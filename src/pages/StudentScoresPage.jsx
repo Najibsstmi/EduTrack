@@ -908,6 +908,7 @@ export default function StudentScoresPage() {
         .from('subjects')
         .select('id, subject_name, subject_code, tingkatan, subject_type, is_core')
         .eq('school_id', profileData.school_id)
+        .eq('is_active', true)
         .order('subject_name', { ascending: true }),
       supabase
         .from('grade_scales')

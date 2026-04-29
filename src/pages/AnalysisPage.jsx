@@ -136,7 +136,8 @@ export default function AnalysisPage() {
       supabase
         .from('subjects')
         .select('*')
-        .eq('school_id', schoolId),
+        .eq('school_id', schoolId)
+        .eq('is_active', true),
 
       supabase
         .from('student_enrollments')

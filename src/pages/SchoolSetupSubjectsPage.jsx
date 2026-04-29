@@ -247,35 +247,58 @@ export default function SchoolSetupSubjectsPage() {
     setSaving(false)
   }
 
-  const handleDelete = async (subject) => {
-    const confirmDelete = window.confirm('Padam / nyahaktifkan subjek ini?')
-    if (!confirmDelete) return
+  const handleSetSubjectActive = async (subject, isActive) => {
+    const actionLabel = isActive ? 'aktifkan semula' : 'nyahaktifkan'
+    const confirmToggle = window.confirm(
+      `Anda pasti mahu ${actionLabel} subjek "${subject.subject_name}"?`
+    )
+    if (!confirmToggle) return
 
-    let query = supabase.from('subjects')
+    setSaving(true)
 
-    if (subject.is_default) {
-      const { error } = await query
-        .update({ is_active: false })
-        .eq('id', subject.id)
+    const { error } = await supabase
+      .from('subjects')
+      .update({ is_active: isActive })
+      .eq('id', subject.id)
 
-      if (error) {
-        console.error(error)
-        alert(`Gagal nyahaktifkan subject: ${error.message}`)
-        return
-      }
-    } else {
-      const { error } = await query
-        .delete()
-        .eq('id', subject.id)
-
-      if (error) {
-        console.error(error)
-        alert(`Gagal padam subject: ${error.message}`)
-        return
-      }
+    if (error) {
+      console.error(error)
+      alert(`Gagal ${actionLabel} subject: ${error.message}`)
+      setSaving(false)
+      return
     }
 
     await loadSubjects(profile.school_id)
+    setSaving(false)
+  }
+
+  const handleDeleteSubject = async (subject) => {
+    if (subject.is_default) {
+      alert('Subjek default tidak boleh dipadam. Sila nyahaktifkan jika tidak digunakan.')
+      return
+    }
+
+    const confirmDelete = window.confirm(
+      `Padam subjek "${subject.subject_name}"? Tindakan ini tidak boleh dibuat asal.`
+    )
+    if (!confirmDelete) return
+
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('subjects')
+      .delete()
+      .eq('id', subject.id)
+
+    if (error) {
+      console.error(error)
+      alert(`Gagal padam subject: ${error.message}`)
+      setSaving(false)
+      return
+    }
+
+    await loadSubjects(profile.school_id)
+    setSaving(false)
   }
 
   const handleNextStep = async () => {
@@ -458,15 +481,43 @@ export default function SchoolSetupSubjectsPage() {
                             <td className="px-3 py-3 align-middle">{s.subject_name}</td>
                             <td className="px-3 py-3 align-middle">{s.subject_code || '-'}</td>
                             <td className="px-3 py-3 align-middle">{s.is_core ? 'Ya' : 'Tidak'}</td>
-                            <td className="px-3 py-3 align-middle">{s.is_active ? 'Aktif' : 'Tidak aktif'}</td>
                             <td className="px-3 py-3 align-middle">
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(s)}
-                                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  s.is_active
+                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                                }`}
                               >
-                                {s.is_default ? 'Nyahaktif' : 'Padam'}
-                              </button>
+                                {s.is_active ? 'Aktif' : 'Tidak aktif'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 align-middle">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetSubjectActive(s, !s.is_active)}
+                                  disabled={saving}
+                                  className={`rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-60 ${
+                                    s.is_active
+                                      ? 'bg-amber-600 hover:bg-amber-700'
+                                      : 'bg-emerald-600 hover:bg-emerald-700'
+                                  }`}
+                                >
+                                  {s.is_active ? 'Nyahaktif' : 'Aktifkan'}
+                                </button>
+
+                                {!s.is_default && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSubject(s)}
+                                    disabled={saving}
+                                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                                  >
+                                    Padam
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}

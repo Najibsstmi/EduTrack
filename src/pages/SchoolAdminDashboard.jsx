@@ -70,6 +70,7 @@ export default function SchoolAdminDashboard() {
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
   const [completionSubjects, setCompletionSubjects] = useState([])
+  const [completionSubjectsByGrade, setCompletionSubjectsByGrade] = useState({})
   const [selectedExamKey, setSelectedExamKey] = useState('TOV')
   const [examOptions, setExamOptions] = useState([])
   const [examAccessRows, setExamAccessRows] = useState([])
@@ -306,6 +307,7 @@ export default function SchoolAdminDashboard() {
     if (!schoolId) {
       setCompletionRows([])
       setCompletionSubjects([])
+      setCompletionSubjectsByGrade({})
       return
     }
 
@@ -413,6 +415,29 @@ export default function SchoolAdminDashboard() {
       a.localeCompare(b, 'ms', { sensitivity: 'base' })
     )
 
+    const subjectNamesByGrade = activeSubjects.reduce((acc, subject) => {
+      const gradeKey = normalizeText(subject.tingkatan)
+      const subjectName = String(subject.subject_name || '').trim()
+
+      if (!gradeKey || !subjectName) return acc
+
+      if (!acc[gradeKey]) {
+        acc[gradeKey] = []
+      }
+
+      if (!acc[gradeKey].some((item) => normalizeText(item) === normalizeText(subjectName))) {
+        acc[gradeKey].push(subjectName)
+      }
+
+      return acc
+    }, {})
+
+    Object.keys(subjectNamesByGrade).forEach((gradeKey) => {
+      subjectNamesByGrade[gradeKey].sort((a, b) =>
+        a.localeCompare(b, 'ms', { sensitivity: 'base' })
+      )
+    })
+
     const studentExamMap = buildStudentExamMap(scoreRows || [])
 
     const enrollmentsByClass = new Map()
@@ -453,9 +478,12 @@ export default function SchoolAdminDashboard() {
               )
           )
 
+        const subjectNamesForClass =
+          subjectNamesByGrade[normalizeText(classItem.tingkatan)] || []
+
         const cells = {}
 
-        subjectNames.forEach((subjectName) => {
+        subjectNamesForClass.forEach((subjectName) => {
           const subject = offeredSubjectsForClass.find(
             (item) => normalizeText(item.subject_name) === normalizeText(subjectName)
           )
@@ -527,6 +555,7 @@ export default function SchoolAdminDashboard() {
       })
 
     setCompletionSubjects(subjectNames)
+    setCompletionSubjectsByGrade(subjectNamesByGrade)
     setCompletionRows(rows)
     setCompletionLoading(false)
   }
@@ -1356,9 +1385,11 @@ export default function SchoolAdminDashboard() {
               Belum ada data kelas, subjek atau murid aktif untuk dipaparkan.
             </div>
           ) : (
-            <div style={styles.matrixGroupList}>
+              <div style={styles.matrixGroupList}>
                 {groupedCompletionRows.map(({ grade, rows }) => {
                   const isExpanded = expandedCompletionGrades[grade] === true
+                  const gradeSubjectNames =
+                    completionSubjectsByGrade[normalizeText(grade)] || []
 
                   return (
                     <div key={grade} style={styles.matrixGroupCard}>
@@ -1379,6 +1410,10 @@ export default function SchoolAdminDashboard() {
                           <div style={styles.matrixGroupEmpty}>
                             {`Tiada kelas untuk ${getDisplayLevel(grade, levelMappings)}.`}
                           </div>
+                        ) : gradeSubjectNames.length === 0 ? (
+                          <div style={styles.matrixGroupEmpty}>
+                            {`Tiada subjek aktif untuk ${getDisplayLevel(grade, levelMappings)}.`}
+                          </div>
                         ) : (
                           <div style={{ width: '100%', overflow: 'hidden' }}>
                             <div style={styles.matrixWrap}>
@@ -1388,7 +1423,7 @@ export default function SchoolAdminDashboard() {
                                     <th style={{ ...styles.matrixTh, ...styles.matrixStickyCol }}>
                                       Tingkatan / Kelas
                                     </th>
-                                    {completionSubjects.map((subjectName) => (
+                                    {gradeSubjectNames.map((subjectName) => (
                                       <th key={`${grade}-${subjectName}`} style={styles.matrixTh}>
                                         {subjectName}
                                       </th>
@@ -1402,7 +1437,7 @@ export default function SchoolAdminDashboard() {
                                         {getDisplayClassLabel(row.tingkatan, row.class_name, levelMappings)}
                                       </td>
 
-                                      {completionSubjects.map((subjectName) => {
+                                      {gradeSubjectNames.map((subjectName) => {
                                         const cell = row.cells?.[subjectName]
                                         const isClickable = cell?.status !== 'na'
 

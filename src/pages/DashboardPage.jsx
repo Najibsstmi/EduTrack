@@ -160,7 +160,8 @@ function DashboardPage() {
       supabase
         .from('subjects')
         .select('id, subject_name')
-        .eq('school_id', schoolId),
+        .eq('school_id', schoolId)
+        .eq('is_active', true),
     ])
 
     const setupStep = setupData?.setup_step || 0
