@@ -236,6 +236,34 @@ export default function SchoolSetupExamsPage() {
       return
     }
 
+    const academicYear =
+      settings?.current_academic_year || new Date().getFullYear()
+
+    const examRows = Object.entries(examStructure).flatMap(([gradeLabel, exams]) =>
+      exams.map((exam, index) => ({
+        school_id: profile.school_id,
+        academic_year: academicYear,
+        level: gradeLabel,
+        grade_label: gradeLabel,
+        exam_key: String(exam.key || '').trim().toUpperCase(),
+        exam_name: String(exam.name || exam.key || '').trim(),
+        exam_order: index + 1,
+        is_active: false,
+      }))
+    )
+
+    const { error: examConfigError } = await supabase
+      .from('exam_configs')
+      .upsert(examRows, {
+        onConflict: 'school_id,academic_year,grade_label,exam_key',
+      })
+
+    if (examConfigError) {
+      alert(`Gagal sync exam_configs: ${examConfigError.message}`)
+      setSaving(false)
+      return
+    }
+
     alert('Tetapan peperiksaan berjaya disimpan.')
     setSaving(false)
     navigate('/school-setup/grades')
