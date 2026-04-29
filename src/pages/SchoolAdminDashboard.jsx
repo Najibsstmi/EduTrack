@@ -893,7 +893,28 @@ export default function SchoolAdminDashboard() {
     }))
   }, [completionRows])
 
-  const EXAM_MATRIX_KEYS = ['TOV', 'OTR1', 'AR1', 'OTR2', 'AR2', 'ETR']
+  const visibleExamKeys = useMemo(() => {
+    const unique = new Map()
+
+    ;(examAccessRows || []).forEach((row) => {
+      const examKey = String(row.exam_key || '').trim().toUpperCase()
+
+      if (!examKey || examKey.startsWith('OTR')) return
+      if (!unique.has(examKey)) unique.set(examKey, row)
+    })
+
+    const sorted = Array.from(unique.values())
+      .sort((a, b) => Number(a.exam_order || 999) - Number(b.exam_order || 999))
+      .map((row) => String(row.exam_key || '').trim().toUpperCase())
+
+    return sorted.length > 0 ? sorted : ['TOV', 'AR1', 'AR2', 'ETR']
+  }, [examAccessRows])
+
+  const getExamColumnLabel = (examKey) => {
+    if (examKey === 'AR1') return 'AR1 / PPT'
+    if (examKey === 'AR2') return 'AR2 / PPC'
+    return examKey
+  }
 
   const groupedExamAccessRows = useMemo(() => {
     const grouped = {}
@@ -902,7 +923,7 @@ export default function SchoolAdminDashboard() {
       const gradeLabel = String(row.level || row.grade_label || '').trim()
       const examKey = String(row.exam_key || '').trim().toUpperCase()
 
-      if (!EXAM_MATRIX_KEYS.includes(examKey)) continue
+      if (!visibleExamKeys.includes(examKey)) continue
 
       if (!grouped[gradeLabel]) {
         grouped[gradeLabel] = {
@@ -917,7 +938,7 @@ export default function SchoolAdminDashboard() {
     return Object.values(grouped).sort((a, b) =>
       a.grade_label.localeCompare(b.grade_label, 'ms', { numeric: true })
     )
-  }, [examAccessRows])
+  }, [examAccessRows, visibleExamKeys])
 
   const toggleCompletionGrade = (grade) => {
     setExpandedCompletionGrades((prev) => ({
@@ -1482,12 +1503,9 @@ export default function SchoolAdminDashboard() {
                   <thead>
                     <tr>
                       <th style={styles.th}>Tingkatan</th>
-                      <th style={styles.thCenter}>TOV</th>
-                      <th style={styles.thCenter}>OTR1</th>
-                      <th style={styles.thCenter}>AR1 / PPT</th>
-                      <th style={styles.thCenter}>OTR2</th>
-                      <th style={styles.thCenter}>AR2 / PPC</th>
-                      <th style={styles.thCenter}>ETR</th>
+                      {visibleExamKeys.map((examKey) => (
+                        <th key={examKey} style={styles.thCenter}>{getExamColumnLabel(examKey)}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -1495,7 +1513,7 @@ export default function SchoolAdminDashboard() {
                       <tr key={group.grade_label}>
                         <td style={styles.tdStrong}>{getDisplayLevel(group.grade_label, levelMappings)}</td>
 
-                        {EXAM_MATRIX_KEYS.map((examKey) => {
+                        {visibleExamKeys.map((examKey) => {
                           const row = group.exams[examKey]
 
                           if (!row) {

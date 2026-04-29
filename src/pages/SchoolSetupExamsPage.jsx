@@ -239,17 +239,45 @@ export default function SchoolSetupExamsPage() {
     const academicYear =
       settings?.current_academic_year || new Date().getFullYear()
 
+    const { data: existingExamConfigs, error: existingExamConfigsError } = await supabase
+      .from('exam_configs')
+      .select('grade_label, exam_key, is_active')
+      .eq('school_id', profile.school_id)
+      .eq('academic_year', academicYear)
+
+    if (existingExamConfigsError) {
+      alert(`Gagal ambil status exam_configs sedia ada: ${existingExamConfigsError.message}`)
+      setSaving(false)
+      return
+    }
+
+    const existingStatusMap = new Map(
+      (existingExamConfigs || []).map((row) => {
+        const key = `${String(row.grade_label || '').trim().toLowerCase()}__${String(row.exam_key || '')
+          .trim()
+          .toUpperCase()}`
+        return [key, row.is_active !== false]
+      })
+    )
+
     const examRows = Object.entries(examStructure).flatMap(([gradeLabel, exams]) =>
-      exams.map((exam, index) => ({
-        school_id: profile.school_id,
-        academic_year: academicYear,
-        level: gradeLabel,
-        grade_label: gradeLabel,
-        exam_key: String(exam.key || '').trim().toUpperCase(),
-        exam_name: String(exam.name || exam.key || '').trim(),
-        exam_order: index + 1,
-        is_active: false,
-      }))
+      exams.map((exam, index) => {
+        const examKey = String(exam.key || '').trim().toUpperCase()
+        const mapKey = `${String(gradeLabel || '').trim().toLowerCase()}__${examKey}`
+
+        return {
+          school_id: profile.school_id,
+          academic_year: academicYear,
+          level: gradeLabel,
+          grade_label: gradeLabel,
+          exam_key: examKey,
+          exam_name: String(exam.name || exam.key || '').trim(),
+          exam_order: index + 1,
+          is_active: existingStatusMap.has(mapKey)
+            ? existingStatusMap.get(mapKey)
+            : false,
+        }
+      })
     )
 
     const { error: examConfigError } = await supabase
