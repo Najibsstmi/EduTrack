@@ -263,9 +263,9 @@ export default function SchoolAdminDashboard() {
     try {
       const { data, error } = await supabase
         .from('exam_configs')
-        .select('id, school_id, grade_label, exam_key, exam_name, exam_order, is_active')
+        .select('*')
         .eq('school_id', schoolId)
-        .order('grade_label', { ascending: true })
+        .order('level', { ascending: true })
         .order('exam_order', { ascending: true })
 
       if (error) throw error
@@ -531,23 +531,25 @@ export default function SchoolAdminDashboard() {
     setCompletionLoading(false)
   }
 
-  const handleToggleExamAccess = async (rowId, nextValue) => {
-    if (!adminProfile?.school_id || !rowId) return
+  const handleToggleExamAccess = async (examId, value) => {
+    if (!examId) return
 
-    setExamAccessSavingId(rowId)
+    setExamAccessSavingId(examId)
 
     try {
       const { error } = await supabase
         .from('exam_configs')
-        .update({ is_active: nextValue })
-        .eq('id', rowId)
-        .eq('school_id', adminProfile.school_id)
+        .update({
+          is_active: value,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', examId)
 
       if (error) throw error
 
       setExamAccessRows((prev) =>
         prev.map((row) =>
-          row.id === rowId ? { ...row, is_active: nextValue } : row
+          row.id === examId ? { ...row, is_active: value } : row
         )
       )
     } catch (err) {
@@ -891,13 +893,13 @@ export default function SchoolAdminDashboard() {
     }))
   }, [completionRows])
 
-  const EXAM_MATRIX_KEYS = ['TOV', 'AR1', 'AR2', 'ETR']
+  const EXAM_MATRIX_KEYS = ['TOV', 'OTR1', 'AR1', 'OTR2', 'AR2', 'ETR']
 
   const groupedExamAccessRows = useMemo(() => {
     const grouped = {}
 
     for (const row of examAccessRows || []) {
-      const gradeLabel = String(row.grade_label || '').trim()
+      const gradeLabel = String(row.level || row.grade_label || '').trim()
       const examKey = String(row.exam_key || '').trim().toUpperCase()
 
       if (!EXAM_MATRIX_KEYS.includes(examKey)) continue
@@ -1481,7 +1483,9 @@ export default function SchoolAdminDashboard() {
                     <tr>
                       <th style={styles.th}>Tingkatan</th>
                       <th style={styles.thCenter}>TOV</th>
+                      <th style={styles.thCenter}>OTR1</th>
                       <th style={styles.thCenter}>AR1 / PPT</th>
+                      <th style={styles.thCenter}>OTR2</th>
                       <th style={styles.thCenter}>AR2 / PPC</th>
                       <th style={styles.thCenter}>ETR</th>
                     </tr>
