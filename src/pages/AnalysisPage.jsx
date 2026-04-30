@@ -23,6 +23,21 @@ const getExamMetric = (analysis, examKey) => {
   return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
 }
 
+const getDefaultExamOrder = (examKey) => {
+  const key = String(examKey || '').trim().toUpperCase()
+
+  if (key === 'TOV') return 0
+  if (key === 'ETR') return 999
+
+  const otrMatch = key.match(/^OTR(\d+)$/)
+  if (otrMatch) return Number(otrMatch[1]) * 10
+
+  const arMatch = key.match(/^AR(\d+)$/)
+  if (arMatch) return Number(arMatch[1]) * 10 + 1
+
+  return 500
+}
+
 const isPassGrade = (grade) => {
   const value = String(grade || '').trim().toUpperCase()
   return ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'D', 'E'].includes(value)
@@ -56,6 +71,58 @@ const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
   return point === null || point === undefined || point === ''
     ? null
     : Number(point)
+}
+
+const findGradeFromMark = (mark, tingkatan, gradeScales) => {
+  const numericMark = Number(mark)
+  if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
+
+  const form = String(tingkatan || '').trim().toLowerCase()
+  const matched = (gradeScales || []).find((item) => {
+    const itemForm = String(
+      item.tingkatan ?? item.grade_label ?? item.form_level ?? item.level ?? ''
+    )
+      .trim()
+      .toLowerCase()
+    const min = Number(item.min_mark ?? item.min_score ?? 0)
+    const max = Number(item.max_mark ?? item.max_score ?? 100)
+
+    return itemForm === form && numericMark >= min && numericMark <= max
+  })
+
+  if (!matched) return { grade_name: null, grade_point: null }
+
+  return {
+    grade_name: matched.grade_name ?? matched.grade ?? null,
+    grade_point:
+      matched.grade_point ??
+      matched.point_value ??
+      matched.grade_value ??
+      null,
+  }
+}
+
+const normalizeMetric = (metric, tingkatan, gradeScales) => {
+  const mark = metric?.mark
+
+  if (mark === null || mark === undefined || mark === '' || Number.isNaN(Number(mark))) {
+    return {
+      mark: mark ?? null,
+      grade_name: metric?.grade_name ?? null,
+      grade_point: metric?.grade_point ?? null,
+      label: metric?.label,
+    }
+  }
+
+  if (metric?.grade_name) return metric
+
+  const computedGrade = findGradeFromMark(mark, tingkatan, gradeScales)
+
+  return {
+    ...metric,
+    grade_name: computedGrade.grade_name,
+    grade_point: computedGrade.grade_point,
+  }
 }
 
 export default function AnalysisPage() {
@@ -312,8 +379,65 @@ export default function AnalysisPage() {
   }, [studentRows, selectedTingkatan, selectedClassId])
 
   const analysisColumns = useMemo(() => {
-    return getExamStructureForGrade(setupConfig, selectedTingkatan)
-  }, [setupConfig, selectedTingkatan])
+    const examMap = new Map()
+
+    const addExam = ({ key, name, order }) => {
+      const normalizedKey = String(key || '').trim().toUpperCase()
+      if (!normalizedKey) return
+
+      const current = examMap.get(normalizedKey)
+      examMap.set(normalizedKey, {
+        key: normalizedKey,
+        name: name || current?.name || normalizedKey,
+        order: Number.isFinite(Number(order))
+          ? Number(order)
+          : current?.order ?? getDefaultExamOrder(normalizedKey),
+      })
+    }
+
+    addExam({ key: 'TOV', name: 'TOV', order: 0 })
+
+    getExamStructureForGrade(setupConfig, selectedTingkatan).forEach((exam) => {
+      addExam({
+        key: exam.key,
+        name: exam.name || exam.key,
+        order: getDefaultExamOrder(exam.key),
+      })
+    })
+
+    const selectedEnrollmentIds = new Set(
+      filteredStudents.map((student) => student.enrollment_id)
+    )
+
+    ;(scores || [])
+      .filter(
+        (score) =>
+          (!selectedSubjectId || score.subject_id === selectedSubjectId) &&
+          selectedEnrollmentIds.has(score.student_enrollment_id)
+      )
+      .forEach((score) => {
+        addExam({ key: score.exam_key, name: score.exam_key })
+      })
+
+    ;(targets || [])
+      .filter(
+        (target) =>
+          (!selectedSubjectId || target.subject_id === selectedSubjectId) &&
+          selectedEnrollmentIds.has(target.student_enrollment_id)
+      )
+      .forEach((target) => {
+        addExam({ key: target.target_key, name: target.target_key })
+      })
+
+    return Array.from(examMap.values()).sort((a, b) => {
+      const orderDiff = a.order - b.order
+      if (orderDiff !== 0) return orderDiff
+
+      return String(a.name || '').localeCompare(String(b.name || ''), 'ms', {
+        sensitivity: 'base',
+      })
+    })
+  }, [setupConfig, selectedTingkatan, filteredStudents, scores, targets, selectedSubjectId])
 
   const gradeColumns = useMemo(() => {
     return (gradeScales || [])
@@ -360,21 +484,21 @@ export default function AnalysisPage() {
         if (key.startsWith('OTR') || key === 'ETR') {
           const targetRow = studentTargets.find((t) => String(t.target_key || '').toUpperCase() === key)
 
-          analysis[key] = {
+          analysis[key] = normalizeMetric({
             mark: targetRow?.target_mark ?? null,
             grade_name: targetRow?.grade_name ?? null,
             grade_point: targetRow?.grade_point ?? null,
             label: exam.name || key,
-          }
+          }, student.tingkatan, gradeScales)
         } else {
           const scoreRow = studentScores.find((s) => String(s.exam_key || '').toUpperCase() === key)
 
-          analysis[key] = {
+          analysis[key] = normalizeMetric({
             mark: scoreRow?.mark ?? null,
             grade_name: scoreRow?.grade_name ?? null,
             grade_point: scoreRow?.grade_point ?? null,
             label: exam.name || key,
-          }
+          }, student.tingkatan, gradeScales)
         }
       })
 
@@ -383,7 +507,7 @@ export default function AnalysisPage() {
         analysis,
       }
     })
-  }, [filteredStudents, scores, targets, selectedSubjectId, analysisColumns])
+  }, [filteredStudents, scores, targets, selectedSubjectId, analysisColumns, gradeScales])
 
   const summaryExamKey = useMemo(() => {
     const firstRealExam = analysisColumns.find((exam) => {

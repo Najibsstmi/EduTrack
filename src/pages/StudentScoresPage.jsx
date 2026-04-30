@@ -9,6 +9,7 @@ import {
 import {
   generateOtrMarks,
   getOtrKeysForTingkatan,
+  shouldAutoRecalculateOtrs,
 } from '../lib/otrGeneration'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix'
 import {
@@ -1978,6 +1979,18 @@ export default function StudentScoresPage() {
         return shouldDelete ? existing.id : null
       })
       .filter(Boolean)
+    const deletedEnrollmentIds = displayedStudents
+      .filter((student) => displayedEnrollmentIdSet.has(String(student.enrollment_id)))
+      .map((student) => {
+        const existing = scores[student.student_id]
+        const rawMark = existing?.mark
+        const shouldDelete =
+          existing?.id &&
+          (rawMark === '' || rawMark === null || rawMark === undefined)
+
+        return shouldDelete ? student.enrollment_id : null
+      })
+      .filter(Boolean)
 
     if (payload.length === 0 && deleteIds.length === 0) {
       setSaving(false)
@@ -1997,6 +2010,27 @@ export default function StudentScoresPage() {
 
         if (deleteResult.error) {
           error = deleteResult.error
+        }
+      }
+
+      if (!error && deletedEnrollmentIds.length > 0) {
+        const otrKeys = getOtrKeysForTingkatan(selectedGradeLabel, setupConfig)
+
+        if (otrKeys.length > 0) {
+          const deleteOtrResult = await supabase
+            .from('student_targets')
+            .delete()
+            .eq('school_id', schoolId)
+            .eq('academic_year', currentYear)
+            .eq('class_id', selectedClass)
+            .eq('subject_id', selectedSubject)
+            .eq('generated_by_system', true)
+            .in('student_enrollment_id', deletedEnrollmentIds)
+            .in('target_key', otrKeys)
+
+          if (deleteOtrResult.error) {
+            error = deleteOtrResult.error
+          }
         }
       }
 
@@ -2026,6 +2060,65 @@ export default function StudentScoresPage() {
           })
 
         error = result.error
+      }
+
+      if (
+        !error &&
+        targetPayload.length > 0 &&
+        shouldAutoRecalculateOtrs(setupConfig)
+      ) {
+        const enrollmentIds = targetPayload
+          .map((row) => row.student_enrollment_id)
+          .filter(Boolean)
+        const { data: tovRows, error: tovError } = await supabase
+          .from('student_scores')
+          .select('student_enrollment_id, mark')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentYear)
+          .eq('class_id', selectedClass)
+          .eq('subject_id', selectedSubject)
+          .eq('exam_key', 'TOV')
+          .in('student_enrollment_id', enrollmentIds)
+
+        if (tovError) {
+          error = tovError
+        } else {
+          const tovByEnrollmentId = new Map(
+            (tovRows || []).map((row) => [row.student_enrollment_id, row.mark])
+          )
+          const generatedOtrRows = []
+
+          targetPayload.forEach((target) => {
+            const tovMark = tovByEnrollmentId.get(target.student_enrollment_id)
+            if (tovMark === null || tovMark === undefined || tovMark === '') return
+
+            generatedOtrRows.push(
+              ...generateOtrRows({
+                schoolId,
+                academicYear: currentYear,
+                studentEnrollmentId: target.student_enrollment_id,
+                studentProfileId: target.student_profile_id,
+                classId: target.class_id,
+                subjectId: target.subject_id,
+                enteredBy: profile.id,
+                tingkatan: selectedGradeLabel,
+                tovMark,
+                etrMark: target.target_mark,
+                setupConfig,
+              })
+            )
+          })
+
+          if (generatedOtrRows.length > 0) {
+            const otrResult = await supabase
+              .from('student_targets')
+              .upsert(generatedOtrRows, {
+                onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+              })
+
+            error = otrResult.error
+          }
+        }
       }
     } else {
       if (deleteIds.length > 0) {

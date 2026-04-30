@@ -232,14 +232,15 @@ function DashboardPage() {
     profile?.email ||
     '-'
   const schoolName = schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'
+  const schoolLogoUrl = schoolInfo?.logo_url || '/edutrack-logo.png'
 
   return (
     <div style={styles.page}>
       <div style={styles.headerCard}>
         <div style={styles.brandRow}>
           <img
-            src="/edutrack-logo.png"
-            alt="EduTrack"
+            src={schoolLogoUrl}
+            alt={schoolName}
             style={styles.logo}
           />
           <div>
