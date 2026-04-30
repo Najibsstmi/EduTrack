@@ -301,6 +301,34 @@ export default function SchoolSetupSubjectsPage() {
     setSaving(false)
   }
 
+  const handleSetSubjectCore = async (subject, isCore) => {
+    const actionLabel = isCore ? 'jadikan subjek teras' : 'jadikan subjek elektif'
+    const confirmToggle = window.confirm(
+      `Anda pasti mahu ${actionLabel} untuk "${subject.subject_name}"?`
+    )
+    if (!confirmToggle) return
+
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('subjects')
+      .update({
+        is_core: isCore,
+        subject_type: isCore ? 'core' : 'selective',
+      })
+      .eq('id', subject.id)
+
+    if (error) {
+      console.error(error)
+      alert(`Gagal ${actionLabel}: ${error.message}`)
+      setSaving(false)
+      return
+    }
+
+    await loadSubjects(profile.school_id)
+    setSaving(false)
+  }
+
   const handleNextStep = async () => {
     if (!profile?.school_id) {
       alert('Maklumat sekolah tidak ditemui.')
@@ -480,7 +508,21 @@ export default function SchoolSetupSubjectsPage() {
                           <tr key={s.id} className="border-b">
                             <td className="px-3 py-3 align-middle">{s.subject_name}</td>
                             <td className="px-3 py-3 align-middle">{s.subject_code || '-'}</td>
-                            <td className="px-3 py-3 align-middle">{s.is_core ? 'Ya' : 'Tidak'}</td>
+                            <td className="px-3 py-3 align-middle">
+                              <button
+                                type="button"
+                                onClick={() => handleSetSubjectCore(s, !s.is_core)}
+                                disabled={saving}
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold disabled:opacity-60 ${
+                                  s.is_core
+                                    ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
+                                    : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+                                }`}
+                                title={s.is_core ? 'Klik untuk jadikan elektif' : 'Klik untuk jadikan teras'}
+                              >
+                                {s.is_core ? 'Ya' : 'Tidak'}
+                              </button>
+                            </td>
                             <td className="px-3 py-3 align-middle">
                               <span
                                 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${

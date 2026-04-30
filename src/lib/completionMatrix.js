@@ -19,9 +19,19 @@ export const getRelevantEnrollmentIds = ({
       .map((enrollment) => enrollment.id)
   }
 
-  // Untuk subjek selective, guna enrollment murid-subjek sahaja.
+  const classEnrollmentIds = new Set(
+    (enrollments || [])
+      .filter((enrollment) => enrollment.class_id === classId)
+      .map((enrollment) => enrollment.id)
+  )
+
+  // Untuk subjek selective, guna enrollment murid-subjek dalam kelas yang sama sahaja.
   return (studentSubjectEnrollments || [])
-    .filter((row) => row.subject_id === subject.id)
+    .filter(
+      (row) =>
+        row.subject_id === subject.id &&
+        classEnrollmentIds.has(row.student_enrollment_id)
+    )
     .map((row) => row.student_enrollment_id)
 }
 

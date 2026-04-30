@@ -1013,22 +1013,42 @@ export default function StudentScoresPage() {
 
     setStudents(filteredStudents)
 
-    let scoreQuery = supabase
-      .from('student_scores')
-      .select('*')
-      .eq('class_id', selectedClass)
-      .eq('subject_id', selectedSubject)
-      .eq('school_id', profile.school_id)
+    const normalizedSelectedExam = normalizeExamKey(selectedExam)
+    let scoreData = []
 
-    scoreQuery = scoreQuery.eq('academic_year', currentYear)
+    if (normalizedSelectedExam === 'ETR') {
+      const { data: targetData } = await supabase
+        .from('student_targets')
+        .select('*')
+        .eq('class_id', selectedClass)
+        .eq('subject_id', selectedSubject)
+        .eq('school_id', profile.school_id)
+        .eq('academic_year', currentYear)
+        .eq('target_key', 'ETR')
 
-    scoreQuery = applySmartExamScoreFilter(
-      scoreQuery,
-      selectedExam,
-      selectedExamConfig?.id || null
-    )
+      scoreData = (targetData || []).map((target) => ({
+        ...target,
+        mark: target.target_mark,
+      }))
+    } else {
+      let scoreQuery = supabase
+        .from('student_scores')
+        .select('*')
+        .eq('class_id', selectedClass)
+        .eq('subject_id', selectedSubject)
+        .eq('school_id', profile.school_id)
 
-    const { data: scoreData } = await scoreQuery
+      scoreQuery = scoreQuery.eq('academic_year', currentYear)
+
+      scoreQuery = applySmartExamScoreFilter(
+        scoreQuery,
+        selectedExam,
+        selectedExamConfig?.id || null
+      )
+
+      const { data } = await scoreQuery
+      scoreData = data || []
+    }
 
     const scoreMap = {}
     scoreData?.forEach((s) => {
@@ -1946,22 +1966,99 @@ export default function StudentScoresPage() {
         }
       })
 
-    if (payload.length === 0) {
+    const deleteIds = displayedStudents
+      .filter((student) => displayedEnrollmentIdSet.has(String(student.enrollment_id)))
+      .map((student) => {
+        const existing = scores[student.student_id]
+        const rawMark = existing?.mark
+        const shouldDelete =
+          existing?.id &&
+          (rawMark === '' || rawMark === null || rawMark === undefined)
+
+        return shouldDelete ? existing.id : null
+      })
+      .filter(Boolean)
+
+    if (payload.length === 0 && deleteIds.length === 0) {
       setSaving(false)
       alert('Sila masukkan sekurang-kurangnya satu markah sebelum simpan.')
       return
     }
 
-    const { error } = await supabase
-      .from('student_scores')
-      .upsert(payload, {
-        onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
-      })
+    const normalizedSelectedExam = normalizeExamKey(selectedExam)
+    let error = null
+
+    if (normalizedSelectedExam === 'ETR') {
+      if (deleteIds.length > 0) {
+        const deleteResult = await supabase
+          .from('student_targets')
+          .delete()
+          .in('id', deleteIds)
+
+        if (deleteResult.error) {
+          error = deleteResult.error
+        }
+      }
+
+      const targetPayload = payload.map((row) => ({
+        school_id: row.school_id,
+        academic_year: row.academic_year,
+        student_enrollment_id: row.student_enrollment_id,
+        student_profile_id: row.student_profile_id,
+        class_id: row.class_id,
+        subject_id: row.subject_id,
+        target_key: 'ETR',
+        target_mark: row.mark,
+        grade_name: null,
+        grade_point: null,
+        generated_by_system: false,
+        manually_adjusted: false,
+        remarks: null,
+        entered_by: row.entered_by,
+        updated_at: row.updated_at,
+      }))
+
+      if (!error && targetPayload.length > 0) {
+        const result = await supabase
+          .from('student_targets')
+          .upsert(targetPayload, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+          })
+
+        error = result.error
+      }
+    } else {
+      if (deleteIds.length > 0) {
+        const deleteResult = await supabase
+          .from('student_scores')
+          .delete()
+          .in('id', deleteIds)
+
+        if (deleteResult.error) {
+          error = deleteResult.error
+        }
+      }
+
+      if (!error && payload.length > 0) {
+        const result = await supabase
+          .from('student_scores')
+          .upsert(payload, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
+          })
+
+        error = result.error
+      }
+    }
 
     setSaving(false)
 
     if (error) {
-      alert(error.message || 'Error simpan markah')
+      const errorMessage = String(error.message || '')
+      const friendlyMessage = errorMessage.includes('student_score_history')
+        ? 'Markah tidak dapat disimpan/dipadam kerana policy audit student_score_history belum membenarkan rekod sejarah ditulis. Sila kemaskini RLS policy Supabase untuk student_score_history.'
+        : error.message || 'Error simpan markah'
+
+      alert(friendlyMessage)
       console.error(error)
       return
     }

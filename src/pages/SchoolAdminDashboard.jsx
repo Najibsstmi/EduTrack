@@ -321,6 +321,7 @@ export default function SchoolAdminDashboard() {
       { data: subjectRows, error: subjectError },
       { data: enrollmentRows, error: enrollmentError },
       { data: scoreRows, error: scoreError },
+      { data: targetRows, error: targetError },
       { data: examConfigRows, error: examConfigError },
       { data: studentSubjectEnrollmentRows, error: studentSubjectEnrollmentError },
     ] = await Promise.all([
@@ -353,6 +354,13 @@ export default function SchoolAdminDashboard() {
         .eq('academic_year', academicYear),
 
       supabase
+        .from('student_targets')
+        .select('class_id, subject_id, student_enrollment_id, target_key')
+        .eq('school_id', schoolId)
+        .eq('academic_year', academicYear)
+        .eq('target_key', 'ETR'),
+
+      supabase
         .from('exam_configs')
         .select('grade_label, exam_key, exam_name, exam_order, is_active')
         .eq('school_id', schoolId)
@@ -370,6 +378,7 @@ export default function SchoolAdminDashboard() {
     if (subjectError) console.error('Subject matrix error:', subjectError)
     if (enrollmentError) console.error('Enrollment matrix error:', enrollmentError)
     if (scoreError) console.error('Score matrix error:', scoreError)
+    if (targetError) console.error('Target matrix error:', targetError)
     if (studentSubjectEnrollmentError) console.error('Student subject enrollment matrix error:', studentSubjectEnrollmentError)
     if (examConfigError) console.error('Exam config matrix error:', examConfigError)
 
@@ -439,6 +448,13 @@ export default function SchoolAdminDashboard() {
     })
 
     const studentExamMap = buildStudentExamMap(scoreRows || [])
+    const studentTargetMap = buildStudentExamMap(
+      (targetRows || []).map((row) => ({
+        student_enrollment_id: row.student_enrollment_id,
+        subject_id: row.subject_id,
+        exam_key: row.target_key,
+      }))
+    )
 
     const enrollmentsByClass = new Map()
     ;(enrollmentRows || []).forEach((row) => {
@@ -527,8 +543,12 @@ export default function SchoolAdminDashboard() {
           relevantEnrollmentIds.forEach((enrollmentId) => {
             const mapKey = `${enrollmentId}__${subject.id}`
             const examSet = studentExamMap.get(mapKey) || new Set()
+            const targetSet = studentTargetMap.get(mapKey) || new Set()
 
-            if (examSet.has(normalizedSelectedExamKey)) {
+            if (
+              examSet.has(normalizedSelectedExamKey) ||
+              (normalizedSelectedExamKey === 'ETR' && targetSet.has('ETR'))
+            ) {
               completedStudents += 1
             }
           })

@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import {
+  getExamStructureForGrade,
+  normalizeSetupConfigWithExamConfigs,
+} from '../lib/examConfig'
 
 const DEFAULT_GRADE_KEYS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
 
@@ -25,6 +29,99 @@ function createEmptyGradeCounts() {
     'TH': 0,
     'G': 0,
   }
+}
+
+const findGradeFromMark = (mark, gradeScales = []) => {
+  const numericMark = Number(mark)
+  if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
+
+  const matched = (gradeScales || []).find((grade) => {
+    const min = Number(grade.min_mark ?? grade.min_score ?? 0)
+    const max = Number(grade.max_mark ?? grade.max_score ?? 100)
+    return numericMark >= min && numericMark <= max
+  })
+
+  if (!matched) return { grade_name: null, grade_point: null }
+
+  return {
+    grade_name: matched.grade_name ?? matched.grade ?? null,
+    grade_point:
+      matched.grade_point ??
+      matched.point_value ??
+      matched.grade_value ??
+      null,
+  }
+}
+
+const getDefaultExamOrder = (examKey) => {
+  const key = normaliseExamKey(examKey)
+
+  if (key === 'TOV') return 0
+  if (key === 'ETR') return 999
+
+  const otrMatch = key.match(/^OTR(\d+)$/)
+  if (otrMatch) return Number(otrMatch[1]) * 10
+
+  const arMatch = key.match(/^AR(\d+)$/)
+  if (arMatch) return Number(arMatch[1]) * 10 + 1
+
+  return 500
+}
+
+const buildExamList = ({ setupConfig, examConfigs, currentTingkatan, scores, targets }) => {
+  const normalizedSetupConfig = normalizeSetupConfigWithExamConfigs(
+    setupConfig || {},
+    examConfigs || []
+  )
+  const configuredExams = getExamStructureForGrade(normalizedSetupConfig, currentTingkatan)
+  const examMap = new Map()
+
+  const addExam = ({ key, label, order }) => {
+    const normalizedKey = normaliseExamKey(key)
+    if (!normalizedKey) return
+
+    const current = examMap.get(normalizedKey)
+    examMap.set(normalizedKey, {
+      value: normalizedKey,
+      label: label || current?.label || normalizedKey,
+      order: Number.isFinite(Number(order))
+        ? Number(order)
+        : current?.order ?? getDefaultExamOrder(normalizedKey),
+    })
+  }
+
+  addExam({ key: 'TOV', label: 'TOV', order: 0 })
+
+  ;(configuredExams || []).forEach((exam) => {
+    addExam({
+      key: exam.key,
+      label: exam.name || exam.key,
+      order: getDefaultExamOrder(exam.key),
+    })
+  })
+
+  ;(examConfigs || []).forEach((exam) => {
+    addExam({
+      key: exam.exam_key,
+      label: exam.exam_name || exam.exam_key,
+      order: exam.exam_order,
+    })
+  })
+
+  ;(scores || []).forEach((score) => {
+    addExam({ key: score.exam_key, label: score.exam_key })
+  })
+
+  ;(targets || []).forEach((target) => {
+    addExam({ key: target.target_key, label: target.target_key })
+  })
+
+  return Array.from(examMap.values()).sort((a, b) => {
+    const orderDiff = a.order - b.order
+    if (orderDiff !== 0) return orderDiff
+
+    return a.label.localeCompare(b.label, 'ms', { sensitivity: 'base' })
+  })
 }
 
 export default function ClassSubjectAnalysisPanel({
@@ -69,21 +166,30 @@ export default function ClassSubjectAnalysisPanel({
           return
         }
 
+        const { data: setupConfigRows, error: setupConfigError } = await supabase
+          .from('school_setup_configs')
+          .select('*')
+          .eq('school_id', schoolId)
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (setupConfigError) throw setupConfigError
+
+        const setupConfig = setupConfigRows?.[0] || {}
+        const currentAcademicYear =
+          setupConfig?.current_academic_year || new Date().getFullYear()
+
         // 2. Ambil exam dari DB sebenar
         const { data: examConfigs, error: examError } = await supabase
           .from('exam_configs')
-          .select('exam_key, exam_name, exam_order')
+          .select('exam_key, exam_name, exam_order, grade_label, academic_year, is_active')
           .eq('school_id', schoolId)
           .eq('grade_label', currentTingkatan)
-          .eq('is_active', true)
+          .eq('academic_year', currentAcademicYear)
           .order('exam_order', { ascending: true })
 
         if (examError) throw examError
-
-        const examList = (examConfigs || []).map((item) => ({
-          value: String(item.exam_key || '').trim().toUpperCase(),
-          label: item.exam_name || item.exam_key,
-        }))
 
         // 3. Ambil semua kelas dalam tingkatan yang sama
         const { data: allClasses, error: classesError } = await supabase
@@ -107,6 +213,7 @@ export default function ClassSubjectAnalysisPanel({
           .from('student_enrollments')
           .select('id, class_id, student_profile_id')
           .eq('school_id', schoolId)
+          .eq('academic_year', currentAcademicYear)
           .eq('is_active', true)
           .in('class_id', classIds)
 
@@ -172,9 +279,46 @@ export default function ClassSubjectAnalysisPanel({
           .select('student_enrollment_id, exam_key, mark, grade_name, grade_point, is_absent, class_id')
           .eq('school_id', schoolId)
           .eq('subject_id', subjectId)
+          .eq('academic_year', currentAcademicYear)
           .in('class_id', classIds)
 
         if (scoresError) throw scoresError
+
+        const { data: targets, error: targetsError } = await supabase
+          .from('student_targets')
+          .select('student_enrollment_id, target_key, target_mark, grade_name, grade_point, class_id')
+          .eq('school_id', schoolId)
+          .eq('subject_id', subjectId)
+          .eq('academic_year', currentAcademicYear)
+          .in('class_id', classIds)
+
+        if (targetsError) throw targetsError
+
+        const { data: gradeScales, error: gradeScalesError } = await supabase
+          .from('grade_scales')
+          .select('*')
+          .eq('school_id', schoolId)
+
+        if (gradeScalesError) throw gradeScalesError
+
+        const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
+          const label =
+            grade.tingkatan ??
+            grade.grade_label ??
+            grade.form_level ??
+            grade.level ??
+            ''
+
+          return normaliseText(label) === normaliseText(currentTingkatan)
+        })
+
+        const examList = buildExamList({
+          setupConfig,
+          examConfigs: examConfigs || [],
+          currentTingkatan,
+          scores: scores || [],
+          targets: targets || [],
+        })
 
         const scoreMap = {}
         ;(scores || []).forEach((row) => {
@@ -188,6 +332,24 @@ export default function ClassSubjectAnalysisPanel({
           }
 
           scoreMap[row.student_enrollment_id][examKey] = row
+        })
+
+        ;(targets || []).forEach((row) => {
+          if (!validEnrollmentIds.has(row.student_enrollment_id)) return
+
+          const examKey = normaliseExamKey(row.target_key)
+          if (!examKey) return
+
+          if (!scoreMap[row.student_enrollment_id]) {
+            scoreMap[row.student_enrollment_id] = {}
+          }
+
+          scoreMap[row.student_enrollment_id][examKey] = {
+            ...row,
+            exam_key: examKey,
+            mark: row.target_mark,
+            is_absent: false,
+          }
         })
 
         const summaryRows = examList.map((exam) => {
@@ -219,7 +381,13 @@ export default function ClassSubjectAnalysisPanel({
 
             hadir += 1
 
-            const rawGrade = normaliseText(scoreEntry.grade_name)
+            const computedGrade = scoreEntry.grade_name
+              ? {
+                  grade_name: scoreEntry.grade_name,
+                  grade_point: scoreEntry.grade_point,
+                }
+              : findGradeFromMark(markValue, gradeScalesForTingkatan)
+            const rawGrade = normaliseText(computedGrade.grade_name)
             const gradeKey = DEFAULT_GRADE_KEYS.includes(rawGrade) ? rawGrade : 'G'
 
             gradeCounts[gradeKey] += 1
@@ -230,7 +398,7 @@ export default function ClassSubjectAnalysisPanel({
               lulus += 1
             }
 
-            const point = scoreEntry.grade_point
+            const point = computedGrade.grade_point
             if (point !== null && point !== '' && !Number.isNaN(Number(point))) {
               gpmpTotal += Number(point)
               gpmpCount += 1
