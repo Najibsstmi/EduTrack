@@ -11,7 +11,7 @@ const modules = [
   },
   {
     title: 'PAJSK',
-    description: 'Input SEGAK, BMI, kokurikulum dan ekstrakurikulum.',
+    description: 'Input SEGAK dan BMI untuk fasa PAJSK semasa.',
     path: '/pbs/pajsk',
     tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
   },
@@ -22,8 +22,9 @@ const modules = [
     tone: 'border-amber-200 bg-amber-50 text-amber-900',
   },
   {
-    title: 'Analisis PBS',
-    description: 'Paparan analisis bersepadu murid individu.',
+    title: 'Analisis PBS Bersepadu',
+    description:
+      'Graf poligon peperiksaan, PBD, SEGAK, BMI, PAJSK dan ekstrakurikulum.',
     path: '/analysis/pbs',
     tone: 'border-violet-200 bg-violet-50 text-violet-900',
   },
@@ -42,15 +43,6 @@ export default function PbsHubPage() {
       <div className="mx-auto max-w-7xl">
         <AppHeader
           title="PBS Bersepadu"
-          actionLeft={
-            <button
-              type="button"
-              onClick={() => navigate('/analysis')}
-              className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              Analisis
-            </button>
-          }
           actionRight={
             <button
               type="button"
