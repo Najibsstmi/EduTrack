@@ -332,6 +332,23 @@ function DashboardPage() {
 
             <button
               type="button"
+              onClick={() => navigate('/pbs')}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardAmber,
+              }}
+            >
+              <div style={styles.quickActionHeader}>
+                <h4 style={styles.quickActionTitle}>PBS Bersepadu</h4>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Akses PBD, PAJSK, PPsi dan analisis PBS dalam modul berasingan.
+              </p>
+            </button>
+
+            <button
+              type="button"
               onClick={() => navigate('/manage-subject-students')}
               style={{
                 ...styles.quickActionCard,
@@ -477,6 +494,10 @@ const styles = {
   quickActionCardGreen: {
     background: 'linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%)',
     borderColor: '#bbf7d0',
+  },
+  quickActionCardAmber: {
+    background: 'linear-gradient(180deg, #fffbeb 0%, #fffdf5 100%)',
+    borderColor: '#fde68a',
   },
   quickActionCardPurple: {
     background: 'linear-gradient(180deg, #f5f3ff 0%, #faf8ff 100%)',

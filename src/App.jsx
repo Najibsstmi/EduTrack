@@ -23,6 +23,14 @@ import AnalysisHubPage from './pages/AnalysisHubPage'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
+import PbsHubPage from './pages/PbsHubPage.jsx'
+import PbdInputPage from './pages/PbdInputPage.jsx'
+import PbdAnalysisReportPage from './pages/PbdAnalysisReportPage.jsx'
+import PbdSubjectAnalysisPage from './pages/PbdSubjectAnalysisPage.jsx'
+import PbdStudentAnalysisPage from './pages/PbdStudentAnalysisPage.jsx'
+import PajskInputPage from './pages/PajskInputPage.jsx'
+import PpsiPage from './pages/PpsiPage.jsx'
+import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
@@ -102,10 +110,19 @@ function App() {
         <Route path="/manage-subject-students" element={<ManageSubjectStudentsPage />} />
         <Route path="/targets" element={<TargetsPage />} />
         <Route path="/academic-targets" element={<TargetsPage />} />
+        <Route path="/pbs" element={<PbsHubPage />} />
+        <Route path="/pbs/pbd" element={<PbdInputPage />} />
+        <Route path="/pbs/pbd/input" element={<PbdInputPage />} />
+        <Route path="/pbs/pbd/analysis" element={<PbdAnalysisReportPage />} />
+        <Route path="/pbs/pbd/subject" element={<PbdSubjectAnalysisPage />} />
+        <Route path="/pbs/pbd/student" element={<PbdStudentAnalysisPage />} />
+        <Route path="/pbs/pajsk" element={<PajskInputPage />} />
+        <Route path="/pbs/ppsi" element={<PpsiPage />} />
         <Route path="/analysis" element={<AnalysisHubPage />} />
         <Route path="/analysis/class" element={<AnalysisPage />} />
         <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />
         <Route path="/analysis/student-subject" element={<StudentSubjectTrendPage />} />
+        <Route path="/analysis/pbs" element={<PbsAnalysisPage />} />
         <Route path="/pending" element={<PendingApprovalPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />

@@ -1052,6 +1052,14 @@ export default function SchoolAdminDashboard() {
 
               <button
                 type="button"
+                onClick={() => handleMobileNavigate('/pbs')}
+                style={getMobileNavButtonStyle('/pbs')}
+              >
+                PBS
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleMobileNavigate('/academic-targets')}
                 style={getMobileNavButtonStyle('/academic-targets')}
               >
@@ -1171,6 +1179,16 @@ export default function SchoolAdminDashboard() {
               style={getNavButtonStyle('/analysis')}
             >
               Analisis
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/pbs')}
+              onMouseEnter={() => setHoveredNav('/pbs')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/pbs')}
+            >
+              PBS
             </button>
 
             <button
@@ -1303,6 +1321,30 @@ export default function SchoolAdminDashboard() {
               </div>
               <p style={styles.quickActionDesc}>
                 Lihat analisis kelas, individu dan prestasi subjek dengan lebih jelas.
+              </p>
+            </div>
+
+            <div
+              onClick={() => navigate('/pbs')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardAmber,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>PBS Bersepadu</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Akses PBD, PAJSK, PPsi dan analisis PBS tanpa mengubah modul peperiksaan lama.
               </p>
             </div>
 
@@ -2100,6 +2142,10 @@ const styles = {
   quickActionCardGreen: {
     background: 'linear-gradient(180deg, #ecfdf5 0%, #f7fefb 100%)',
     borderColor: '#bbf7d0',
+  },
+  quickActionCardAmber: {
+    background: 'linear-gradient(180deg, #fffbeb 0%, #fffdf5 100%)',
+    borderColor: '#fde68a',
   },
   quickActionCardPurple: {
     background: 'linear-gradient(180deg, #faf5ff 0%, #fdf9ff 100%)',

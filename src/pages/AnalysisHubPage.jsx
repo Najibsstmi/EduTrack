@@ -82,6 +82,20 @@ export default function AnalysisHubPage() {
             </button>
 
             <button
+              onClick={() => navigate('/analysis/pbs')}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Analisis PBS
+            </button>
+
+            <button
+              onClick={() => navigate('/pbs/pbd/analysis')}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              Analisis PBD
+            </button>
+
+            <button
               onClick={() => navigate(dashboardPath)}
               className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
