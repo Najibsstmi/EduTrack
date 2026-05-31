@@ -29,6 +29,9 @@ import PbdAnalysisReportPage from './pages/PbdAnalysisReportPage.jsx'
 import PbdSubjectAnalysisPage from './pages/PbdSubjectAnalysisPage.jsx'
 import PbdStudentAnalysisPage from './pages/PbdStudentAnalysisPage.jsx'
 import PajskInputPage from './pages/PajskInputPage.jsx'
+import PajskSegakPage from './pages/PajskSegakPage.jsx'
+import PajskSegakInputPage from './pages/PajskSegakInputPage.jsx'
+import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
 import PpsiPage from './pages/PpsiPage.jsx'
 import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
@@ -117,6 +120,9 @@ function App() {
         <Route path="/pbs/pbd/subject" element={<PbdSubjectAnalysisPage />} />
         <Route path="/pbs/pbd/student" element={<PbdStudentAnalysisPage />} />
         <Route path="/pbs/pajsk" element={<PajskInputPage />} />
+        <Route path="/pbs/pajsk/segak" element={<PajskSegakPage />} />
+        <Route path="/pbs/pajsk/segak/input" element={<PajskSegakInputPage />} />
+        <Route path="/pbs/pajsk/segak/analysis" element={<PajskSegakAnalysisPage />} />
         <Route path="/pbs/ppsi" element={<PpsiPage />} />
         <Route path="/analysis" element={<AnalysisHubPage />} />
         <Route path="/analysis/class" element={<AnalysisPage />} />

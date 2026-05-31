@@ -95,21 +95,31 @@ create table if not exists public.student_pajsk_segak (
   school_id uuid not null references public.schools(id) on delete cascade,
   student_enrollment_id uuid not null references public.student_enrollments(id) on delete cascade,
   academic_year integer not null,
-  subject_id uuid references public.subjects(id) on delete set null,
+  term text not null default 'PENGGAL_1'
+    constraint student_pajsk_segak_term_check
+    check (term in ('PENGGAL_1', 'PENGGAL_2')),
   height_cm numeric(6,2),
   weight_kg numeric(6,2),
   bmi numeric(5,2),
-  kategori_bmi text,
-  skor_segak numeric(5,2) constraint student_pajsk_segak_score_check
-    check (skor_segak is null or (skor_segak >= 0 and skor_segak <= 100)),
-  gred_segak text,
+  bmi_category text,
+  segak_total_score integer
+    constraint student_pajsk_segak_total_score_check
+    check (segak_total_score is null or segak_total_score between 0 and 20),
+  segak_grade text,
+  segak_stars integer
+    constraint student_pajsk_segak_stars_check
+    check (segak_stars is null or segak_stars between 0 and 5),
+  fitness_level text,
+  fitness_statement text,
+  is_absent boolean not null default false,
   assessment_date date,
+  note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   created_by uuid references public.profiles(id) on delete set null,
   updated_by uuid references public.profiles(id) on delete set null,
-  constraint student_pajsk_segak_unique_year
-    unique (student_enrollment_id, academic_year)
+  constraint student_pajsk_segak_unique_student_year_term
+    unique (school_id, student_enrollment_id, academic_year, term)
 );
 
 create table if not exists public.student_pajsk_kokurikulum (
@@ -156,12 +166,137 @@ create table if not exists public.student_pajsk_ekstra (
 -- Compatibility for databases that already ran an earlier draft of this migration.
 alter table public.student_ppsi_results
   add column if not exists subject_id uuid references public.subjects(id) on delete set null;
-alter table public.student_pajsk_segak
-  add column if not exists subject_id uuid references public.subjects(id) on delete set null;
 alter table public.student_pajsk_kokurikulum
   add column if not exists subject_id uuid references public.subjects(id) on delete set null;
 alter table public.student_pajsk_ekstra
   add column if not exists subject_id uuid references public.subjects(id) on delete set null;
+
+alter table public.student_pajsk_segak
+  add column if not exists term text,
+  add column if not exists height_cm numeric,
+  add column if not exists weight_kg numeric,
+  add column if not exists bmi numeric,
+  add column if not exists bmi_category text,
+  add column if not exists segak_total_score integer,
+  add column if not exists segak_grade text,
+  add column if not exists segak_stars integer,
+  add column if not exists fitness_level text,
+  add column if not exists fitness_statement text,
+  add column if not exists is_absent boolean default false,
+  add column if not exists assessment_date date,
+  add column if not exists note text;
+
+update public.student_pajsk_segak
+set term = 'PENGGAL_1'
+where term is null
+   or term not in ('PENGGAL_1', 'PENGGAL_2');
+
+update public.student_pajsk_segak
+set is_absent = false
+where is_absent is null;
+
+alter table public.student_pajsk_segak
+  alter column term set default 'PENGGAL_1',
+  alter column term set not null,
+  alter column is_absent set default false,
+  alter column is_absent set not null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and column_name = 'kategori_bmi'
+  ) then
+    update public.student_pajsk_segak
+    set bmi_category = coalesce(bmi_category, kategori_bmi)
+    where bmi_category is null;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and column_name = 'gred_segak'
+  ) then
+    update public.student_pajsk_segak
+    set segak_grade = coalesce(segak_grade, gred_segak)
+    where segak_grade is null;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and column_name = 'skor_segak'
+  ) then
+    update public.student_pajsk_segak
+    set segak_total_score = coalesce(segak_total_score, round(skor_segak)::integer)
+    where segak_total_score is null
+      and skor_segak is not null
+      and skor_segak between 0 and 20;
+  end if;
+end;
+$$;
+
+alter table public.student_pajsk_segak
+  drop constraint if exists student_pajsk_segak_unique_year;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and constraint_name = 'student_pajsk_segak_term_check'
+  ) then
+    alter table public.student_pajsk_segak
+      add constraint student_pajsk_segak_term_check
+      check (term in ('PENGGAL_1', 'PENGGAL_2'));
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and constraint_name = 'student_pajsk_segak_total_score_check'
+  ) then
+    alter table public.student_pajsk_segak
+      add constraint student_pajsk_segak_total_score_check
+      check (segak_total_score is null or segak_total_score between 0 and 20);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and constraint_name = 'student_pajsk_segak_stars_check'
+  ) then
+    alter table public.student_pajsk_segak
+      add constraint student_pajsk_segak_stars_check
+      check (segak_stars is null or segak_stars between 0 and 5);
+  end if;
+
+  if not exists (
+    select 1
+    from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'student_pajsk_segak'
+      and constraint_name = 'student_pajsk_segak_unique_student_year_term'
+  ) then
+    alter table public.student_pajsk_segak
+      add constraint student_pajsk_segak_unique_student_year_term
+      unique (school_id, student_enrollment_id, academic_year, term);
+  end if;
+end;
+$$;
 
 create index if not exists student_pbd_scores_school_year_idx
   on public.student_pbd_scores (school_id, academic_year);
@@ -183,8 +318,12 @@ create index if not exists student_pajsk_segak_school_year_idx
   on public.student_pajsk_segak (school_id, academic_year);
 create index if not exists student_pajsk_segak_enrollment_idx
   on public.student_pajsk_segak (student_enrollment_id);
-create index if not exists student_pajsk_segak_subject_idx
-  on public.student_pajsk_segak (subject_id);
+create index if not exists student_pajsk_segak_school_year_term_idx
+  on public.student_pajsk_segak (school_id, academic_year, term);
+create index if not exists student_pajsk_segak_enrollment_year_idx
+  on public.student_pajsk_segak (student_enrollment_id, academic_year);
+create index if not exists student_pajsk_segak_analysis_idx
+  on public.student_pajsk_segak (school_id, academic_year, term, segak_grade, bmi_category);
 
 create index if not exists student_pajsk_kokurikulum_school_year_idx
   on public.student_pajsk_kokurikulum (school_id, academic_year);

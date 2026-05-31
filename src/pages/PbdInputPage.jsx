@@ -177,8 +177,10 @@ export default function PbdInputPage() {
   }, [classes, levelMappings, setupConfig])
 
   const availableClasses = useMemo(() => {
+    if (!selectedTingkatan) return []
+
     return classes
-      .filter((item) => !selectedTingkatan || item.tingkatan === selectedTingkatan)
+      .filter((item) => item.tingkatan === selectedTingkatan)
       .sort((a, b) =>
         getDisplayClassLabel(a.tingkatan, a.class_name, levelMappings).localeCompare(
           getDisplayClassLabel(b.tingkatan, b.class_name, levelMappings),
@@ -189,13 +191,26 @@ export default function PbdInputPage() {
   }, [classes, levelMappings, selectedTingkatan])
 
   const availableSubjects = useMemo(() => {
-    return subjects
-      .filter((subject) => !selectedTingkatan || subject.tingkatan === selectedTingkatan)
+    if (!selectedTingkatan) return []
+
+    const uniqueSubjects = new Map()
+
+    subjects
+      .filter((subject) => subject.tingkatan === selectedTingkatan)
       .sort((a, b) =>
         String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'ms', {
           sensitivity: 'base',
         })
       )
+
+      .forEach((subject) => {
+        const key = `${String(subject.subject_name || '').trim().toLowerCase()}__${String(subject.subject_code || '').trim().toLowerCase()}`
+        if (!uniqueSubjects.has(key)) {
+          uniqueSubjects.set(key, subject)
+        }
+      })
+
+    return Array.from(uniqueSubjects.values())
   }, [subjects, selectedTingkatan])
 
   const selectedSubject = useMemo(() => {
@@ -504,8 +519,9 @@ export default function PbdInputPage() {
               value={selectedClassId}
               onChange={(event) => setSelectedClassId(event.target.value)}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              disabled={!selectedTingkatan}
             >
-              <option value="">Pilih Kelas</option>
+              <option value="">{selectedTingkatan ? 'Pilih Kelas' : 'Pilih Tingkatan dahulu'}</option>
               {availableClasses.map((item) => (
                 <option key={item.id} value={item.id}>
                   {getDisplayClassLabel(item.tingkatan, item.class_name, levelMappings)}
@@ -517,8 +533,9 @@ export default function PbdInputPage() {
               value={selectedSubjectId}
               onChange={(event) => setSelectedSubjectId(event.target.value)}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              disabled={!selectedTingkatan}
             >
-              <option value="">Pilih Subjek</option>
+              <option value="">{selectedTingkatan ? 'Pilih Subjek' : 'Pilih Tingkatan dahulu'}</option>
               {availableSubjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
                   {subject.subject_name}
