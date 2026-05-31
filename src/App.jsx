@@ -25,9 +25,7 @@ import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
 import PbsHubPage from './pages/PbsHubPage.jsx'
 import PbdInputPage from './pages/PbdInputPage.jsx'
-import PbdAnalysisReportPage from './pages/PbdAnalysisReportPage.jsx'
-import PbdSubjectAnalysisPage from './pages/PbdSubjectAnalysisPage.jsx'
-import PbdStudentAnalysisPage from './pages/PbdStudentAnalysisPage.jsx'
+import PbdAnalysisPage from './pages/PbdAnalysisPage.jsx'
 import PajskInputPage from './pages/PajskInputPage.jsx'
 import PajskSegakPage from './pages/PajskSegakPage.jsx'
 import PajskSegakInputPage from './pages/PajskSegakInputPage.jsx'
@@ -116,9 +114,11 @@ function App() {
         <Route path="/pbs" element={<PbsHubPage />} />
         <Route path="/pbs/pbd" element={<PbdInputPage />} />
         <Route path="/pbs/pbd/input" element={<PbdInputPage />} />
-        <Route path="/pbs/pbd/analysis" element={<PbdAnalysisReportPage />} />
-        <Route path="/pbs/pbd/subject" element={<PbdSubjectAnalysisPage />} />
-        <Route path="/pbs/pbd/student" element={<PbdStudentAnalysisPage />} />
+        <Route path="/input-pbd" element={<PbdInputPage />} />
+        <Route path="/pbs/pbd/analysis" element={<PbdAnalysisPage />} />
+        <Route path="/analisis-pbd" element={<PbdAnalysisPage />} />
+        <Route path="/pbs/pbd/subject" element={<PbdAnalysisPage />} />
+        <Route path="/pbs/pbd/student" element={<PbdAnalysisPage />} />
         <Route path="/pbs/pajsk" element={<PajskInputPage />} />
         <Route path="/pbs/pajsk/segak" element={<PajskSegakPage />} />
         <Route path="/pbs/pajsk/segak/input" element={<PajskSegakInputPage />} />

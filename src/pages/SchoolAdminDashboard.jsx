@@ -25,6 +25,11 @@ const COMPLETION_GRADE_GROUPS = [
   'Tingkatan 5',
 ]
 
+const PBD_PERIODS = [
+  { key: 'PENGGAL_1', name: 'Penggal 1' },
+  { key: 'PENGGAL_2', name: 'Penggal 2' },
+]
+
 const DESIGNATION_OPTIONS = [
   'Pengetua',
   'Penolong kanan',
@@ -76,6 +81,9 @@ export default function SchoolAdminDashboard() {
   const [examAccessRows, setExamAccessRows] = useState([])
   const [examAccessLoading, setExamAccessLoading] = useState(false)
   const [examAccessSavingId, setExamAccessSavingId] = useState('')
+  const [pbdWindows, setPbdWindows] = useState([])
+  const [pbdWindowLoading, setPbdWindowLoading] = useState(false)
+  const [pbdWindowSavingKey, setPbdWindowSavingKey] = useState('')
   const [levelMappings, setLevelMappings] = useState([])
   const [expandedCompletionGrades, setExpandedCompletionGrades] = useState(() =>
     COMPLETION_GRADE_GROUPS.reduce((acc, grade) => {
@@ -253,6 +261,7 @@ export default function SchoolAdminDashboard() {
     await Promise.all([
       fetchSchoolData(profile.school_id),
       fetchScoreCompletionMatrix(profile.school_id, setupData),
+      loadPbdWindows(profile.school_id, mappingAcademicYear),
     ])
   }
 
@@ -580,6 +589,59 @@ export default function SchoolAdminDashboard() {
     setCompletionLoading(false)
   }
 
+  const loadPbdWindows = async (
+    schoolId = adminProfile?.school_id,
+    academicYear = setupConfig?.current_academic_year || new Date().getFullYear()
+  ) => {
+    if (!schoolId || !academicYear) return
+
+    setPbdWindowLoading(true)
+
+    try {
+      const fetchRows = async () =>
+        supabase
+          .from('pbd_windows')
+          .select('*')
+          .eq('school_id', schoolId)
+          .eq('academic_year', academicYear)
+          .order('period_key', { ascending: true })
+
+      const { data, error } = await fetchRows()
+      if (error) throw error
+
+      const existingKeys = new Set((data || []).map((row) => row.period_key))
+      const missingRows = PBD_PERIODS.filter((period) => !existingKeys.has(period.key)).map(
+        (period) => ({
+          school_id: schoolId,
+          academic_year: Number(academicYear),
+          period_key: period.key,
+          period_name: period.name,
+          is_open: false,
+          is_locked: false,
+        })
+      )
+
+      let rows = data || []
+      if (missingRows.length > 0) {
+        const { error: insertError } = await supabase.from('pbd_windows').insert(missingRows)
+        if (insertError && !String(insertError.message || '').includes('duplicate')) {
+          throw insertError
+        }
+
+        const { data: refreshedData, error: refreshedError } = await fetchRows()
+        if (refreshedError) throw refreshedError
+        rows = refreshedData || []
+      }
+
+      setPbdWindows(rows)
+    } catch (err) {
+      console.error('loadPbdWindows error:', err)
+      setPbdWindows([])
+    } finally {
+      setPbdWindowLoading(false)
+    }
+  }
+
   const handleToggleExamAccess = async (examId, value) => {
     if (!examId) return
 
@@ -606,6 +668,145 @@ export default function SchoolAdminDashboard() {
       alert('Gagal mengemaskini status peperiksaan.')
     } finally {
       setExamAccessSavingId('')
+    }
+  }
+
+  const getPbdAcademicYear = () =>
+    Number(setupConfig?.current_academic_year || new Date().getFullYear())
+
+  const handleOpenPbdWindow = async (periodKey) => {
+    const period = PBD_PERIODS.find((item) => item.key === periodKey)
+    if (!period || !adminProfile?.school_id) return
+
+    const existingWindow = pbdWindows.find((row) => row.period_key === periodKey)
+    if (existingWindow?.is_locked) {
+      alert(`${period.name} sudah dikunci dan tidak boleh dibuka semula.`)
+      return
+    }
+
+    if (periodKey === 'PENGGAL_2') {
+      const penggal1Window = pbdWindows.find((row) => row.period_key === 'PENGGAL_1')
+      if (!penggal1Window?.is_locked) {
+        alert('Kunci Penggal 1 dahulu sebelum buka Penggal 2.')
+        return
+      }
+    }
+
+    const academicYear = getPbdAcademicYear()
+    setPbdWindowSavingKey(`open-${periodKey}`)
+
+    try {
+      const { error: closeOtherError } = await supabase
+        .from('pbd_windows')
+        .update({ is_open: false })
+        .eq('school_id', adminProfile.school_id)
+        .eq('academic_year', academicYear)
+        .eq('is_locked', false)
+        .neq('period_key', periodKey)
+
+      if (closeOtherError) throw closeOtherError
+
+      const { error: upsertError } = await supabase.from('pbd_windows').upsert(
+        {
+          school_id: adminProfile.school_id,
+          academic_year: academicYear,
+          period_key: period.key,
+          period_name: period.name,
+          is_open: true,
+          is_locked: false,
+          opened_at: new Date().toISOString(),
+          opened_by: adminProfile.id,
+        },
+        { onConflict: 'school_id,academic_year,period_key' }
+      )
+
+      if (upsertError) throw upsertError
+
+      await loadPbdWindows(adminProfile.school_id, academicYear)
+      alert(`${period.name} PBD telah dibuka.`)
+    } catch (err) {
+      console.error('handleOpenPbdWindow error:', err)
+      alert(
+        err.message?.includes('pbd_windows')
+          ? 'Gagal buka PBD. Sila jalankan SQL migration PBD baharu dahulu.'
+          : err.message || 'Gagal buka window PBD.'
+      )
+    } finally {
+      setPbdWindowSavingKey('')
+    }
+  }
+
+  const handleLockPbdWindow = async (periodKey) => {
+    const period = PBD_PERIODS.find((item) => item.key === periodKey)
+    if (!period || !adminProfile?.school_id) return
+
+    const existingWindow = pbdWindows.find((row) => row.period_key === periodKey)
+    if (existingWindow?.is_locked) {
+      alert(`${period.name} sudah dikunci.`)
+      return
+    }
+
+    if (!existingWindow?.is_open) {
+      alert(`${period.name} perlu dibuka sebelum dikunci.`)
+      return
+    }
+
+    if (periodKey === 'PENGGAL_2') {
+      const penggal1Window = pbdWindows.find((row) => row.period_key === 'PENGGAL_1')
+      if (!penggal1Window?.is_locked) {
+        alert('Kunci Penggal 1 dahulu sebelum kunci Penggal 2.')
+        return
+      }
+    }
+
+    const academicYear = getPbdAcademicYear()
+
+    const { count, error: countError } = await supabase
+      .from('student_pbd_current')
+      .select('id', { count: 'exact', head: true })
+      .eq('school_id', adminProfile.school_id)
+      .eq('academic_year', academicYear)
+      .not('tp', 'is', null)
+
+    if (countError) {
+      alert(
+        countError.message?.includes('student_pbd_current')
+          ? 'Jadual student_pbd_current belum tersedia. Sila jalankan SQL migration PBD baharu dahulu.'
+          : countError.message || 'Gagal menyemak rekod TP semasa.'
+      )
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Kunci ${period.name} PBD ${academicYear}?\n\n` +
+        `Sistem akan menyimpan snapshot ${count || 0} rekod TP semasa. ` +
+        'Snapshot yang telah dikunci tidak boleh diubah.'
+    )
+
+    if (!confirmed) return
+
+    setPbdWindowSavingKey(`lock-${periodKey}`)
+
+    try {
+      const { data, error } = await supabase.rpc('lock_pbd_window', {
+        target_school_id: adminProfile.school_id,
+        target_academic_year: academicYear,
+        target_period_key: periodKey,
+      })
+
+      if (error) throw error
+
+      await loadPbdWindows(adminProfile.school_id, academicYear)
+      alert(`${period.name} berjaya dikunci. Snapshot baharu: ${data?.inserted_count ?? 0}.`)
+    } catch (err) {
+      console.error('handleLockPbdWindow error:', err)
+      alert(
+        err.message?.includes('lock_pbd_window')
+          ? 'Fungsi lock_pbd_window belum tersedia. Sila jalankan SQL migration PBD baharu dahulu.'
+          : err.message || 'Gagal kunci window PBD.'
+      )
+    } finally {
+      setPbdWindowSavingKey('')
     }
   }
 
@@ -1034,6 +1235,14 @@ export default function SchoolAdminDashboard() {
 
               <button
                 type="button"
+                onClick={() => handleMobileNavigate('/input-pbd')}
+                style={getMobileNavButtonStyle('/input-pbd')}
+              >
+                Input PBD
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleMobileNavigate('/students')}
                 style={getMobileNavButtonStyle('/students')}
                 disabled={!isSchoolAdmin}
@@ -1048,6 +1257,14 @@ export default function SchoolAdminDashboard() {
                 style={getMobileNavButtonStyle('/analysis')}
               >
                 Analisis
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleMobileNavigate('/analisis-pbd')}
+                style={getMobileNavButtonStyle('/analisis-pbd')}
+              >
+                Analisis PBD
               </button>
 
               <button
@@ -1119,6 +1336,16 @@ export default function SchoolAdminDashboard() {
 
             <button
               type="button"
+              onClick={() => navigate('/input-pbd')}
+              onMouseEnter={() => setHoveredNav('/input-pbd')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/input-pbd')}
+            >
+              Input PBD
+            </button>
+
+            <button
+              type="button"
               onClick={() => navigate('/students')}
               onMouseEnter={() => setHoveredNav('/students')}
               onMouseLeave={() => setHoveredNav('')}
@@ -1179,6 +1406,16 @@ export default function SchoolAdminDashboard() {
               style={getNavButtonStyle('/analysis')}
             >
               Analisis
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/analisis-pbd')}
+              onMouseEnter={() => setHoveredNav('/analisis-pbd')}
+              onMouseLeave={() => setHoveredNav('')}
+              style={getNavButtonStyle('/analisis-pbd')}
+            >
+              Analisis PBD
             </button>
 
             <button
@@ -1348,6 +1585,54 @@ export default function SchoolAdminDashboard() {
               </p>
             </div>
 
+            <div
+              onClick={() => navigate('/input-pbd')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardTeal,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>Input PBD</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Isi TP semasa murid menggunakan window PBD yang dibuka oleh admin sekolah.
+              </p>
+            </div>
+
+            <div
+              onClick={() => navigate('/analisis-pbd')}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardRose,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={styles.quickActionTitle}>Analisis PBD</h3>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Lihat ringkasan TP semasa, snapshot Penggal 1, snapshot Penggal 2 dan perubahan murid.
+              </p>
+            </div>
+
             {isSchoolAdmin && (
               <div
                 onClick={() => navigate('/manage-subject-students')}
@@ -1376,6 +1661,114 @@ export default function SchoolAdminDashboard() {
             )}
           </div>
         </section>
+
+        {isSchoolAdmin && (
+          <section style={styles.sectionCard}>
+            <div style={styles.sectionHeader}>
+              <div>
+                <h2 style={styles.cardTitle}>Kawalan PBD</h2>
+                <p style={styles.sectionDesc}>
+                  Buka window PBD untuk guru mengemaskini TP semasa. Apabila dikunci,
+                  sistem menyimpan snapshot Penggal 1 atau Penggal 2 untuk analisis.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => loadPbdWindows(adminProfile.school_id, getPbdAcademicYear())}
+                disabled={pbdWindowLoading}
+                style={{
+                  ...styles.secondaryButton,
+                  ...(pbdWindowLoading ? styles.toggleDisabled : {}),
+                }}
+              >
+                {pbdWindowLoading ? 'Memuat...' : 'Refresh'}
+              </button>
+            </div>
+
+            {pbdWindowLoading ? (
+              <div style={styles.infoText}>Sedang memuat status PBD...</div>
+            ) : (
+              <div style={styles.tableWrap}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Penggal</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Dibuka Pada</th>
+                      <th style={styles.th}>Dikunci Pada</th>
+                      <th style={styles.thCenter}>Tindakan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PBD_PERIODS.map((period) => {
+                      const row = pbdWindows.find((item) => item.period_key === period.key)
+                      const status = row?.is_locked
+                        ? 'Dikunci'
+                        : row?.is_open
+                          ? 'Dibuka'
+                          : 'Belum dibuka'
+                      const savingOpen = pbdWindowSavingKey === `open-${period.key}`
+                      const savingLock = pbdWindowSavingKey === `lock-${period.key}`
+                      const isSaving = savingOpen || savingLock
+
+                      return (
+                        <tr key={period.key}>
+                          <td style={styles.tdStrong}>{period.name}</td>
+                          <td style={styles.td}>
+                            <span
+                              style={{
+                                ...styles.pbdStatusPill,
+                                ...(row?.is_locked
+                                  ? styles.pbdStatusLocked
+                                  : row?.is_open
+                                    ? styles.pbdStatusOpen
+                                    : styles.pbdStatusIdle),
+                              }}
+                            >
+                              {status}
+                            </span>
+                          </td>
+                          <td style={styles.td}>{row?.opened_at ? new Date(row.opened_at).toLocaleString('ms-MY') : '-'}</td>
+                          <td style={styles.td}>{row?.locked_at ? new Date(row.locked_at).toLocaleString('ms-MY') : '-'}</td>
+                          <td style={styles.tdCenter}>
+                            <div style={styles.pbdActionGroup}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPbdWindow(period.key)}
+                                disabled={isSaving || row?.is_locked || row?.is_open}
+                                style={{
+                                  ...styles.smallActionButton,
+                                  ...(isSaving || row?.is_locked || row?.is_open
+                                    ? styles.toggleDisabled
+                                    : {}),
+                                }}
+                              >
+                                {savingOpen ? 'Membuka...' : 'Buka'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleLockPbdWindow(period.key)}
+                                disabled={isSaving || row?.is_locked || !row?.is_open}
+                                style={{
+                                  ...styles.smallDangerButton,
+                                  ...(isSaving || row?.is_locked || !row?.is_open
+                                    ? styles.toggleDisabled
+                                    : {}),
+                                }}
+                              >
+                                {savingLock ? 'Mengunci...' : 'Kunci'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
         <section style={styles.dualGrid}>
           <div style={styles.sectionCard}>
@@ -2093,10 +2486,21 @@ const styles = {
     fontWeight: 600,
   },
   primaryButton: { background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '12px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' },
+  secondaryButton: {
+    background: '#ffffff',
+    color: '#0f172a',
+    border: '1px solid #cbd5e1',
+    borderRadius: '12px',
+    padding: '10px 14px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
   sectionHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: '14px',
+    flexWrap: 'wrap',
     marginBottom: '16px',
   },
   sectionHeaderResponsive: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' },
@@ -2150,6 +2554,14 @@ const styles = {
   quickActionCardPurple: {
     background: 'linear-gradient(180deg, #faf5ff 0%, #fdf9ff 100%)',
     borderColor: '#e9d5ff',
+  },
+  quickActionCardTeal: {
+    background: 'linear-gradient(180deg, #f0fdfa 0%, #f8fffd 100%)',
+    borderColor: '#99f6e4',
+  },
+  quickActionCardRose: {
+    background: 'linear-gradient(180deg, #fff1f2 0%, #fffafa 100%)',
+    borderColor: '#fecdd3',
   },
   quickActionTitle: {
     fontSize: '18px',
@@ -2240,6 +2652,56 @@ const styles = {
   matrixToggleOff: {
     background: '#fee2e2',
     color: '#991b1b',
+  },
+  pbdStatusPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '999px',
+    padding: '7px 11px',
+    fontSize: '12px',
+    fontWeight: 800,
+    whiteSpace: 'nowrap',
+  },
+  pbdStatusOpen: {
+    background: '#dcfce7',
+    color: '#166534',
+  },
+  pbdStatusLocked: {
+    background: '#e0e7ff',
+    color: '#3730a3',
+  },
+  pbdStatusIdle: {
+    background: '#f1f5f9',
+    color: '#475569',
+  },
+  pbdActionGroup: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  smallActionButton: {
+    border: 'none',
+    borderRadius: '999px',
+    background: '#0f172a',
+    color: '#ffffff',
+    minWidth: '76px',
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+  smallDangerButton: {
+    border: 'none',
+    borderRadius: '999px',
+    background: '#be123c',
+    color: '#ffffff',
+    minWidth: '76px',
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: 800,
+    cursor: 'pointer',
   },
   mutedDash: {
     color: '#94a3b8',

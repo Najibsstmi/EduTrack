@@ -5,9 +5,15 @@ import { useRequireAuth } from '../lib/useRequireAuth.js'
 const modules = [
   {
     title: 'PBD',
-    description: 'Input TP1 hingga TP6 mengikut kelas, subjek dan murid.',
-    path: '/pbs/pbd/input',
+    description: 'Input TP semasa mengikut kelas, subjek dan murid.',
+    path: '/input-pbd',
     tone: 'border-blue-200 bg-blue-50 text-blue-900',
+  },
+  {
+    title: 'Analisis PBD',
+    description: 'Ringkasan TP semasa, snapshot penggal dan perubahan murid.',
+    path: '/analisis-pbd',
+    tone: 'border-rose-200 bg-rose-50 text-rose-900',
   },
   {
     title: 'PAJSK',

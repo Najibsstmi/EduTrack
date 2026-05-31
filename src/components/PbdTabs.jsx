@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom'
 export default function PbdTabs({ active }) {
   const navigate = useNavigate()
   const tabs = [
-    { key: 'input', label: 'Input PBD', path: '/pbs/pbd/input' },
-    { key: 'analysis', label: 'Analisis', path: '/pbs/pbd/analysis' },
-    { key: 'subject', label: 'Subjek', path: '/pbs/pbd/subject' },
-    { key: 'student', label: 'Murid', path: '/pbs/pbd/student' },
+    { key: 'input', label: 'Input PBD', path: '/input-pbd' },
+    { key: 'analysis', label: 'Analisis', path: '/analisis-pbd' },
   ]
 
   return (

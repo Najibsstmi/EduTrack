@@ -17,19 +17,27 @@ import {
 } from '../lib/pbdAnalysis.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
-const todayIsoDate = () => new Date().toISOString().slice(0, 10)
+const PBD_PERIODS = [
+  { key: 'PENGGAL_1', name: 'Penggal 1' },
+  { key: 'PENGGAL_2', name: 'Penggal 2' },
+]
 
 const buildYearOptions = (currentYear) => {
   const baseYear = Number(currentYear) || new Date().getFullYear()
   return [baseYear - 1, baseYear, baseYear + 1, baseYear + 2]
 }
 
+const getWindowLabel = (windowRow) =>
+  windowRow?.period_name ||
+  PBD_PERIODS.find((period) => period.key === windowRow?.period_key)?.name ||
+  'PBD'
+
 export default function PbdInputPage() {
   const navigate = useNavigate()
   const checkingAuth = useRequireAuth()
 
   const [loading, setLoading] = useState(true)
-  const [loadingScores, setLoadingScores] = useState(false)
+  const [loadingCurrent, setLoadingCurrent] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -41,13 +49,20 @@ export default function PbdInputPage() {
   const [subjects, setSubjects] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [studentSubjectEnrollments, setStudentSubjectEnrollments] = useState([])
-  const [scoreDrafts, setScoreDrafts] = useState({})
+  const [pbdWindows, setPbdWindows] = useState([])
+  const [currentDrafts, setCurrentDrafts] = useState({})
   const [bulkTp, setBulkTp] = useState('')
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [tpFilter, setTpFilter] = useState('')
+
+  const activeWindow = useMemo(
+    () => pbdWindows.find((row) => row.is_open && !row.is_locked) || null,
+    [pbdWindows]
+  )
+  const canEditPbd = !!activeWindow
 
   const initPage = useCallback(async () => {
     setLoading(true)
@@ -98,6 +113,30 @@ export default function PbdInputPage() {
       setLoading(false)
     }
   }, [navigate])
+
+  const loadPbdWindows = useCallback(async (schoolId, year) => {
+    if (!schoolId || !year) return
+
+    try {
+      const { data, error } = await supabase
+        .from('pbd_windows')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('academic_year', year)
+        .order('period_key', { ascending: true })
+
+      if (error) throw error
+      setPbdWindows(data || [])
+    } catch (error) {
+      console.error(error)
+      setPbdWindows([])
+      setErrorMessage(
+        error.message?.includes('pbd_windows')
+          ? 'Jadual pbd_windows belum tersedia. Sila jalankan SQL migration PBD baharu di Supabase.'
+          : error.message || 'Gagal memuatkan status window PBD.'
+      )
+    }
+  }, [])
 
   const loadAcademicData = useCallback(async (schoolId, year) => {
     setLoading(true)
@@ -202,24 +241,23 @@ export default function PbdInputPage() {
           sensitivity: 'base',
         })
       )
-
       .forEach((subject) => {
         const key = `${String(subject.subject_name || '').trim().toLowerCase()}__${String(subject.subject_code || '').trim().toLowerCase()}`
-        if (!uniqueSubjects.has(key)) {
-          uniqueSubjects.set(key, subject)
-        }
+        if (!uniqueSubjects.has(key)) uniqueSubjects.set(key, subject)
       })
 
     return Array.from(uniqueSubjects.values())
   }, [subjects, selectedTingkatan])
 
-  const selectedSubject = useMemo(() => {
-    return subjects.find((subject) => String(subject.id) === String(selectedSubjectId)) || null
-  }, [subjects, selectedSubjectId])
+  const selectedSubject = useMemo(
+    () => subjects.find((subject) => String(subject.id) === String(selectedSubjectId)) || null,
+    [subjects, selectedSubjectId]
+  )
 
-  const selectedClass = useMemo(() => {
-    return classes.find((item) => String(item.id) === String(selectedClassId)) || null
-  }, [classes, selectedClassId])
+  const selectedClass = useMemo(
+    () => classes.find((item) => String(item.id) === String(selectedClassId)) || null,
+    [classes, selectedClassId]
+  )
 
   const studentRows = useMemo(() => {
     if (!selectedClassId || !selectedSubject) return []
@@ -248,24 +286,25 @@ export default function PbdInputPage() {
       )
   }, [selectedClassId, selectedSubject, enrollments, studentSubjectEnrollments])
 
-  const loadPbdScores = useCallback(async () => {
+  const loadCurrentPbd = useCallback(async () => {
     if (!profile?.school_id || !academicYear || !selectedClassId || !selectedSubjectId) return
 
     const enrollmentIds = studentRows.map((student) => student.enrollment_id)
     if (enrollmentIds.length === 0) {
-      setScoreDrafts({})
+      setCurrentDrafts({})
       return
     }
 
-    setLoadingScores(true)
+    setLoadingCurrent(true)
     setErrorMessage('')
 
     try {
       const { data, error } = await supabase
-        .from('student_pbd_scores')
-        .select('id, student_enrollment_id, subject_id, tp_level, evidence_note, assessment_date, created_by, updated_by')
+        .from('student_pbd_current')
+        .select('id, student_enrollment_id, student_profile_id, class_id, subject_id, tp, evidence_note, teacher_note, updated_by')
         .eq('school_id', profile.school_id)
         .eq('academic_year', academicYear)
+        .eq('class_id', selectedClassId)
         .eq('subject_id', selectedSubjectId)
         .in('student_enrollment_id', enrollmentIds)
 
@@ -275,24 +314,23 @@ export default function PbdInputPage() {
       ;(data || []).forEach((row) => {
         nextDrafts[row.student_enrollment_id] = {
           id: row.id,
-          tp_level: row.tp_level ? String(row.tp_level) : '',
+          tp: row.tp ? String(row.tp) : '',
           evidence_note: row.evidence_note || '',
-          assessment_date: row.assessment_date || '',
-          created_by: row.created_by || '',
+          teacher_note: row.teacher_note || '',
           updated_by: row.updated_by || '',
         }
       })
 
-      setScoreDrafts(nextDrafts)
+      setCurrentDrafts(nextDrafts)
     } catch (error) {
       console.error(error)
       setErrorMessage(
-        error.message?.includes('student_pbd_scores')
-          ? 'Jadual student_pbd_scores belum tersedia. Sila jalankan SQL migration PBS di Supabase.'
-          : error.message || 'Gagal memuatkan skor PBD.'
+        error.message?.includes('student_pbd_current')
+          ? 'Jadual student_pbd_current belum tersedia. Sila jalankan SQL migration PBD baharu di Supabase.'
+          : error.message || 'Gagal memuatkan TP semasa PBD.'
       )
     } finally {
-      setLoadingScores(false)
+      setLoadingCurrent(false)
     }
   }, [academicYear, profile?.school_id, selectedClassId, selectedSubjectId, studentRows])
 
@@ -304,15 +342,16 @@ export default function PbdInputPage() {
   useEffect(() => {
     if (!profile?.school_id || !academicYear) return
     loadAcademicData(profile.school_id, academicYear)
-  }, [profile?.school_id, academicYear, loadAcademicData])
+    loadPbdWindows(profile.school_id, academicYear)
+  }, [profile?.school_id, academicYear, loadAcademicData, loadPbdWindows])
 
   useEffect(() => {
-    setScoreDrafts({})
-    loadPbdScores()
-  }, [loadPbdScores])
+    setCurrentDrafts({})
+    loadCurrentPbd()
+  }, [loadCurrentPbd])
 
   const updateDraft = (enrollmentId, field, value) => {
-    setScoreDrafts((prev) => ({
+    setCurrentDrafts((prev) => ({
       ...prev,
       [enrollmentId]: {
         ...(prev[enrollmentId] || {}),
@@ -322,18 +361,22 @@ export default function PbdInputPage() {
   }
 
   const applyBulkTp = () => {
+    if (!canEditPbd) {
+      alert('PBD belum dibuka oleh admin sekolah.')
+      return
+    }
+
     if (!bulkTp) {
       alert('Pilih TP pukal dahulu.')
       return
     }
 
-    setScoreDrafts((prev) => {
+    setCurrentDrafts((prev) => {
       const next = { ...prev }
       visibleStudents.forEach((student) => {
         next[student.enrollment_id] = {
           ...(next[student.enrollment_id] || {}),
-          tp_level: bulkTp,
-          assessment_date: next[student.enrollment_id]?.assessment_date || todayIsoDate(),
+          tp: bulkTp,
         }
       })
       return next
@@ -342,35 +385,52 @@ export default function PbdInputPage() {
 
   const visibleStudents = useMemo(() => {
     return studentRows.filter((student) => {
-      const draft = scoreDrafts[student.enrollment_id] || {}
-      const tp = draft.tp_level ? String(draft.tp_level) : ''
+      const draft = currentDrafts[student.enrollment_id] || {}
+      const tp = draft.tp ? String(draft.tp) : ''
 
       if (tpFilter === 'empty' && tp) return false
       if (tpFilter && tpFilter !== 'empty' && tp !== tpFilter) return false
 
       return true
     })
-  }, [scoreDrafts, studentRows, tpFilter])
+  }, [currentDrafts, studentRows, tpFilter])
 
   const currentDistribution = useMemo(() => {
-    const scoreRows = studentRows
+    const pbdRows = studentRows
       .map((student) => ({
         student_enrollment_id: student.enrollment_id,
-        tp_level: Number(scoreDrafts[student.enrollment_id]?.tp_level),
+        tp: Number(currentDrafts[student.enrollment_id]?.tp),
       }))
-      .filter((row) => TP_LEVELS.includes(row.tp_level))
+      .filter((row) => TP_LEVELS.includes(row.tp))
 
-    return calculatePbdDistribution(scoreRows, studentRows.length)
-  }, [scoreDrafts, studentRows])
+    return calculatePbdDistribution(pbdRows, studentRows.length)
+  }, [currentDrafts, studentRows])
 
   const minimumAchievement = useMemo(
     () => calculatePbdMinimumAchievement(currentDistribution),
     [currentDistribution]
   )
 
-  const savePbdScores = async () => {
+  const windowStatusText = useMemo(() => {
+    if (activeWindow) {
+      return `${getWindowLabel(activeWindow)} sedang dibuka. Guru boleh mengemaskini TP semasa.`
+    }
+
+    if (pbdWindows.some((row) => row.is_locked)) {
+      return 'PBD belum dibuka oleh admin sekolah. TP semasa boleh dilihat tetapi tidak boleh diedit.'
+    }
+
+    return 'PBD belum dibuka oleh admin sekolah.'
+  }, [activeWindow, pbdWindows])
+
+  const saveCurrentPbd = async () => {
     if (!profile?.school_id || !academicYear || !selectedClassId || !selectedSubjectId) {
       alert('Sila pilih tahun, kelas dan subjek dahulu.')
+      return
+    }
+
+    if (!canEditPbd) {
+      alert('PBD belum dibuka oleh admin sekolah.')
       return
     }
 
@@ -379,66 +439,54 @@ export default function PbdInputPage() {
 
     try {
       const rowsToUpsert = []
-      const deleteIds = []
 
       studentRows.forEach((student) => {
-        const draft = scoreDrafts[student.enrollment_id]
+        const draft = currentDrafts[student.enrollment_id]
         if (!draft) return
 
-        const tpLevel = Number(draft.tp_level)
+        const tpLevel = Number(draft.tp)
         const hasTp = TP_LEVELS.includes(tpLevel)
+        const evidenceNote = String(draft.evidence_note || '').trim()
+        const teacherNote = String(draft.teacher_note || '').trim()
 
-        if (!hasTp) {
-          if (draft.id) deleteIds.push(draft.id)
-          return
-        }
+        if (!hasTp && !draft.id && !evidenceNote && !teacherNote) return
 
         rowsToUpsert.push({
           school_id: profile.school_id,
-          student_enrollment_id: student.enrollment_id,
           academic_year: Number(academicYear),
+          student_enrollment_id: student.enrollment_id,
+          student_profile_id: student.student_profile_id,
+          class_id: selectedClassId,
           subject_id: selectedSubjectId,
-          tp_level: tpLevel,
-          evidence_note: String(draft.evidence_note || '').trim() || null,
-          assessment_date: draft.assessment_date || null,
-          created_by: draft.created_by || profile.id,
+          tp: hasTp ? tpLevel : null,
+          evidence_note: evidenceNote || null,
+          teacher_note: teacherNote || null,
           updated_by: profile.id,
         })
       })
 
-      if (rowsToUpsert.length === 0 && deleteIds.length === 0) {
+      if (rowsToUpsert.length === 0) {
         alert('Tiada perubahan PBD untuk disimpan.')
         setSaving(false)
         return
       }
 
-      if (deleteIds.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('student_pbd_scores')
-          .delete()
-          .in('id', deleteIds)
+      const { error: upsertError } = await supabase
+        .from('student_pbd_current')
+        .upsert(rowsToUpsert, {
+          onConflict: 'student_enrollment_id,subject_id,academic_year',
+        })
 
-        if (deleteError) throw deleteError
-      }
+      if (upsertError) throw upsertError
 
-      if (rowsToUpsert.length > 0) {
-        const { error: upsertError } = await supabase
-          .from('student_pbd_scores')
-          .upsert(rowsToUpsert, {
-            onConflict: 'student_enrollment_id,subject_id,academic_year',
-          })
-
-        if (upsertError) throw upsertError
-      }
-
-      await loadPbdScores()
-      alert('Rekod PBD berjaya disimpan.')
+      await loadCurrentPbd()
+      alert('TP semasa PBD berjaya disimpan.')
     } catch (error) {
       console.error(error)
       setErrorMessage(
-        error.message?.includes('student_pbd_scores')
-          ? 'Simpan gagal kerana jadual student_pbd_scores belum wujud atau RLS belum dikemaskini. Jalankan SQL migration PBS dahulu.'
-          : error.message || 'Gagal menyimpan PBD.'
+        error.message?.includes('student_pbd_current')
+          ? 'Simpan gagal kerana jadual student_pbd_current belum wujud atau RLS belum dikemaskini. Jalankan SQL migration PBD baharu dahulu.'
+          : error.message || 'Gagal menyimpan TP semasa PBD.'
       )
     } finally {
       setSaving(false)
@@ -466,7 +514,7 @@ export default function PbdInputPage() {
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/pbs/pbd/analysis')}
+              onClick={() => navigate('/analisis-pbd')}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
               Analisis PBD
@@ -481,6 +529,36 @@ export default function PbdInputPage() {
             {errorMessage}
           </div>
         ) : null}
+
+        <section
+          className={`rounded-2xl border p-4 shadow-sm md:p-5 ${
+            canEditPbd
+              ? 'border-emerald-200 bg-emerald-50'
+              : 'border-amber-200 bg-amber-50'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Status Window PBD</h2>
+              <p className="mt-1 text-sm text-slate-700">{windowStatusText}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {PBD_PERIODS.map((period) => {
+                const row = pbdWindows.find((item) => item.period_key === period.key)
+                const label = row?.is_locked ? 'Dikunci' : row?.is_open ? 'Dibuka' : 'Belum dibuka'
+
+                return (
+                  <span
+                    key={period.key}
+                    className="rounded-full border border-white/70 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
+                  >
+                    {period.name}: {label}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Penapis Input PBD</h2>
@@ -503,7 +581,7 @@ export default function PbdInputPage() {
                 setSelectedTingkatan(event.target.value)
                 setSelectedClassId('')
                 setSelectedSubjectId('')
-                setScoreDrafts({})
+                setCurrentDrafts({})
               }}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
@@ -582,6 +660,7 @@ export default function PbdInputPage() {
                 value={bulkTp}
                 onChange={(event) => setBulkTp(event.target.value)}
                 className="rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                disabled={!canEditPbd}
               >
                 <option value="">TP Pukal</option>
                 {TP_LEVELS.map((level) => (
@@ -593,25 +672,31 @@ export default function PbdInputPage() {
               <button
                 type="button"
                 onClick={applyBulkTp}
-                disabled={!visibleStudents.length}
+                disabled={!canEditPbd || !visibleStudents.length}
                 className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Tetapkan
               </button>
               <button
                 type="button"
-                onClick={savePbdScores}
-                disabled={saving || !studentRows.length}
+                onClick={saveCurrentPbd}
+                disabled={saving || !canEditPbd || !studentRows.length}
                 className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? 'Menyimpan...' : 'Simpan PBD'}
+                {saving ? 'Menyimpan...' : 'Simpan TP Semasa'}
               </button>
             </div>
           </div>
 
-          {loadingScores ? (
+          {!canEditPbd ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              PBD belum dibuka oleh admin sekolah.
+            </div>
+          ) : null}
+
+          {loadingCurrent ? (
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              Memuatkan skor PBD...
+              Memuatkan TP semasa PBD...
             </div>
           ) : !selectedClassId || !selectedSubjectId ? (
             <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
@@ -633,19 +718,19 @@ export default function PbdInputPage() {
                       No IC
                     </th>
                     <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">
-                      TP
+                      TP Semasa
                     </th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">
-                      Tarikh
+                    <th className="min-w-72 border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">
+                      Eviden
                     </th>
-                    <th className="min-w-80 border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">
-                      Eviden / Catatan
+                    <th className="min-w-72 border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">
+                      Catatan Guru
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleStudents.map((student) => {
-                    const draft = scoreDrafts[student.enrollment_id] || {}
+                    const draft = currentDrafts[student.enrollment_id] || {}
 
                     return (
                       <tr key={student.enrollment_id} className="border-b border-slate-100">
@@ -655,11 +740,12 @@ export default function PbdInputPage() {
                         <td className="px-4 py-3 text-slate-600">{student.ic_number}</td>
                         <td className="px-4 py-3">
                           <select
-                            value={draft.tp_level || ''}
+                            value={draft.tp || ''}
                             onChange={(event) =>
-                              updateDraft(student.enrollment_id, 'tp_level', event.target.value)
+                              updateDraft(student.enrollment_id, 'tp', event.target.value)
                             }
-                            className="w-28 rounded-lg border border-slate-300 px-3 py-2"
+                            className="w-28 rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+                            disabled={!canEditPbd}
                           >
                             <option value="">-</option>
                             {TP_LEVELS.map((level) => (
@@ -670,24 +756,27 @@ export default function PbdInputPage() {
                           </select>
                         </td>
                         <td className="px-4 py-3">
-                          <input
-                            type="date"
-                            value={draft.assessment_date || ''}
-                            onChange={(event) =>
-                              updateDraft(student.enrollment_id, 'assessment_date', event.target.value)
-                            }
-                            className="rounded-lg border border-slate-300 px-3 py-2"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
                           <textarea
                             value={draft.evidence_note || ''}
                             onChange={(event) =>
                               updateDraft(student.enrollment_id, 'evidence_note', event.target.value)
                             }
                             rows={2}
-                            className="w-full min-w-72 resize-y rounded-lg border border-slate-300 px-3 py-2"
-                            placeholder="Catatan eviden PBD"
+                            className="w-full min-w-64 resize-y rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+                            placeholder="Eviden PBD"
+                            disabled={!canEditPbd}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <textarea
+                            value={draft.teacher_note || ''}
+                            onChange={(event) =>
+                              updateDraft(student.enrollment_id, 'teacher_note', event.target.value)
+                            }
+                            rows={2}
+                            className="w-full min-w-64 resize-y rounded-lg border border-slate-300 px-3 py-2 disabled:bg-slate-100"
+                            placeholder="Catatan ringkas"
+                            disabled={!canEditPbd}
                           />
                         </td>
                       </tr>

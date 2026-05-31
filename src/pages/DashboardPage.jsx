@@ -349,6 +349,40 @@ function DashboardPage() {
 
             <button
               type="button"
+              onClick={() => navigate('/input-pbd')}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardTeal,
+              }}
+            >
+              <div style={styles.quickActionHeader}>
+                <h4 style={styles.quickActionTitle}>Input PBD</h4>
+                <span style={styles.quickActionArrow}>â€º</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Kemas kini TP semasa murid apabila window PBD dibuka oleh admin sekolah.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/analisis-pbd')}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardRose,
+              }}
+            >
+              <div style={styles.quickActionHeader}>
+                <h4 style={styles.quickActionTitle}>Analisis PBD</h4>
+                <span style={styles.quickActionArrow}>â€º</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Lihat TP semasa, snapshot Penggal 1, snapshot Penggal 2 dan perubahan murid.
+              </p>
+            </button>
+
+            <button
+              type="button"
               onClick={() => navigate('/manage-subject-students')}
               style={{
                 ...styles.quickActionCard,
@@ -502,6 +536,14 @@ const styles = {
   quickActionCardPurple: {
     background: 'linear-gradient(180deg, #f5f3ff 0%, #faf8ff 100%)',
     borderColor: '#d8b4fe',
+  },
+  quickActionCardTeal: {
+    background: 'linear-gradient(180deg, #f0fdfa 0%, #f8fffd 100%)',
+    borderColor: '#99f6e4',
+  },
+  quickActionCardRose: {
+    background: 'linear-gradient(180deg, #fff1f2 0%, #fffafa 100%)',
+    borderColor: '#fecdd3',
   },
   quickActionHeader: { display: 'flex', alignItems: 'center', gap: '10px' },
   quickActionTitle: {

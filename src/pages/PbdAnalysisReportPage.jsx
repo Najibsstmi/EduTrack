@@ -17,11 +17,16 @@ import { buildPbdYearOptions, usePbdAnalysisData } from '../lib/usePbdAnalysisDa
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase()
+const formatSubjectName = (value) => String(value || '').trim().toUpperCase()
 
 const uniqueSubjectNames = (subjects) =>
-  [...new Set((subjects || []).map((subject) => subject.subject_name).filter(Boolean))].sort(
-    (a, b) => String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' })
-  )
+  [
+    ...new Set(
+      (subjects || [])
+        .map((subject) => formatSubjectName(subject.subject_name))
+        .filter(Boolean)
+    ),
+  ].sort((a, b) => String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' }))
 
 export default function PbdAnalysisReportPage() {
   const navigate = useNavigate()
@@ -164,7 +169,7 @@ export default function PbdAnalysisReportPage() {
           actionLeft={
             <button
               type="button"
-              onClick={() => navigate('/pbs/pbd/input')}
+              onClick={() => navigate('/input-pbd')}
               className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
             >
               Input PBD

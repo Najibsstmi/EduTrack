@@ -155,7 +155,7 @@ export default function PbdStudentAnalysisPage() {
           actionLeft={
             <button
               type="button"
-              onClick={() => navigate('/pbs/pbd/input')}
+              onClick={() => navigate('/input-pbd')}
               className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
             >
               Input PBD
@@ -164,7 +164,7 @@ export default function PbdStudentAnalysisPage() {
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/pbs/pbd/analysis')}
+              onClick={() => navigate('/analisis-pbd')}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
               Laporan PBD

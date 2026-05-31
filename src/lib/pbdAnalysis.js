@@ -22,7 +22,7 @@ export const calculatePbdDistribution = (scoreRows = [], totalStudents = scoreRo
   const counts = createEmptyTpCounts()
 
   ;(scoreRows || []).forEach((row) => {
-    const level = Number(row?.tp_level)
+    const level = Number(row?.tp_level ?? row?.tp)
     if (!TP_LEVELS.includes(level)) return
     counts[level] += 1
   })
