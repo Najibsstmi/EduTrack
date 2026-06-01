@@ -10,12 +10,6 @@ const modules = [
     tone: 'border-blue-200 bg-blue-50 text-blue-900',
   },
   {
-    title: 'Analisis PBD',
-    description: 'Ringkasan TP semasa, snapshot penggal dan perubahan murid.',
-    path: '/analisis-pbd',
-    tone: 'border-rose-200 bg-rose-50 text-rose-900',
-  },
-  {
     title: 'PAJSK',
     description: 'Input SEGAK dan BMI untuk fasa PAJSK semasa.',
     path: '/pbs/pajsk',

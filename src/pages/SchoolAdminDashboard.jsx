@@ -1261,14 +1261,6 @@ export default function SchoolAdminDashboard() {
 
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/analisis-pbd')}
-                style={getMobileNavButtonStyle('/analisis-pbd')}
-              >
-                Analisis PBD
-              </button>
-
-              <button
-                type="button"
                 onClick={() => handleMobileNavigate('/pbs')}
                 style={getMobileNavButtonStyle('/pbs')}
               >
@@ -1406,16 +1398,6 @@ export default function SchoolAdminDashboard() {
               style={getNavButtonStyle('/analysis')}
             >
               Analisis
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/analisis-pbd')}
-              onMouseEnter={() => setHoveredNav('/analisis-pbd')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/analisis-pbd')}
-            >
-              Analisis PBD
             </button>
 
             <button
