@@ -131,6 +131,16 @@ const getGuideLabel = (examKey) => {
   return guideKey || 'Panduan'
 }
 
+const getExamDisplayLabel = (exam) => {
+  const key = normalizeExamKey(exam?.key || exam?.exam_key)
+  const name = normalizeText(exam?.name || exam?.exam_name)
+
+  if (!key) return name || ''
+  if (!name || normalizeExamKey(name) === key) return key
+
+  return `${key} - ${name}`
+}
+
 const normalizeSubjectType = (value) =>
   String(value || '').trim().toLowerCase()
 
@@ -2792,7 +2802,7 @@ export default function StudentScoresPage() {
               ) : (
                 activeExamOptions.map((exam) => (
                   <option key={exam.key} value={exam.key}>
-                    {exam.name}
+                    {getExamDisplayLabel(exam)}
                   </option>
                 ))
               )}
@@ -2806,20 +2816,20 @@ export default function StudentScoresPage() {
               <h2 className="text-xl font-semibold text-slate-900">Import Markah CSV</h2>
               <p className="mt-1 text-sm text-slate-500">
                 {importMode === 'bulk_admin'
-                  ? 'Gunakan template dinamik untuk isi banyak subjek dalam satu baris murid, atau template lama jika mahu import format panjang.'
+                  ? 'Gunakan template dinamik untuk isi banyak subjek dalam satu baris murid.'
                   : 'Gunakan template import biasa yang mengandungi nama_murid, no_ic, subjek, jenis_peperiksaan dan markah sahaja. Kelas dan tingkatan tidak perlu kerana konteks sudah dipilih pada halaman ini.'}
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={downloadTemplateCsv}
-              className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
-            >
-              {importMode === 'bulk_admin'
-                ? 'Muat Turun Template Pukal Lama'
-                : 'Muat Turun Template Import Biasa'}
-            </button>
+            {importMode === 'normal' && (
+              <button
+                type="button"
+                onClick={downloadTemplateCsv}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Muat Turun Template Import Biasa
+              </button>
+            )}
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -3046,12 +3056,29 @@ export default function StudentScoresPage() {
                 Template dinamik menggunakan satu baris untuk setiap murid. Column subjek akan
                 mengikut subjek aktif yang didaftarkan oleh admin sekolah.
               </p>
-              <p className="mt-1 text-sm text-slate-600">
-                Format lama masih disokong: tingkatan, kelas (optional), no_ic, nama_murid,
-                subjek, jenis_peperiksaan, markah.
-              </p>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,360px)_auto] md:items-end md:justify-start">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Peperiksaan Import
+                  </label>
+                  <select
+                    value={selectedExam}
+                    onChange={(e) => setSelectedExam(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
+                  >
+                    {activeExamOptions.length === 0 ? (
+                      <option value="">Tiada peperiksaan dibuka</option>
+                    ) : (
+                      activeExamOptions.map((exam) => (
+                        <option key={exam.key} value={exam.key}>
+                          {getExamDisplayLabel(exam)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
                 <button
                   type="button"
                   onClick={downloadDynamicBulkTemplateCsv}
@@ -3060,10 +3087,6 @@ export default function StudentScoresPage() {
                 >
                   {dynamicTemplateLoading ? 'Sedang jana...' : 'Muat Turun Template Dinamik'}
                 </button>
-
-                <span className="text-sm text-slate-600">
-                  Peperiksaan dipilih: <strong>{selectedExam || 'Belum dipilih'}</strong>
-                </span>
               </div>
 
               {!selectedExam && (
