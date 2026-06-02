@@ -376,7 +376,7 @@ export default function StudentSubjectTrendPage() {
   }, [trendRows])
 
   if (loading) {
-    return <div className="p-6">Loading Trend Subjek...</div>
+    return <div className="p-6">Loading Prestasi Subjek Murid...</div>
   }
 
   return (
@@ -388,7 +388,7 @@ export default function StudentSubjectTrendPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 EduTrack
               </p>
-              <h1 className="text-3xl font-bold text-slate-900">Trend Subjek Murid</h1>
+              <h1 className="text-3xl font-bold text-slate-900">Prestasi Subjek Murid</h1>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -396,7 +396,7 @@ export default function StudentSubjectTrendPage() {
                 onClick={() => navigate('/analysis/class')}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Kelas
+                Prestasi Kelas
               </button>
 
               <button
@@ -411,7 +411,7 @@ export default function StudentSubjectTrendPage() {
                 }
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Individu
+                Prestasi Murid
               </button>
 
               <button
@@ -426,7 +426,7 @@ export default function StudentSubjectTrendPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
-          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Filter Trend</h2>
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Penapis Prestasi Subjek</h2>
 
           <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-4">
             <select

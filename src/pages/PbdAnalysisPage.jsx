@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader.jsx'
 import { PbdTpBarChart } from '../components/PbdCharts.jsx'
 import PbdTabs from '../components/PbdTabs.jsx'
 import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath.js'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix.js'
 import {
   fetchSchoolLevelLabels,
@@ -621,6 +622,7 @@ export default function PbdAnalysisPage() {
     })
     return labels.join(' | ')
   }, [pbdWindows])
+  const dashboardPath = getDashboardPath(profile)
 
   if (checkingAuth || loading) {
     return <div className="p-6 text-slate-600">Loading analisis PBD...</div>
@@ -631,22 +633,13 @@ export default function PbdAnalysisPage() {
       <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PBD"
-          actionLeft={
-            <button
-              type="button"
-              onClick={() => navigate('/pbs')}
-              className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              PBS
-            </button>
-          }
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/input-pbd')}
+              onClick={() => navigate(dashboardPath)}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              Input PBD
+              Kembali ke Dashboard
             </button>
           }
         />

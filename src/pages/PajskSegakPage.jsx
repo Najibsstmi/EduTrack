@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, ClipboardList } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import SegakTabs from '../components/SegakTabs.jsx'
@@ -25,7 +25,7 @@ export default function PajskSegakPage() {
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
-          title="PAJSK SEGAK / BMI"
+          title="SEGAK / BMI"
           actionLeft={
             <button
               type="button"
@@ -34,16 +34,6 @@ export default function PajskSegakPage() {
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               <span>PAJSK</span>
-            </button>
-          }
-          actionRight={
-            <button
-              type="button"
-              onClick={() => navigate('/pbs/pajsk/segak/input')}
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span>Input SEGAK</span>
             </button>
           }
         />
@@ -62,24 +52,6 @@ export default function PajskSegakPage() {
                   </p>
                 </div>
               ))}
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/pbs/pajsk/segak/input')}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                <ClipboardList className="h-4 w-4" aria-hidden="true" />
-                <span>Buka Input</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/pbs/pajsk/segak/analysis')}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                <BarChart3 className="h-4 w-4" aria-hidden="true" />
-                <span>Lihat Analisis</span>
-              </button>
             </div>
           </div>
 

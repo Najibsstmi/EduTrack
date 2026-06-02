@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 const tabs = [
   {
     key: 'overview',
-    label: 'SEGAK',
+    label: 'Ringkasan',
     path: '/pbs/pajsk/segak',
     icon: Activity,
   },

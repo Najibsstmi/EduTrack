@@ -333,7 +333,7 @@ function DashboardPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/pbs')}
+              onClick={() => navigate('/analysis/pbs')}
               style={{
                 ...styles.quickActionCard,
                 ...styles.quickActionCardAmber,
@@ -344,7 +344,7 @@ function DashboardPage() {
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
-                Akses PBD, PAJSK, PPsi dan analisis PBS dalam modul berasingan.
+                Lihat paparan holistik peperiksaan, PBD, SEGAK dan PAJSK.
               </p>
             </button>
 

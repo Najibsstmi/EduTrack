@@ -606,7 +606,7 @@ export default function StudentIndividualAnalysisPage() {
   }, [examOptions, selectedExamKey])
 
   if (loading) {
-    return <div className="p-6">Loading Analisis Individu...</div>
+    return <div className="p-6">Loading Prestasi Murid...</div>
   }
 
   return (
@@ -619,7 +619,7 @@ export default function StudentIndividualAnalysisPage() {
                 EduTrack
               </p>
               <h1 className="text-3xl font-bold text-slate-900">
-                Analisis Individu Murid
+                Prestasi Murid
               </h1>
             </div>
 
@@ -628,12 +628,12 @@ export default function StudentIndividualAnalysisPage() {
                 onClick={() => navigate('/analysis/class')}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Kelas
+                Prestasi Kelas
               </button>
 
               <button
                 onClick={() =>
-                  navigate('/analysis/student-subject', {
+                  navigate('/analysis/subject', {
                     state: {
                       selectedTingkatan,
                       selectedClassId,
@@ -643,7 +643,7 @@ export default function StudentIndividualAnalysisPage() {
                 }
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Trend
+                Prestasi Subjek (GPMP)
               </button>
 
               <button

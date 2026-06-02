@@ -15,6 +15,7 @@ import {
 } from '../lib/levelLabels.js'
 import { buildPbdYearOptions, usePbdAnalysisData } from '../lib/usePbdAnalysisData.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
+import { getDashboardPath } from '../lib/dashboardPath.js'
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase()
 const formatSubjectName = (value) => String(value || '').trim().toUpperCase()
@@ -34,6 +35,7 @@ export default function PbdAnalysisReportPage() {
   const {
     loading,
     errorMessage,
+    profile,
     setupConfig,
     academicYear,
     setAcademicYear,
@@ -55,6 +57,7 @@ export default function PbdAnalysisReportPage() {
   const subjectNames = useMemo(() => uniqueSubjectNames(subjects), [subjects])
 
   const effectiveSubjectName = selectedSubjectName || subjectNames[0] || ''
+  const dashboardPath = getDashboardPath(profile)
 
   const availableTingkatan = useMemo(() => {
     const fromClasses = classes.map((item) => item.tingkatan).filter(Boolean)
@@ -178,10 +181,10 @@ export default function PbdAnalysisReportPage() {
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/pbs')}
+              onClick={() => navigate(dashboardPath)}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              PBS
+              Kembali ke Dashboard
             </button>
           }
         />

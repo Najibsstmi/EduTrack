@@ -1,11 +1,39 @@
 import { Activity, ArrowLeft, BarChart3, ClipboardList } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
+import { getDashboardPath } from '../lib/dashboardPath.js'
+import { supabase } from '../lib/supabaseClient.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
 export default function PajskInputPage() {
   const navigate = useNavigate()
   const checkingAuth = useRequireAuth()
+  const [profile, setProfile] = useState(null)
+
+  useEffect(() => {
+    if (checkingAuth) return
+
+    const loadProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, role, is_school_admin')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      setProfile(data || null)
+    }
+
+    loadProfile()
+  }, [checkingAuth])
+
+  const dashboardPath = getDashboardPath(profile)
 
   if (checkingAuth) {
     return <div className="p-6 text-slate-600">Loading PAJSK...</div>
@@ -19,11 +47,11 @@ export default function PajskInputPage() {
           actionLeft={
             <button
               type="button"
-              onClick={() => navigate('/pbs')}
+              onClick={() => navigate(dashboardPath)}
               className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>PBS</span>
+              <span>Dashboard</span>
             </button>
           }
           actionRight={

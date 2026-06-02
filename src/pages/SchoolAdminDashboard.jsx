@@ -1203,7 +1203,7 @@ export default function SchoolAdminDashboard() {
   const examAnalysisItems = [
     { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
     { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
-    { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
+    { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/subject' },
     { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
   ]
 

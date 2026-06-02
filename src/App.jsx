@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import SignupPage from './pages/SignupPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -23,7 +23,6 @@ import AnalysisHubPage from './pages/AnalysisHubPage'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
-import PbsHubPage from './pages/PbsHubPage.jsx'
 import PbdInputPage from './pages/PbdInputPage.jsx'
 import PbdAnalysisPage from './pages/PbdAnalysisPage.jsx'
 import PajskInputPage from './pages/PajskInputPage.jsx'
@@ -36,6 +35,7 @@ import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
+import { getDashboardPath } from './lib/dashboardPath'
 
 function AuthSessionWatcher() {
   const navigate = useNavigate()
@@ -58,6 +58,50 @@ function AuthSessionWatcher() {
   }, [navigate])
 
   return null
+}
+
+function LegacyPbsRedirect() {
+  const [targetPath, setTargetPath] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadTargetPath = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (!isMounted) return
+
+      if (userError || !user) {
+        setTargetPath('/login')
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, role, is_school_admin')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (isMounted) {
+        setTargetPath(getDashboardPath(profile))
+      }
+    }
+
+    loadTargetPath()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  if (!targetPath) {
+    return <div className="p-6 text-slate-600">Loading...</div>
+  }
+
+  return <Navigate to={targetPath} replace />
 }
 
 function App() {
@@ -112,7 +156,7 @@ function App() {
         <Route path="/manage-subject-students" element={<ManageSubjectStudentsPage />} />
         <Route path="/targets" element={<TargetsPage />} />
         <Route path="/academic-targets" element={<TargetsPage />} />
-        <Route path="/pbs" element={<PbsHubPage />} />
+        <Route path="/pbs" element={<LegacyPbsRedirect />} />
         <Route path="/pbs/pbd" element={<PbdInputPage />} />
         <Route path="/pbs/pbd/input" element={<PbdInputPage />} />
         <Route path="/input-pbd" element={<PbdInputPage />} />
@@ -128,6 +172,7 @@ function App() {
         <Route path="/pbs/ppsi" element={<PpsiPage />} />
         <Route path="/analysis" element={<AnalysisHubPage />} />
         <Route path="/analysis/class" element={<AnalysisPage />} />
+        <Route path="/analysis/subject" element={<AnalysisPage />} />
         <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />
         <Route path="/analysis/student-subject" element={<StudentSubjectTrendPage />} />
         <Route path="/analysis/pajsk-segak" element={<PajskSegakAnalysisPage />} />

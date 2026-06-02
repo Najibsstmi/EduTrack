@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
@@ -128,6 +128,7 @@ const normalizeMetric = (metric, tingkatan, gradeScales) => {
 
 export default function AnalysisPage() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
@@ -146,6 +147,8 @@ export default function AnalysisPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
 
   const dashboardPath = getDashboardPath(profile)
+  const isSubjectPerformancePage = location.pathname === '/analysis/subject'
+  const pageTitle = isSubjectPerformancePage ? 'Prestasi Subjek (GPMP)' : 'Prestasi Kelas'
 
   useEffect(() => {
     loadInitialData()
@@ -621,7 +624,7 @@ export default function AnalysisPage() {
   }, [analysisColumns, mergedRows, gradeColumns, gradeScales])
 
   if (loading) {
-    return <div className="p-6">Loading Analysis...</div>
+    return <div className="p-6">Loading {pageTitle}...</div>
   }
 
   return (
@@ -633,7 +636,7 @@ export default function AnalysisPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 EduTrack
               </p>
-              <h1 className="text-3xl font-bold text-slate-900">Analisis Akademik</h1>
+              <h1 className="text-3xl font-bold text-slate-900">{pageTitle}</h1>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -641,13 +644,13 @@ export default function AnalysisPage() {
                 onClick={() => navigate('/analysis/student')}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Individu
+                Prestasi Murid
               </button>
               <button
-                onClick={() => navigate('/analysis/student-subject')}
+                onClick={() => navigate(isSubjectPerformancePage ? '/analysis/class' : '/analysis/subject')}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                Analisis Trend
+                {isSubjectPerformancePage ? 'Prestasi Kelas' : 'Prestasi Subjek (GPMP)'}
               </button>
               <button
                 onClick={() => navigate(dashboardPath)}
@@ -661,7 +664,7 @@ export default function AnalysisPage() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
-          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Filter Analisis</h2>
+          <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Penapis Prestasi</h2>
 
           <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-3">
             <select

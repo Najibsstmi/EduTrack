@@ -14,7 +14,7 @@ function ChevronLeftIcon() {
 const EXAM_ANALYSIS_LINKS = [
   { label: 'Prestasi Murid', path: '/analysis/student' },
   { label: 'Prestasi Kelas', path: '/analysis/class' },
-  { label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
+  { label: 'Prestasi Subjek (GPMP)', path: '/analysis/subject' },
   { label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
 ]
 

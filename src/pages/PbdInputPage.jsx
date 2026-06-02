@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import PbdTabs from '../components/PbdTabs.jsx'
 import { supabase } from '../lib/supabaseClient'
+import { getDashboardPath } from '../lib/dashboardPath.js'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix.js'
 import {
   fetchSchoolLevelLabels,
@@ -80,6 +81,7 @@ export default function PbdInputPage() {
     [pbdWindows]
   )
   const canEditPbd = !!activeWindow
+  const dashboardPath = getDashboardPath(profile)
 
   const initPage = useCallback(async () => {
     setLoading(true)
@@ -767,22 +769,13 @@ export default function PbdInputPage() {
       <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
           title="Input PBD"
-          actionLeft={
-            <button
-              type="button"
-              onClick={() => navigate('/pbs')}
-              className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              PBS
-            </button>
-          }
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/analisis-pbd')}
+              onClick={() => navigate(dashboardPath)}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              Analisis PBD
+              Kembali ke Dashboard
             </button>
           }
         />
