@@ -1124,8 +1124,6 @@ export default function SchoolAdminDashboard() {
   ]
 
   const analysisItems = [
-    { key: 'headcount', label: 'Headcount', disabled: true, note: 'Akan datang' },
-    { key: 'targets', label: 'Sasaran Akademik', path: '/academic-targets' },
     { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
     { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
     { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
@@ -1134,14 +1132,9 @@ export default function SchoolAdminDashboard() {
 
   const settingsItems = [
     {
-      key: 'users',
-      label: 'Pengguna',
-      action: scrollToUserManagement,
-    },
-    {
-      key: 'academic-structure',
-      label: 'Struktur Sekolah',
-      path: '/school-setup',
+      key: 'targets',
+      label: 'Sasaran Akademik',
+      path: '/academic-targets',
     },
     {
       key: 'exam-settings',
@@ -1152,6 +1145,16 @@ export default function SchoolAdminDashboard() {
       key: 'grade-settings',
       label: 'Skala Gred',
       path: '/grade-settings',
+    },
+    {
+      key: 'academic-structure',
+      label: 'Struktur Sekolah',
+      path: '/school-setup',
+    },
+    {
+      key: 'users',
+      label: 'Pengguna',
+      action: scrollToUserManagement,
     },
     {
       key: 'school-profile',
