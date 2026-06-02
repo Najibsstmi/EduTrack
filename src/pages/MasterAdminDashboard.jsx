@@ -519,6 +519,14 @@ export default function MasterAdminDashboard() {
 
             <button
               type="button"
+              onClick={() => navigate('/profile')}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Profil Saya
+            </button>
+
+            <button
+              type="button"
               onClick={handleLogout}
               className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >

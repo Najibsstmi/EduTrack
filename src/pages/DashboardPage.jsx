@@ -250,9 +250,14 @@ function DashboardPage() {
           </div>
         </div>
 
-        <button onClick={handleLogout} style={styles.logoutButton}>
-          Logout
-        </button>
+        <div style={styles.headerActions}>
+          <button onClick={() => navigate('/profile')} style={styles.profileButton}>
+            Profil Saya
+          </button>
+          <button onClick={handleLogout} style={styles.logoutButton}>
+            Logout
+          </button>
+        </div>
       </div>
 
       <div style={styles.container}>
@@ -428,6 +433,21 @@ const styles = {
     margin: '0 auto 20px auto',
   },
   brandRow: { display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  profileButton: {
+    border: '1px solid #cbd5e1',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '10px 16px',
+    borderRadius: '12px',
+    cursor: 'pointer',
+    fontWeight: 700,
+  },
   logo: {
     width: '52px',
     height: '52px',

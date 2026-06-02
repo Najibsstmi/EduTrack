@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 function SignupPage() {
   const [fullName, setFullName] = useState('')
   const [designation, setDesignation] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [schoolType, setSchoolType] = useState('')
@@ -137,6 +138,7 @@ function SignupPage() {
     try {
       const trimmedFullName = fullName.trim()
       const trimmedDesignation = designation.trim()
+      const trimmedPhone = phone.trim()
       const normalizedEmail = String(email || '').trim().toLowerCase()
 
       if (!trimmedFullName || !trimmedDesignation || !normalizedEmail || !password || !selectedSchoolId) {
@@ -193,6 +195,7 @@ function SignupPage() {
           .update({
             full_name: trimmedFullName,
             designation: trimmedDesignation,
+            phone: trimmedPhone || null,
             email: normalizedEmail,
             school_id: selectedSchoolId,
             role: 'user',
@@ -211,6 +214,7 @@ function SignupPage() {
             id: user.id,
             full_name: trimmedFullName,
             designation: trimmedDesignation,
+            phone: trimmedPhone || null,
             email: normalizedEmail,
             school_id: selectedSchoolId,
             role: 'user',
@@ -304,6 +308,19 @@ function SignupPage() {
               className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
               placeholder="Contoh: Guru, Ketua Panitia, GKMP"
               required
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              No. Telefon / WhatsApp <span className="font-normal text-slate-400">(digalakkan)</span>
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
+              placeholder="Contoh: 0123456789"
             />
           </div>
 

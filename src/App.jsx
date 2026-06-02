@@ -32,6 +32,7 @@ import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
 import PpsiPage from './pages/PpsiPage.jsx'
 import PsychometricAnalysisPage from './pages/PsychometricAnalysisPage.jsx'
 import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
+import UserProfilePage from './pages/UserProfilePage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
@@ -180,6 +181,8 @@ function App() {
         <Route path="/analysis/pbs" element={<PbsAnalysisPage />} />
         <Route path="/pending" element={<PendingApprovalPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
+        <Route path="/profile" element={<UserProfilePage />} />
+        <Route path="/profil-saya" element={<UserProfilePage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>

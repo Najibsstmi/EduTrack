@@ -1235,6 +1235,11 @@ export default function SchoolAdminDashboard() {
 
   const settingsItems = [
     {
+      key: 'my-profile',
+      label: 'Profil Saya',
+      path: '/profile',
+    },
+    {
       key: 'targets',
       label: 'Sasaran Akademik',
       path: '/academic-targets',
