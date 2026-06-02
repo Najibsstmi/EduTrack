@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { Menu, X } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
@@ -69,6 +70,7 @@ export default function SchoolAdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [hoveredNav, setHoveredNav] = useState('')
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showMobileSettings, setShowMobileSettings] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
@@ -140,6 +142,7 @@ export default function SchoolAdminDashboard() {
       setIsMobileView(nextIsMobile)
       if (!nextIsMobile) {
         setShowMobileSettings(false)
+        setShowMobileMenu(false)
       }
     }
 
@@ -991,6 +994,7 @@ export default function SchoolAdminDashboard() {
 
   const handleMobileNavigate = (path) => {
     setShowMobileSettings(false)
+    setShowMobileMenu(false)
     navigate(path)
   }
 
@@ -1004,10 +1008,12 @@ export default function SchoolAdminDashboard() {
     return location.pathname === path || location.pathname.startsWith(`${path}/`)
   }
 
-  const getMobileNavButtonStyle = (path) => {
-    return isMobileNavActive(path)
-      ? { ...styles.mobilePrimaryButton, ...styles.mobilePrimaryButtonActive }
-      : styles.mobilePrimaryButton
+  const getMobileNavButtonStyle = (path, disabled = false) => {
+    return {
+      ...styles.mobileMenuItem,
+      ...(isMobileNavActive(path) ? styles.mobileMenuItemActive : {}),
+      ...(disabled ? styles.mobileMenuItemDisabled : {}),
+    }
   }
 
   const getNavButtonStyle = (pathKey) => {
@@ -1070,6 +1076,7 @@ export default function SchoolAdminDashboard() {
   const navigateFromSettings = (path) => {
     setShowSettingsMenu(false)
     setShowMobileSettings(false)
+    setShowMobileMenu(false)
     navigate(path)
   }
 
@@ -1113,6 +1120,22 @@ export default function SchoolAdminDashboard() {
           },
         ]
       : []),
+  ]
+
+  const mobileNavItems = [
+    { key: 'dashboard', label: 'Utama', path: '/dashboard' },
+    { key: 'scores', label: 'Input Markah', path: '/scores' },
+    { key: 'input-pbd', label: 'Input PBD', path: '/input-pbd' },
+    {
+      key: 'students',
+      label: 'Urus Murid',
+      path: '/students',
+      disabled: !isSchoolAdmin,
+      title: !isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined,
+    },
+    { key: 'analysis', label: 'Analisis', path: '/analysis' },
+    { key: 'pbs', label: 'PBS', path: '/pbs' },
+    { key: 'academic-targets', label: 'Sasaran Akademik', path: '/academic-targets' },
   ]
 
   const groupedCompletionRows = useMemo(() => {
@@ -1207,217 +1230,261 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.topBar}>
-        <div style={styles.brandWrap}>
-          <img
-            src="/edutrack-logo.png"
-            alt="EduTrack"
-            style={styles.brandLogo}
-          />
-          <div style={styles.brandTextWrap}>
-            <div style={styles.brandTitle}>EduTrack</div>
-            <div style={styles.brandSub}>
-              {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
-            </div>
-          </div>
-        </div>
-
+      <header style={{ ...styles.topBar, ...(isMobileView ? styles.mobileTopBar : {}) }}>
         {isMobileView ? (
-          <div style={styles.mobileTopNavWrap} ref={settingsMenuRef}>
-            <div style={styles.mobileTopNavRow}>
+          <>
+            <button
+              type="button"
+              aria-label="Buka menu utama"
+              aria-expanded={showMobileMenu}
+              onClick={() => setShowMobileMenu(true)}
+              style={styles.mobileMenuButton}
+            >
+              <Menu size={24} strokeWidth={2.4} />
+            </button>
+
+            <div style={styles.mobileBrandWrap}>
+              <img
+                src="/edutrack-logo.png"
+                alt="EduTrack"
+                style={styles.mobileBrandLogo}
+              />
+              <div style={styles.mobileBrandTextWrap}>
+                <div style={styles.mobileBrandTitle}>EduTrack</div>
+                <div style={styles.mobileBrandSub}>
+                  {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.mobileHeaderSpacer} aria-hidden="true" />
+
+            {showMobileMenu && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Tutup menu utama"
+                  onClick={() => {
+                    setShowMobileMenu(false)
+                    setShowMobileSettings(false)
+                  }}
+                  style={styles.mobileDrawerBackdrop}
+                />
+
+                <nav
+                  ref={settingsMenuRef}
+                  aria-label="Menu utama"
+                  style={styles.mobileDrawer}
+                >
+                  <button
+                    type="button"
+                    aria-label="Tutup menu utama"
+                    onClick={() => {
+                      setShowMobileMenu(false)
+                      setShowMobileSettings(false)
+                    }}
+                    style={styles.mobileDrawerCloseButton}
+                  >
+                    <X size={25} strokeWidth={2.2} />
+                  </button>
+
+                  <div style={styles.mobileDrawerBrand}>
+                    <img
+                      src="/edutrack-logo.png"
+                      alt="EduTrack"
+                      style={styles.mobileDrawerLogo}
+                    />
+                    <div>
+                      <div style={styles.mobileDrawerTitle}>EduTrack</div>
+                      <div style={styles.mobileDrawerSub}>
+                        {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={styles.mobileDrawerMenu}>
+                    {mobileNavItems.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => {
+                          if (!item.disabled) handleMobileNavigate(item.path)
+                        }}
+                        disabled={item.disabled}
+                        title={item.title}
+                        style={getMobileNavButtonStyle(item.path, item.disabled)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+
+                    {isSchoolAdmin && (
+                      <div style={styles.mobileMenuGroup}>
+                        <button
+                          type="button"
+                          onClick={() => setShowMobileSettings((prev) => !prev)}
+                          style={{
+                            ...styles.mobileMenuItem,
+                            ...(showMobileSettings ? styles.mobileMenuItemActive : {}),
+                          }}
+                        >
+                          <span>Tetapan</span>
+                          <span aria-hidden="true">{showMobileSettings ? '▴' : '▾'}</span>
+                        </button>
+
+                        {showMobileSettings && (
+                          <div style={styles.mobileSettingsPanel}>
+                            {settingsItems.map((item) => (
+                              <button
+                                key={item.key}
+                                type="button"
+                                onClick={item.onClick}
+                                style={styles.mobileSettingsItem}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setShowMobileMenu(false)
+                      setShowMobileSettings(false)
+                      await handleLogout()
+                    }}
+                    style={styles.mobileLogoutButton}
+                  >
+                    Logout
+                  </button>
+                </nav>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={styles.brandWrap}>
+              <img
+                src="/edutrack-logo.png"
+                alt="EduTrack"
+                style={styles.brandLogo}
+              />
+              <div style={styles.brandTextWrap}>
+                <div style={styles.brandTitle}>EduTrack</div>
+                <div style={styles.brandSub}>
+                  {schoolInfo?.school_name || 'Sistem Pemantauan Akademik Sekolah'}
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.topActions}>
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/scores')}
-                style={getMobileNavButtonStyle('/scores')}
+                onClick={() => navigate('/scores')}
+                onMouseEnter={() => setHoveredNav('/scores')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={getNavButtonStyle('/scores')}
               >
                 Input Markah
               </button>
 
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/input-pbd')}
-                style={getMobileNavButtonStyle('/input-pbd')}
+                onClick={() => navigate('/input-pbd')}
+                onMouseEnter={() => setHoveredNav('/input-pbd')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={getNavButtonStyle('/input-pbd')}
               >
                 Input PBD
               </button>
 
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/students')}
-                style={getMobileNavButtonStyle('/students')}
+                onClick={() => navigate('/students')}
+                onMouseEnter={() => setHoveredNav('/students')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={{
+                  ...getNavButtonStyle('/students'),
+                  ...(!isSchoolAdmin ? styles.disabledTopButton : {}),
+                }}
                 disabled={!isSchoolAdmin}
                 title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
               >
                 Urus Murid
               </button>
 
+              {isSchoolAdmin && (
+                <div style={{ position: 'relative' }} ref={settingsMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowSettingsMenu((prev) => !prev)}
+                    onMouseEnter={() => setHoveredNav('/settings')}
+                    onMouseLeave={() => setHoveredNav('')}
+                    style={getNavButtonStyle('/settings')}
+                  >
+                    Tetapan
+                  </button>
+
+                  {showSettingsMenu && (
+                    <div style={styles.settingsDropdown}>
+                      {settingsItems.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={item.onClick}
+                          style={styles.dropdownItem}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/analysis')}
-                style={getMobileNavButtonStyle('/analysis')}
+                onClick={() => navigate('/academic-targets')}
+                onMouseEnter={() => setHoveredNav('/academic-targets')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={getNavButtonStyle('/academic-targets')}
+              >
+                Sasaran Akademik
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/analysis')}
+                onMouseEnter={() => setHoveredNav('/analysis')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={getNavButtonStyle('/analysis')}
               >
                 Analisis
               </button>
 
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/pbs')}
-                style={getMobileNavButtonStyle('/pbs')}
+                onClick={() => navigate('/pbs')}
+                onMouseEnter={() => setHoveredNav('/pbs')}
+                onMouseLeave={() => setHoveredNav('')}
+                style={getNavButtonStyle('/pbs')}
               >
                 PBS
               </button>
 
               <button
                 type="button"
-                onClick={() => handleMobileNavigate('/academic-targets')}
-                style={getMobileNavButtonStyle('/academic-targets')}
+                onClick={handleLogout}
+                style={styles.logoutButton}
               >
-                Sasaran Akademik
+                Logout
               </button>
-
-              {isSchoolAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setShowMobileSettings((prev) => !prev)}
-                  style={{
-                    ...styles.mobilePrimaryButton,
-                    ...(showMobileSettings ? styles.mobilePrimaryButtonActive : {}),
-                  }}
-                >
-                  Tetapan {showMobileSettings ? '▴' : '▾'}
-                </button>
-              )}
-
-              <div style={styles.mobileLogoutWrap}>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  style={styles.mobileLogoutButton}
-                >
-                  Logout
-                </button>
-              </div>
             </div>
-
-            {showMobileSettings && isSchoolAdmin && (
-              <div style={styles.mobileSettingsDropdown}>
-                {settingsItems.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={item.onClick}
-                    style={styles.mobileSettingsItem}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div style={styles.topActions}>
-            <button
-              type="button"
-              onClick={() => navigate('/scores')}
-              onMouseEnter={() => setHoveredNav('/scores')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/scores')}
-            >
-              Input Markah
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/input-pbd')}
-              onMouseEnter={() => setHoveredNav('/input-pbd')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/input-pbd')}
-            >
-              Input PBD
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/students')}
-              onMouseEnter={() => setHoveredNav('/students')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={{
-                ...getNavButtonStyle('/students'),
-                ...(!isSchoolAdmin ? styles.disabledTopButton : {}),
-              }}
-              disabled={!isSchoolAdmin}
-              title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
-            >
-              Urus Murid
-            </button>
-
-            {isSchoolAdmin && (
-              <div style={{ position: 'relative' }} ref={settingsMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowSettingsMenu((prev) => !prev)}
-                  onMouseEnter={() => setHoveredNav('/settings')}
-                  onMouseLeave={() => setHoveredNav('')}
-                  style={getNavButtonStyle('/settings')}
-                >
-                  Tetapan
-                </button>
-
-                {showSettingsMenu && (
-                  <div style={styles.settingsDropdown}>
-                    {settingsItems.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={item.onClick}
-                        style={styles.dropdownItem}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => navigate('/academic-targets')}
-              onMouseEnter={() => setHoveredNav('/academic-targets')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/academic-targets')}
-            >
-              Sasaran Akademik
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/analysis')}
-              onMouseEnter={() => setHoveredNav('/analysis')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/analysis')}
-            >
-              Analisis
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/pbs')}
-              onMouseEnter={() => setHoveredNav('/pbs')}
-              onMouseLeave={() => setHoveredNav('')}
-              style={getNavButtonStyle('/pbs')}
-            >
-              PBS
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={styles.logoutButton}
-            >
-              Logout
-            </button>
-          </div>
+          </>
         )}
       </header>
 
@@ -2180,6 +2247,14 @@ const styles = {
     boxShadow: '0 10px 24px rgba(2, 8, 23, 0.22)',
     flexWrap: 'wrap',
   },
+  mobileTopBar: {
+    display: 'grid',
+    gridTemplateColumns: '44px minmax(0, 1fr) 44px',
+    minHeight: '72px',
+    padding: '10px 14px',
+    gap: '8px',
+    flexWrap: 'nowrap',
+  },
   brandWrap: { display: 'flex', alignItems: 'center', gap: '12px' },
   brandLogo: { width: '42px', height: '42px', objectFit: 'contain', borderRadius: '10px', background: 'transparent', flexShrink: 0 },
   brandTextWrap: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 },
@@ -2246,40 +2321,164 @@ const styles = {
     fontWeight: 600,
     color: '#0f172a',
   },
-  mobileTopNavWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    marginTop: '12px',
-  },
-  mobileTopNavRow: {
+  mobileMenuButton: {
+    width: '44px',
+    height: '44px',
+    border: 'none',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: '#ffffff',
     display: 'grid',
-    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: '10px',
-  },
-  mobileLogoutWrap: {
-    gridColumn: '1 / -1',
-  },
-  mobilePrimaryButton: {
-    minHeight: '46px',
-    borderRadius: 12,
-    border: '1px solid #cbd5e1',
-    background: '#fff',
-    color: '#0f172a',
-    fontSize: '14px',
-    fontWeight: 700,
-    padding: '12px 14px',
+    placeItems: 'center',
     cursor: 'pointer',
   },
-  mobilePrimaryButtonActive: {
-    background: '#0f172a',
+  mobileHeaderSpacer: {
+    width: '44px',
+    height: '44px',
+  },
+  mobileBrandWrap: {
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  },
+  mobileBrandLogo: {
+    width: '34px',
+    height: '34px',
+    objectFit: 'contain',
+    borderRadius: '8px',
+    flexShrink: 0,
+  },
+  mobileBrandTextWrap: {
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  mobileBrandTitle: {
+    fontSize: '15px',
+    lineHeight: 1.05,
+    fontWeight: 800,
     color: '#ffffff',
-    border: '1px solid #0f172a',
+    margin: 0,
+  },
+  mobileBrandSub: {
+    width: '100%',
+    maxWidth: '180px',
+    marginTop: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: '10px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.76)',
+  },
+  mobileDrawerBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 38,
+    border: 'none',
+    background: 'rgba(15, 23, 42, 0.42)',
+    padding: 0,
+    cursor: 'pointer',
+  },
+  mobileDrawer: {
+    position: 'fixed',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 45,
+    width: 'min(86vw, 322px)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+    padding: '18px 24px 24px',
+    background: '#0f3b63',
+    color: '#ffffff',
+    boxShadow: '18px 0 40px rgba(2, 8, 23, 0.32)',
+  },
+  mobileDrawerCloseButton: {
+    width: '38px',
+    height: '38px',
+    marginLeft: '-10px',
+    border: 'none',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: '#ffffff',
+    display: 'grid',
+    placeItems: 'center',
+    cursor: 'pointer',
+  },
+  mobileDrawerBrand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    minWidth: 0,
+  },
+  mobileDrawerLogo: {
+    width: '38px',
+    height: '38px',
+    objectFit: 'contain',
+    flexShrink: 0,
+  },
+  mobileDrawerTitle: {
+    fontSize: '17px',
+    lineHeight: 1.1,
+    fontWeight: 800,
+    color: '#ffffff',
+  },
+  mobileDrawerSub: {
+    maxWidth: '210px',
+    marginTop: '2px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: '10px',
+    fontWeight: 700,
+    color: 'rgba(255,255,255,0.72)',
+  },
+  mobileDrawerMenu: {
+    display: 'grid',
+    gap: 0,
+    marginTop: '8px',
+  },
+  mobileMenuGroup: {
+    display: 'grid',
+    gap: 0,
+  },
+  mobileMenuItem: {
+    width: '100%',
+    minHeight: '43px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    border: 'none',
+    borderBottom: '1px solid rgba(163, 230, 53, 0.7)',
+    borderRadius: 0,
+    background: 'transparent',
+    color: '#ffffff',
+    padding: '12px 8px',
+    textAlign: 'left',
+    textTransform: 'uppercase',
+    fontSize: '13px',
+    fontWeight: 800,
+    letterSpacing: '0.01em',
+    cursor: 'pointer',
+  },
+  mobileMenuItemActive: {
+    background: 'rgba(255, 255, 255, 0.08)',
+    color: '#d9f99d',
+  },
+  mobileMenuItemDisabled: {
+    opacity: 0.48,
+    cursor: 'not-allowed',
   },
   mobileLogoutButton: {
     width: '100%',
+    marginTop: 'auto',
     minHeight: '46px',
-    borderRadius: '12px',
+    borderRadius: '8px',
     border: '1px solid #fecaca',
     background: '#fff1f2',
     color: '#b91c1c',
@@ -2288,24 +2487,21 @@ const styles = {
     padding: '12px 14px',
     cursor: 'pointer',
   },
-  mobileSettingsDropdown: {
+  mobileSettingsPanel: {
     display: 'grid',
-    gridTemplateColumns: '1fr',
-    gap: '8px',
-    padding: '10px',
-    borderRadius: '14px',
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
+    gap: 0,
+    marginLeft: '14px',
+    padding: '2px 0 8px',
   },
   mobileSettingsItem: {
-    minHeight: '44px',
-    borderRadius: '10px',
-    border: '1px solid #cbd5e1',
-    background: '#ffffff',
-    color: '#0f172a',
-    fontSize: '14px',
-    fontWeight: 600,
-    padding: '10px 12px',
+    minHeight: '38px',
+    border: 'none',
+    borderBottom: '1px solid rgba(226, 232, 240, 0.22)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: '12px',
+    fontWeight: 700,
+    padding: '9px 8px',
     textAlign: 'left',
     cursor: 'pointer',
   },
