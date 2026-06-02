@@ -1128,6 +1128,7 @@ export default function SchoolAdminDashboard() {
     { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
     { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
     { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
+    { key: 'pbs-integrated', label: 'PBS Bersepadu', path: '/analysis/pbs' },
   ]
 
   const settingsItems = [
