@@ -15,6 +15,19 @@ import {
   calculatePbdMinimumAchievement,
   TP_LEVELS,
 } from '../lib/pbdAnalysis.js'
+import {
+  buildEnrollmentLookup,
+  buildSubjectHeader,
+  buildSubjectLookup,
+  downloadCsv,
+  findEnrollmentFromLookup,
+  generatePbdTemplateRows,
+  normalizeCsvHeader,
+  normalizeSubjectMatchKey,
+  normalizeTpValue,
+  parseCsvText,
+} from '../lib/pbdBulkImport.js'
+import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
 const PBD_PERIODS = [
@@ -52,6 +65,10 @@ export default function PbdInputPage() {
   const [pbdWindows, setPbdWindows] = useState([])
   const [currentDrafts, setCurrentDrafts] = useState({})
   const [bulkTp, setBulkTp] = useState('')
+  const [bulkImportFile, setBulkImportFile] = useState(null)
+  const [bulkImporting, setBulkImporting] = useState(false)
+  const [bulkImportSummary, setBulkImportSummary] = useState(null)
+  const [templateDownloading, setTemplateDownloading] = useState('')
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
@@ -198,7 +215,7 @@ export default function PbdInputPage() {
 
       setLevelMappings(loadedLevelMappings || [])
       setClasses(classData || [])
-      setSubjects(subjectData || [])
+      setSubjects(normalizeSubjectRows(subjectData))
       setEnrollments(enrollmentData || [])
       setStudentSubjectEnrollments(studentSubjectData || [])
     } catch (error) {
@@ -248,6 +265,18 @@ export default function PbdInputPage() {
 
     return Array.from(uniqueSubjects.values())
   }, [subjects, selectedTingkatan])
+
+  const tingkatanClasses = useMemo(
+    () => classes.filter((item) => item.tingkatan === selectedTingkatan),
+    [classes, selectedTingkatan]
+  )
+
+  const tingkatanSubjects = useMemo(() => availableSubjects, [availableSubjects])
+
+  const tingkatanEnrollments = useMemo(() => {
+    const classIdSet = new Set(tingkatanClasses.map((item) => String(item.id)))
+    return enrollments.filter((enrollment) => classIdSet.has(String(enrollment.class_id)))
+  }, [enrollments, tingkatanClasses])
 
   const selectedSubject = useMemo(
     () => subjects.find((subject) => String(subject.id) === String(selectedSubjectId)) || null,
@@ -493,6 +522,242 @@ export default function PbdInputPage() {
     }
   }
 
+  const ensureBulkTemplateReady = () => {
+    if (!profile?.school_id || !academicYear) {
+      alert('Tahun akademik belum tersedia.')
+      return false
+    }
+
+    if (!selectedTingkatan) {
+      alert('Sila pilih tingkatan dahulu.')
+      return false
+    }
+
+    if (tingkatanSubjects.length === 0) {
+      alert('Tiada subjek aktif untuk tingkatan ini.')
+      return false
+    }
+
+    return true
+  }
+
+  const handleDownloadTemplate = async ({ withCurrentData = false }) => {
+    if (!ensureBulkTemplateReady()) return
+
+    const mode = withCurrentData ? 'data-semasa' : 'kosong'
+    setTemplateDownloading(mode)
+    setErrorMessage('')
+
+    try {
+      let currentPbdRows = []
+
+      if (withCurrentData && tingkatanEnrollments.length > 0 && tingkatanSubjects.length > 0) {
+        const { data, error } = await supabase
+          .from('student_pbd_current')
+          .select('student_enrollment_id, subject_id, tp')
+          .eq('school_id', profile.school_id)
+          .eq('academic_year', academicYear)
+          .in('student_enrollment_id', tingkatanEnrollments.map((enrollment) => enrollment.id))
+          .in('subject_id', tingkatanSubjects.map((subject) => subject.id))
+
+        if (error) throw error
+        currentPbdRows = data || []
+      }
+
+      const rows = generatePbdTemplateRows({
+        enrollments: tingkatanEnrollments,
+        classes: tingkatanClasses,
+        subjects: tingkatanSubjects,
+        currentPbdRows,
+        selectedTingkatan,
+      })
+      const safeTingkatan = String(selectedTingkatan).replace(/\s+/g, '-').toLocaleLowerCase('ms-MY')
+      downloadCsv(`template-pbd-${safeTingkatan}-${academicYear}-${mode}.csv`, rows)
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error.message || 'Gagal menjana template PBD.')
+    } finally {
+      setTemplateDownloading('')
+    }
+  }
+
+  const handleImportPbdCsv = async () => {
+    if (!canEditPbd) {
+      alert('PBD belum dibuka oleh admin sekolah.')
+      return
+    }
+
+    if (!ensureBulkTemplateReady()) return
+
+    if (!bulkImportFile) {
+      alert('Sila pilih fail CSV PBD dahulu.')
+      return
+    }
+
+    setBulkImporting(true)
+    setBulkImportSummary(null)
+    setErrorMessage('')
+
+    try {
+      const csvText = await bulkImportFile.text()
+      const csvRows = parseCsvText(csvText)
+
+      if (csvRows.length < 2) {
+        throw new Error('CSV tidak mempunyai data murid untuk diimport.')
+      }
+
+      const headerRow = csvRows[0]
+      const normalizedHeaders = headerRow.map((header) => normalizeCsvHeader(header))
+      const requiredHeaders = ['no_ic', 'nama_murid', 'kelas', 'tingkatan']
+      const requiredIndexes = requiredHeaders.reduce((acc, key) => {
+        acc[key] = normalizedHeaders.findIndex((header) => header === key)
+        return acc
+      }, {})
+      const missingHeaders = requiredHeaders.filter((key) => requiredIndexes[key] < 0)
+
+      if (missingHeaders.length > 0) {
+        throw new Error(
+          `Header wajib tiada: ${missingHeaders
+            .map((key) => key.replace('_', ' ').toLocaleUpperCase('ms-MY'))
+            .join(', ')}`
+        )
+      }
+
+      const subjectLookup = buildSubjectLookup(tingkatanSubjects)
+      const enrollmentLookup = buildEnrollmentLookup(tingkatanEnrollments, tingkatanClasses)
+      const selectiveEnrollmentBySubjectId = new Map()
+
+      tingkatanSubjects.forEach((subject) => {
+        if (String(subject.subject_type || '').trim().toLowerCase() !== 'selective') return
+
+        const enrollmentIds = new Set(
+          studentSubjectEnrollments
+            .filter(
+              (row) =>
+                String(row.subject_id) === String(subject.id) &&
+                row.is_active !== false
+            )
+            .map((row) => String(row.student_enrollment_id))
+        )
+        selectiveEnrollmentBySubjectId.set(String(subject.id), enrollmentIds)
+      })
+
+      const subjectColumns = headerRow
+        .map((header, index) => ({
+          index,
+          originalHeader: String(header || '').replace(/^\uFEFF/, '').trim(),
+          normalizedHeader: normalizedHeaders[index],
+        }))
+        .filter((column) => !requiredHeaders.includes(column.normalizedHeader))
+        .filter((column) => column.originalHeader)
+
+      const errors = []
+      const upsertMap = new Map()
+      let skippedEmptyCount = 0
+
+      csvRows.slice(1).forEach((row, rowIndex) => {
+        const rowNumber = rowIndex + 2
+        const icNumber = row[requiredIndexes.no_ic] || ''
+        const studentName = row[requiredIndexes.nama_murid] || ''
+        const className = row[requiredIndexes.kelas] || ''
+        const tingkatan = row[requiredIndexes.tingkatan] || ''
+        const matched = findEnrollmentFromLookup({
+          lookup: enrollmentLookup,
+          icNumber,
+          className,
+          tingkatan,
+        })
+
+        if (!matched) {
+          errors.push(
+            `Baris ${rowNumber}: Murid ${studentName || '-'} tidak ditemui untuk ${className || '-'} / ${tingkatan || '-'}.`
+          )
+          return
+        }
+
+        subjectColumns.forEach((column) => {
+          const rawValue = row[column.index] || ''
+          const trimmedValue = String(rawValue).trim()
+
+          if (!trimmedValue) {
+            skippedEmptyCount += 1
+            return
+          }
+
+          const subject = subjectLookup.get(normalizeSubjectMatchKey(column.originalHeader))
+
+          if (!subject) {
+            errors.push(
+              `Baris ${rowNumber}: Subjek ${column.originalHeader} tidak ditemui untuk ${selectedTingkatan}.`
+            )
+            return
+          }
+
+          const tp = normalizeTpValue(trimmedValue)
+
+          if (!tp) {
+            errors.push(
+              `Baris ${rowNumber}: TP untuk ${studentName || matched.enrollment.student_profiles?.full_name || '-'} - ${buildSubjectHeader(subject)} mesti antara TP1 hingga TP6.`
+            )
+            return
+          }
+
+          const selectiveEnrollmentIds = selectiveEnrollmentBySubjectId.get(String(subject.id))
+          if (selectiveEnrollmentIds && !selectiveEnrollmentIds.has(String(matched.enrollment.id))) {
+            errors.push(
+              `Baris ${rowNumber}: Murid ${studentName || matched.enrollment.student_profiles?.full_name || '-'} tidak didaftarkan untuk subjek ${buildSubjectHeader(subject)}.`
+            )
+            return
+          }
+
+          const key = `${matched.enrollment.id}__${subject.id}`
+          upsertMap.set(key, {
+            school_id: profile.school_id,
+            academic_year: Number(academicYear),
+            student_enrollment_id: matched.enrollment.id,
+            student_profile_id: matched.enrollment.student_profile_id,
+            class_id: matched.classRow.id,
+            subject_id: subject.id,
+            tp,
+            updated_by: profile.id,
+          })
+        })
+      })
+
+      const rowsToUpsert = Array.from(upsertMap.values())
+
+      for (let index = 0; index < rowsToUpsert.length; index += 500) {
+        const chunk = rowsToUpsert.slice(index, index + 500)
+        const { error } = await supabase
+          .from('student_pbd_current')
+          .upsert(chunk, {
+            onConflict: 'student_enrollment_id,subject_id,academic_year',
+          })
+
+        if (error) throw error
+      }
+
+      await loadCurrentPbd()
+
+      setBulkImportSummary({
+        successCount: rowsToUpsert.length,
+        skippedEmptyCount,
+        errorCount: errors.length,
+        messages: errors.slice(0, 50),
+      })
+    } catch (error) {
+      console.error(error)
+      setBulkImportSummary({
+        successCount: 0,
+        skippedEmptyCount: 0,
+        errorCount: 1,
+        messages: [error.message || 'Gagal import CSV PBD.'],
+      })
+    } finally {
+      setBulkImporting(false)
+    }
+  }
+
   if (checkingAuth || loading) {
     return <div className="p-6 text-slate-600">Loading PBD...</div>
   }
@@ -616,7 +881,7 @@ export default function PbdInputPage() {
               <option value="">{selectedTingkatan ? 'Pilih Subjek' : 'Pilih Tingkatan dahulu'}</option>
               {availableSubjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
-                  {subject.subject_name}
+                  {formatSubjectName(subject.subject_name)}
                 </option>
               ))}
             </select>
@@ -637,6 +902,96 @@ export default function PbdInputPage() {
           </div>
         </section>
 
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Import PBD Pukal</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                Template PBD dijana mengikut tingkatan, murid aktif dan subjek aktif yang
+                didaftarkan oleh admin sekolah. Import pukal tidak memadam TP lama untuk sel
+                kosong, row yang tiada, atau column subjek yang tidak dihantar.
+              </p>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              {selectedTingkatan ? getDisplayLevel(selectedTingkatan, levelMappings) : 'Pilih tingkatan dahulu'}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => handleDownloadTemplate({ withCurrentData: false })}
+                disabled={!selectedTingkatan || templateDownloading || tingkatanSubjects.length === 0}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {templateDownloading === 'kosong' ? 'Menjana...' : 'Muat Turun Template Kosong'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDownloadTemplate({ withCurrentData: true })}
+                disabled={!selectedTingkatan || templateDownloading || tingkatanSubjects.length === 0}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {templateDownloading === 'data-semasa'
+                  ? 'Menjana...'
+                  : 'Muat Turun Template Dengan Data Semasa'}
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => setBulkImportFile(event.target.files?.[0] || null)}
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleImportPbdCsv}
+                disabled={bulkImporting || !canEditPbd || !selectedTingkatan || !bulkImportFile}
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {bulkImporting ? 'Mengimport...' : 'Import CSV PBD'}
+              </button>
+            </div>
+          </div>
+
+          {!canEditPbd ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              PBD belum dibuka oleh admin sekolah.
+            </div>
+          ) : null}
+
+          {bulkImportSummary ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Import selesai.</div>
+              <div className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
+                <div>Berjaya: {bulkImportSummary.successCount} TP</div>
+                <div>Diabaikan kosong: {bulkImportSummary.skippedEmptyCount}</div>
+                <div>Ralat: {bulkImportSummary.errorCount}</div>
+              </div>
+              {bulkImportSummary.messages.length > 0 ? (
+                <div className="mt-3 max-h-56 overflow-auto rounded-lg border border-rose-100 bg-white p-3">
+                  <div className="text-xs font-semibold uppercase text-rose-700">
+                    Senarai ralat / amaran
+                  </div>
+                  <ul className="mt-2 space-y-1 text-sm text-rose-700">
+                    {bulkImportSummary.messages.map((message, index) => (
+                      <li key={`${message}-${index}`}>{message}</li>
+                    ))}
+                  </ul>
+                  {bulkImportSummary.errorCount > bulkImportSummary.messages.length ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Hanya 50 item pertama dipaparkan.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
         <section className="grid gap-4 md:grid-cols-4">
           <SummaryCard title="Jumlah Murid" value={studentRows.length} />
           <SummaryCard title="Telah Diisi" value={currentDistribution.assessedCount} />
@@ -651,7 +1006,7 @@ export default function PbdInputPage() {
                 Senarai Murid {selectedClass ? getDisplayClassLabel(selectedClass.tingkatan, selectedClass.class_name, levelMappings) : ''}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                {selectedSubject ? selectedSubject.subject_name : 'Pilih kelas dan subjek untuk mula input PBD.'}
+                {selectedSubject ? formatSubjectName(selectedSubject.subject_name) : 'Pilih kelas dan subjek untuk mula input PBD.'}
               </p>
             </div>
 

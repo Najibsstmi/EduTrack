@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
+import { formatSubjectName } from '../lib/subjectLabels.js'
 
 function DashboardPage() {
   const navigate = useNavigate()
@@ -174,7 +175,7 @@ function DashboardPage() {
     )]
     const subjectNames = [...new Set(
       (subjectsData || [])
-        .map((item) => item.subject_name)
+        .map((item) => formatSubjectName(item.subject_name))
         .filter(Boolean)
     )]
       .sort((a, b) => String(a).localeCompare(String(b), 'ms', { sensitivity: 'base' }))

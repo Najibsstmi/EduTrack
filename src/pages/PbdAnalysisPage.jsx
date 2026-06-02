@@ -18,6 +18,7 @@ import {
   roundPercent,
   TP_LEVELS,
 } from '../lib/pbdAnalysis.js'
+import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
 const DATASET_TABS = [
@@ -280,7 +281,7 @@ export default function PbdAnalysisPage() {
 
       setLevelMappings(loadedLevelMappings || [])
       setClasses(classData || [])
-      setSubjects(subjectData || [])
+      setSubjects(normalizeSubjectRows(subjectData))
       setEnrollments(enrollmentData || [])
       setStudentSubjectEnrollments(studentSubjectData || [])
       setPbdWindows(windowData || [])
@@ -725,7 +726,7 @@ export default function PbdAnalysisPage() {
               <option value="">Pilih Subjek</option>
               {availableSubjects.map((subject) => (
                 <option key={subject.id} value={subject.id}>
-                  {subject.subject_name}
+                  {formatSubjectName(subject.subject_name)}
                 </option>
               ))}
             </select>

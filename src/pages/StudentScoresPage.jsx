@@ -17,6 +17,8 @@ import {
   getDisplayClassLabel,
   getDisplayLevel,
 } from '../lib/levelLabels'
+import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
+import { compareStudentsByGenderThenName } from '../lib/studentSorting.js'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -831,23 +833,7 @@ export default function StudentScoresPage() {
   }, [prefillExamKey])
 
   const sortedStudents = useMemo(() => {
-    const genderRank = (gender) => {
-      if (gender === 'LELAKI') return 1
-      if (gender === 'PEREMPUAN') return 2
-      return 3
-    }
-
-    return [...visibleStudents].sort((a, b) => {
-      const genderA = (a.gender || '').toUpperCase()
-      const genderB = (b.gender || '').toUpperCase()
-
-      const genderCompare = genderRank(genderA) - genderRank(genderB)
-      if (genderCompare !== 0) return genderCompare
-
-      return (a.full_name || '').localeCompare(b.full_name || '', 'ms', {
-        sensitivity: 'base',
-      })
-    })
+    return [...visibleStudents].sort((a, b) => compareStudentsByGenderThenName(a, b))
   }, [visibleStudents])
 
   useEffect(() => {
@@ -1115,7 +1101,7 @@ export default function StudentScoresPage() {
         .eq('is_active', true),
     ])
 
-    setSubjects(subjectData || [])
+    setSubjects(normalizeSubjectRows(subjectData))
     setGradeScales(gradeScaleData || [])
     setAllEnrollments(enrollmentData || [])
     setStudentSubjectEnrollments(studentSubjectEnrollmentData || [])
@@ -1355,7 +1341,8 @@ export default function StudentScoresPage() {
             student_profiles (
               id,
               full_name,
-              ic_number
+              ic_number,
+              gender
             )
           `)
           .eq('school_id', schoolId)
@@ -1397,7 +1384,7 @@ export default function StudentScoresPage() {
         return
       }
 
-      const subjectHeaders = getUniqueSubjectHeaders(subjectRows || [])
+      const subjectHeaders = getUniqueSubjectHeaders(normalizeSubjectRows(subjectRows))
       const headers = [...DYNAMIC_BULK_TEMPLATE_HEADERS, ...subjectHeaders]
       const templateRows = (enrollmentRows || [])
         .map((enrollment) => {
@@ -1409,6 +1396,7 @@ export default function StudentScoresPage() {
           return {
             ic_number: studentProfile.ic_number || '',
             full_name: studentProfile.full_name || '',
+            gender: studentProfile.gender || '',
             class_name: classRow.class_name || '',
             tingkatan: classRow.tingkatan || '',
           }
@@ -1423,18 +1411,14 @@ export default function StudentScoresPage() {
 
           if (gradeCompare !== 0) return gradeCompare
 
-          const classCompare = String(a.class_name || '').localeCompare(
+          const studentCompare = compareStudentsByGenderThenName(a, b)
+
+          if (studentCompare !== 0) return studentCompare
+
+          return String(a.class_name || '').localeCompare(
             String(b.class_name || ''),
             'ms',
             { numeric: true, sensitivity: 'base' }
-          )
-
-          if (classCompare !== 0) return classCompare
-
-          return String(a.full_name || '').localeCompare(
-            String(b.full_name || ''),
-            'ms',
-            { sensitivity: 'base' }
           )
         })
         .map((row) => [
@@ -2787,7 +2771,7 @@ export default function StudentScoresPage() {
               <option value="">Pilih Subjek</option>
               {uniqueSubjects.map((subject) => (
                 <option key={subject.id || subject.subject_name} value={subject.id}>
-                  {subject.subject_name}
+                  {formatSubjectName(subject.subject_name)}
                 </option>
               ))}
             </select>

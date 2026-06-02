@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
+import {
+  formatSubjectName,
+  normalizeSubjectRows,
+  uppercaseSubjectInput,
+} from '../lib/subjectLabels.js'
 
 const DEFAULT_SUBJECTS_BY_GRADE = {
   'Tingkatan 1': [
@@ -152,7 +157,7 @@ export default function SchoolSetupSubjectsPage() {
 
     const existingMap = new Set(
       (existingSubjects || []).map(
-        (s) => `${s.tingkatan}-${s.subject_name}`
+        (s) => `${s.tingkatan}-${formatSubjectName(s.subject_name)}`
       )
     )
 
@@ -162,13 +167,14 @@ export default function SchoolSetupSubjectsPage() {
       const defaults = DEFAULT_SUBJECTS_BY_GRADE[grade] || []
 
       for (const subject of defaults) {
-        const key = `${grade}-${subject.name}`
+        const subjectName = formatSubjectName(subject.name)
+        const key = `${grade}-${subjectName}`
 
         if (existingMap.has(key)) continue
 
         inserts.push({
           school_id: schoolId,
-          subject_name: subject.name,
+          subject_name: subjectName,
           subject_code: null,
           tingkatan: grade,
           is_core: !!subject.is_core,
@@ -205,7 +211,7 @@ export default function SchoolSetupSubjectsPage() {
       return
     }
 
-    setSubjects(data || [])
+    setSubjects(normalizeSubjectRows(data))
   }
 
   const handleAdd = async () => {
@@ -217,12 +223,15 @@ export default function SchoolSetupSubjectsPage() {
 
     setSaving(true)
 
+    const subjectName = formatSubjectName(form.subject_name)
+    const subjectCode = formatSubjectName(form.subject_code)
+
     const { error } = await supabase
       .from('subjects')
       .insert({
         school_id: profile.school_id,
-        subject_name: form.subject_name.trim(),
-        subject_code: form.subject_code.trim() || null,
+        subject_name: subjectName,
+        subject_code: subjectCode || null,
         tingkatan: form.tingkatan,
         is_core: !!form.is_core,
         subject_type: form.is_core ? 'core' : 'selective',
@@ -250,7 +259,7 @@ export default function SchoolSetupSubjectsPage() {
   const handleSetSubjectActive = async (subject, isActive) => {
     const actionLabel = isActive ? 'aktifkan semula' : 'nyahaktifkan'
     const confirmToggle = window.confirm(
-      `Anda pasti mahu ${actionLabel} subjek "${subject.subject_name}"?`
+      `Anda pasti mahu ${actionLabel} subjek "${formatSubjectName(subject.subject_name)}"?`
     )
     if (!confirmToggle) return
 
@@ -279,7 +288,7 @@ export default function SchoolSetupSubjectsPage() {
     }
 
     const confirmDelete = window.confirm(
-      `Padam subjek "${subject.subject_name}"? Tindakan ini tidak boleh dibuat asal.`
+      `Padam subjek "${formatSubjectName(subject.subject_name)}"? Tindakan ini tidak boleh dibuat asal.`
     )
     if (!confirmDelete) return
 
@@ -304,7 +313,7 @@ export default function SchoolSetupSubjectsPage() {
   const handleSetSubjectCore = async (subject, isCore) => {
     const actionLabel = isCore ? 'jadikan subjek teras' : 'jadikan subjek elektif'
     const confirmToggle = window.confirm(
-      `Anda pasti mahu ${actionLabel} untuk "${subject.subject_name}"?`
+      `Anda pasti mahu ${actionLabel} untuk "${formatSubjectName(subject.subject_name)}"?`
     )
     if (!confirmToggle) return
 
@@ -426,7 +435,7 @@ export default function SchoolSetupSubjectsPage() {
               type="text"
               placeholder="Nama Subjek"
               value={form.subject_name}
-              onChange={(e) => setForm({ ...form, subject_name: e.target.value })}
+              onChange={(e) => setForm({ ...form, subject_name: uppercaseSubjectInput(e.target.value) })}
               className="rounded-lg border border-slate-300 px-3 py-2"
             />
 
@@ -434,7 +443,7 @@ export default function SchoolSetupSubjectsPage() {
               type="text"
               placeholder="Kod (optional)"
               value={form.subject_code}
-              onChange={(e) => setForm({ ...form, subject_code: e.target.value })}
+              onChange={(e) => setForm({ ...form, subject_code: uppercaseSubjectInput(e.target.value) })}
               className="rounded-lg border border-slate-300 px-3 py-2"
             />
 
@@ -506,8 +515,8 @@ export default function SchoolSetupSubjectsPage() {
                       <tbody>
                         {items.map((s) => (
                           <tr key={s.id} className="border-b">
-                            <td className="px-3 py-3 align-middle">{s.subject_name}</td>
-                            <td className="px-3 py-3 align-middle">{s.subject_code || '-'}</td>
+                            <td className="px-3 py-3 align-middle">{formatSubjectName(s.subject_name)}</td>
+                            <td className="px-3 py-3 align-middle">{s.subject_code ? formatSubjectName(s.subject_code) : '-'}</td>
                             <td className="px-3 py-3 align-middle">
                               <button
                                 type="button"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import { fetchSchoolLevelLabels } from './levelLabels.js'
+import { normalizeSubjectRows } from './subjectLabels.js'
 
 const getCurrentYear = () => new Date().getFullYear()
 
@@ -149,7 +150,7 @@ export function usePbdAnalysisData({ checkingAuth }) {
 
       setLevelMappings(loadedLevelMappings || [])
       setClasses(classData || [])
-      setSubjects(subjectData || [])
+      setSubjects(normalizeSubjectRows(subjectData))
       setEnrollments(enrollmentData || [])
       setStudentSubjectEnrollments(studentSubjectData || [])
       setTeachers(teacherData || [])

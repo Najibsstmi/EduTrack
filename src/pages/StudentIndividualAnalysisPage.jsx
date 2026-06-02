@@ -11,6 +11,7 @@ import {
   getDisplayLevel,
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
+import { normalizeSubjectRows } from '../lib/subjectLabels.js'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,7 +446,7 @@ export default function StudentIndividualAnalysisPage() {
     }))
 
     setClasses(classesData || [])
-    setSubjects(subjectsData || [])
+    setSubjects(normalizeSubjectRows(subjectsData))
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
     setTargets(targetsData || [])

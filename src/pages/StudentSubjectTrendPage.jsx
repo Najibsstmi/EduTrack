@@ -11,6 +11,7 @@ import {
   getDisplayLevel,
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
+import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +252,7 @@ export default function StudentSubjectTrendPage() {
     }))
 
     setClasses(classesData || [])
-    setSubjects(subjectsData || [])
+    setSubjects(normalizeSubjectRows(subjectsData))
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
     setTargets(targetsData || [])
@@ -475,7 +476,7 @@ export default function StudentSubjectTrendPage() {
               <option value="">Pilih Subjek</option>
               {availableSubjects.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.subject_name}
+                  {formatSubjectName(item.subject_name)}
                 </option>
               ))}
             </select>
@@ -502,7 +503,7 @@ export default function StudentSubjectTrendPage() {
               </div>
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 md:p-5 md:col-span-2">
                 <div className="text-sm text-amber-600 font-medium">Subjek</div>
-                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">{selectedSubject?.subject_name || '-'}</div>
+                <div className="mt-1 text-lg md:text-xl font-bold text-amber-900">{selectedSubject ? formatSubjectName(selectedSubject.subject_name) : '-'}</div>
               </div>
             </div>
           </div>

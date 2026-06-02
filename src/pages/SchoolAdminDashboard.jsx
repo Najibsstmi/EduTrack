@@ -16,6 +16,7 @@ import {
   getDisplayClassLabel,
   getDisplayLevel,
 } from '../lib/levelLabels'
+import { formatSubjectName } from '../lib/subjectLabels.js'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 const COMPLETION_GRADE_GROUPS = [
@@ -427,7 +428,7 @@ export default function SchoolAdminDashboard() {
     const subjectNames = Array.from(
       new Set(
         activeSubjects
-          .map((item) => String(item.subject_name || '').trim())
+          .map((item) => formatSubjectName(item.subject_name))
           .filter(Boolean)
       )
     ).sort((a, b) =>
@@ -436,7 +437,7 @@ export default function SchoolAdminDashboard() {
 
     const subjectNamesByGrade = activeSubjects.reduce((acc, subject) => {
       const gradeKey = normalizeText(subject.tingkatan)
-      const subjectName = String(subject.subject_name || '').trim()
+      const subjectName = formatSubjectName(subject.subject_name)
 
       if (!gradeKey || !subjectName) return acc
 

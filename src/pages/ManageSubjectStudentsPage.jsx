@@ -5,6 +5,7 @@ import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
 } from '../lib/levelLabels'
+import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 
 const styles = {
   page: {
@@ -308,7 +309,7 @@ export default function ManageSubjectStudentsPage() {
       if (studentSubjectError) throw studentSubjectError
 
       setClasses(classData || [])
-      setSubjects(subjectData || [])
+      setSubjects(normalizeSubjectRows(subjectData))
       setAllStudentEnrollments(enrollmentData || [])
       setStudentSubjectEnrollments(studentSubjectData || [])
     } catch (error) {
@@ -504,7 +505,7 @@ export default function ManageSubjectStudentsPage() {
                 <option value="">Pilih Subjek</option>
                 {availableSubjects.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.subject_name}
+                    {formatSubjectName(item.subject_name)}
                     {isSelectiveSubject(item) ? ' (Selective)' : ' (Core)'}
                   </option>
                 ))}
@@ -522,7 +523,7 @@ export default function ManageSubjectStudentsPage() {
         {selectedSubjectData && !isSelectiveSubject(selectedSubjectData) && (
           <section style={styles.card}>
             <div style={styles.infoBox}>
-              Subjek <strong>{selectedSubjectData.subject_name}</strong> ditetapkan sebagai
+              Subjek <strong>{formatSubjectName(selectedSubjectData.subject_name)}</strong> ditetapkan sebagai
               <strong> core</strong>. Semua murid dalam kelas ini dianggap mengambil
               subjek tersebut, jadi tidak perlu urus murid secara manual.
             </div>
@@ -534,7 +535,7 @@ export default function ManageSubjectStudentsPage() {
             <div style={styles.studentHeader}>
               <div>
                 <h2 style={styles.studentTitle}>
-                  Senarai Murid — {selectedSubjectData.subject_name}
+                  Senarai Murid — {formatSubjectName(selectedSubjectData.subject_name)}
                 </h2>
                 <div style={styles.statusText}>
                   {getDisplayClassLabel(
