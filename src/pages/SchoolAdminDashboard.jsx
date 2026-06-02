@@ -842,17 +842,17 @@ export default function SchoolAdminDashboard() {
     if (!user?.id) return
 
     if (user.is_master_admin) {
-      alert('Akaun master admin tidak boleh disingkirkan oleh admin sekolah.')
+      alert('Akaun master admin tidak boleh dikeluarkan oleh admin sekolah.')
       return
     }
 
     if (user.id === adminProfile?.id) {
-      alert('Admin sekolah semasa tidak boleh singkir akaun sendiri.')
+      alert('Admin sekolah semasa tidak boleh keluarkan akaun sendiri.')
       return
     }
 
     const confirmed = window.confirm(
-      `Singkir ${getDisplayName(user)} daripada sekolah ini? Akaun ini akan hilang daripada senarai pengguna sekolah dan aksesnya akan dihentikan.`
+      `Keluarkan ${getDisplayName(user)} daripada sekolah ini? Akaun ini akan hilang daripada senarai pengguna sekolah dan aksesnya akan dihentikan.`
     )
 
     if (!confirmed) return
@@ -871,14 +871,70 @@ export default function SchoolAdminDashboard() {
 
     if (error) {
       console.error(error)
-      alert(error.message || 'Gagal menyingkirkan akaun')
+      alert(error.message || 'Gagal mengeluarkan akaun dari sekolah')
       setSavingId(null)
       return
     }
 
     setUsers((prev) => prev.filter((item) => item.id !== user.id))
     setSavingId(null)
-    alert('Akaun berjaya disingkirkan dari sekolah ini')
+    alert('Akaun berjaya dikeluarkan dari sekolah ini')
+  }
+
+  const handleDeleteUser = async (user) => {
+    if (!user?.id) return
+
+    if (user.is_master_admin || user.role === 'master_admin') {
+      alert('Akaun master admin tidak boleh dipadam oleh admin sekolah.')
+      return
+    }
+
+    if (user.is_school_admin || user.role === 'school_admin') {
+      alert('Akaun admin sekolah tidak boleh dipadam terus. Buang status admin dahulu jika perlu.')
+      return
+    }
+
+    if (user.id === adminProfile?.id) {
+      alert('Admin sekolah semasa tidak boleh padam akaun sendiri.')
+      return
+    }
+
+    const targetName = getDisplayName(user)
+    const confirmed = window.confirm(
+      `Padam pengguna ${targetName}?\n\n` +
+        'Tindakan ini akan membuang profil pengguna dan cuba memadam akaun login Supabase Auth. ' +
+        'Data akademik murid, markah, analisis dan tetapan sekolah tidak akan diubah.'
+    )
+
+    if (!confirmed) return
+
+    const finalConfirm = window.confirm(
+      `Sahkan sekali lagi: padam pengguna ${targetName}?`
+    )
+
+    if (!finalConfirm) return
+
+    setSavingId(user.id)
+
+    try {
+      const { error } = await supabase.rpc('delete_school_user', {
+        target_user_id: user.id,
+      })
+
+      if (error) throw error
+
+      setUsers((prev) => prev.filter((item) => item.id !== user.id))
+      alert('Pengguna berjaya dipadam.')
+    } catch (error) {
+      console.error(error)
+      alert(
+        error.message?.includes('delete_school_user')
+          ? 'Fungsi delete_school_user belum tersedia. Sila jalankan SQL migration padam pengguna dahulu.'
+          : error.message || 'Gagal memadam pengguna.'
+      )
+    } finally {
+      setSavingId(null)
+    }
   }
 
   const handleSaveDesignation = async (user, nextDesignationRaw) => {
@@ -946,6 +1002,11 @@ export default function SchoolAdminDashboard() {
 
     if (action === 'remove-account') {
       await handleRemoveAccount(user)
+      return
+    }
+
+    if (action === 'delete-user') {
+      await handleDeleteUser(user)
     }
   }
 
@@ -1058,14 +1119,18 @@ export default function SchoolAdminDashboard() {
     }
 
     if (user.approval_status === 'approved' && user.is_school_admin) {
-      options.push({ value: 'remove-admin', label: 'Singkir admin' })
+      options.push({ value: 'remove-admin', label: 'Buang status admin' })
     }
 
     if (user.approval_status === 'rejected') {
       options.push({ value: 'approve', label: 'Luluskan semula' })
     }
 
-    options.push({ value: 'remove-account', label: 'Singkir akaun' })
+    options.push({ value: 'remove-account', label: 'Keluarkan dari sekolah' })
+
+    if (!user.is_school_admin && user.role !== 'school_admin') {
+      options.push({ value: 'delete-user', label: 'Padam pengguna' })
+    }
 
     return options
   }
