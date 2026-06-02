@@ -68,10 +68,9 @@ export default function SchoolAdminDashboard() {
 
   const [activeTab, setActiveTab] = useState('pending')
   const [searchTerm, setSearchTerm] = useState('')
-  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [activeDesktopMenu, setActiveDesktopMenu] = useState('')
   const [hoveredNav, setHoveredNav] = useState('')
   const [showMobileMenu, setShowMobileMenu] = useState(false)
-  const [showMobileSettings, setShowMobileSettings] = useState(false)
   const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
   const [actionDrafts, setActionDrafts] = useState({})
   const [completionLoading, setCompletionLoading] = useState(false)
@@ -128,8 +127,7 @@ export default function SchoolAdminDashboard() {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
-        setShowSettingsMenu(false)
-        setShowMobileSettings(false)
+        setActiveDesktopMenu('')
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -141,8 +139,8 @@ export default function SchoolAdminDashboard() {
       const nextIsMobile = window.innerWidth <= 768
       setIsMobileView(nextIsMobile)
       if (!nextIsMobile) {
-        setShowMobileSettings(false)
         setShowMobileMenu(false)
+        setActiveDesktopMenu('')
       }
     }
 
@@ -992,12 +990,6 @@ export default function SchoolAdminDashboard() {
     else if (setupStep === 4) navigate('/classes')
   }
 
-  const handleMobileNavigate = (path) => {
-    setShowMobileSettings(false)
-    setShowMobileMenu(false)
-    navigate(path)
-  }
-
   const isMobileNavActive = (path) => {
     if (!path) return false
 
@@ -1008,24 +1000,30 @@ export default function SchoolAdminDashboard() {
     return location.pathname === path || location.pathname.startsWith(`${path}/`)
   }
 
-  const getMobileNavButtonStyle = (path, disabled = false) => {
+  const isNavigationItemActive = (item) => {
+    if (!item) return false
+    if (item.path && isMobileNavActive(item.path)) return true
+    return (item.items || []).some((child) => child.path && isMobileNavActive(child.path))
+  }
+
+  const getMobileNavButtonStyle = (item) => {
     return {
       ...styles.mobileMenuItem,
-      ...(isMobileNavActive(path) ? styles.mobileMenuItemActive : {}),
-      ...(disabled ? styles.mobileMenuItemDisabled : {}),
+      ...(isNavigationItemActive(item) ? styles.mobileMenuItemActive : {}),
+      ...(item?.disabled ? styles.mobileMenuItemDisabled : {}),
     }
   }
 
-  const getNavButtonStyle = (pathKey) => {
-    const isHovered = hoveredNav === pathKey
-    const isActivePage =
-      location.pathname === pathKey || location.pathname.startsWith(`${pathKey}/`)
-
-    const shouldBlue = isMobileView ? isActivePage : isHovered
+  const getNavButtonStyle = (item) => {
+    const isHovered = hoveredNav === item.key
+    const isOpen = activeDesktopMenu === item.key
+    const isActivePage = isNavigationItemActive(item)
+    const shouldBlue = isHovered || isOpen || isActivePage
 
     return {
       ...styles.navButton,
       ...(shouldBlue ? styles.navButtonHover : {}),
+      ...(item.disabled ? styles.disabledTopButton : {}),
     }
   }
 
@@ -1073,69 +1071,106 @@ export default function SchoolAdminDashboard() {
   const role = String(adminProfile?.role || '').trim().toLowerCase()
   const isSchoolAdmin = role === 'school_admin'
 
-  const navigateFromSettings = (path) => {
-    setShowSettingsMenu(false)
-    setShowMobileSettings(false)
+  const closeNavigationMenus = () => {
+    setActiveDesktopMenu('')
     setShowMobileMenu(false)
+  }
+
+  const handleNavNavigate = (path) => {
+    closeNavigationMenus()
     navigate(path)
   }
 
-  const settingsItems = [
-    {
-      key: 'academic-structure',
-      label: 'Struktur Akademik',
-      onClick: () => navigateFromSettings('/school-setup'),
-    },
-    {
-      key: 'exam-settings',
-      label: 'Tetapan Peperiksaan',
-      onClick: () => navigateFromSettings('/exam-settings'),
-    },
-    {
-      key: 'grade-settings',
-      label: 'Tetapan Gred',
-      onClick: () => navigateFromSettings('/grade-settings'),
-    },
-    {
-      key: 'subject-settings',
-      label: 'Tetapan Subjek',
-      onClick: () => navigateFromSettings('/subject-settings'),
-    },
-    {
-      key: 'class-settings',
-      label: 'Tetapan Kelas',
-      onClick: () => navigateFromSettings('/class-settings'),
-    },
-    ...(isSchoolAdmin
-      ? [
-          {
-            key: 'student-subject-settings',
-            label: 'Tetapan Murid-Subjek',
-            onClick: () => navigateFromSettings('/manage-subject-students'),
-          },
-          {
-            key: 'school-logo-settings',
-            label: 'Tetapan Logo Sekolah',
-            onClick: () => navigateFromSettings('/settings/school-logo'),
-          },
-        ]
-      : []),
+  const scrollToUserManagement = () => {
+    closeNavigationMenus()
+    const target = document.getElementById('user-management-section')
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleNavItemClick = (item) => {
+    if (!item || item.disabled) return
+    if (item.action) {
+      item.action()
+      return
+    }
+    if (item.path) handleNavNavigate(item.path)
+  }
+
+  const assessmentItems = [
+    { key: 'exam', label: 'Peperiksaan', path: '/scores' },
+    { key: 'pbd', label: 'PBD', path: '/input-pbd' },
+    { key: 'pajsk', label: 'PAJSK', path: '/pbs/pajsk' },
+    { key: 'psychometric', label: 'Psikometrik', path: '/pbs/ppsi' },
   ]
 
-  const mobileNavItems = [
-    { key: 'dashboard', label: 'Utama', path: '/dashboard' },
-    { key: 'scores', label: 'Input Markah', path: '/scores' },
-    { key: 'input-pbd', label: 'Input PBD', path: '/input-pbd' },
+  const studentItems = [
     {
-      key: 'students',
-      label: 'Urus Murid',
+      key: 'student-list',
+      label: 'Senarai Murid',
       path: '/students',
       disabled: !isSchoolAdmin,
       title: !isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined,
     },
-    { key: 'analysis', label: 'Analisis', path: '/analysis' },
-    { key: 'pbs', label: 'PBS', path: '/pbs' },
-    { key: 'academic-targets', label: 'Sasaran Akademik', path: '/academic-targets' },
+    {
+      key: 'student-subjects',
+      label: 'Subjek Murid',
+      path: '/manage-subject-students',
+      disabled: !isSchoolAdmin,
+      title: !isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined,
+    },
+  ]
+
+  const analysisItems = [
+    { key: 'headcount', label: 'Headcount', disabled: true, note: 'Akan datang' },
+    { key: 'targets', label: 'Sasaran Akademik', path: '/academic-targets' },
+    { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
+    { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
+    { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
+    { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
+  ]
+
+  const settingsItems = [
+    {
+      key: 'users',
+      label: 'Pengguna',
+      action: scrollToUserManagement,
+    },
+    {
+      key: 'academic-structure',
+      label: 'Struktur Sekolah',
+      path: '/school-setup',
+    },
+    {
+      key: 'exam-settings',
+      label: 'Konfigurasi Peperiksaan',
+      path: '/exam-settings',
+    },
+    {
+      key: 'grade-settings',
+      label: 'Skala Gred',
+      path: '/grade-settings',
+    },
+    {
+      key: 'school-profile',
+      label: 'Profil Sekolah',
+      path: '/settings/school-logo',
+    },
+  ]
+
+  const adminNavigation = [
+    { key: 'dashboard', label: 'Dashboard', path: '/dashboard' },
+    { key: 'assessment', label: 'Pentaksiran', items: assessmentItems },
+    { key: 'students', label: 'Murid', items: studentItems },
+    { key: 'analysis', label: 'Analisis', items: analysisItems },
+    {
+      key: 'settings',
+      label: 'Tetapan',
+      items: settingsItems,
+      disabled: !isSchoolAdmin,
+      title: !isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined,
+    },
   ]
 
   const groupedCompletionRows = useMemo(() => {
@@ -1266,7 +1301,6 @@ export default function SchoolAdminDashboard() {
                   aria-label="Tutup menu utama"
                   onClick={() => {
                     setShowMobileMenu(false)
-                    setShowMobileSettings(false)
                   }}
                   style={styles.mobileDrawerBackdrop}
                 />
@@ -1281,7 +1315,6 @@ export default function SchoolAdminDashboard() {
                     aria-label="Tutup menu utama"
                     onClick={() => {
                       setShowMobileMenu(false)
-                      setShowMobileSettings(false)
                     }}
                     style={styles.mobileDrawerCloseButton}
                   >
@@ -1303,58 +1336,53 @@ export default function SchoolAdminDashboard() {
                   </div>
 
                   <div style={styles.mobileDrawerMenu}>
-                    {mobileNavItems.map((item) => (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => {
-                          if (!item.disabled) handleMobileNavigate(item.path)
-                        }}
-                        disabled={item.disabled}
-                        title={item.title}
-                        style={getMobileNavButtonStyle(item.path, item.disabled)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
+                    {adminNavigation.map((item) => {
+                      if (!item.items) {
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => handleNavItemClick(item)}
+                            disabled={item.disabled}
+                            title={item.title}
+                            style={getMobileNavButtonStyle(item)}
+                          >
+                            {item.label}
+                          </button>
+                        )
+                      }
 
-                    {isSchoolAdmin && (
-                      <div style={styles.mobileMenuGroup}>
-                        <button
-                          type="button"
-                          onClick={() => setShowMobileSettings((prev) => !prev)}
-                          style={{
-                            ...styles.mobileMenuItem,
-                            ...(showMobileSettings ? styles.mobileMenuItemActive : {}),
-                          }}
-                        >
-                          <span>Tetapan</span>
-                          <span aria-hidden="true">{showMobileSettings ? '▴' : '▾'}</span>
-                        </button>
-
-                        {showMobileSettings && (
-                          <div style={styles.mobileSettingsPanel}>
-                            {settingsItems.map((item) => (
+                      return (
+                        <div key={item.key} style={styles.mobileMenuSection}>
+                          <div style={styles.mobileMenuSectionLabel}>{item.label}</div>
+                          <div style={styles.mobileSubMenuPanel}>
+                            {item.items.map((child) => (
                               <button
-                                key={item.key}
+                                key={child.key}
                                 type="button"
-                                onClick={item.onClick}
-                                style={styles.mobileSettingsItem}
+                                onClick={() => handleNavItemClick(child)}
+                                disabled={child.disabled}
+                                title={child.title || child.note}
+                                style={{
+                                  ...styles.mobileSubMenuItem,
+                                  ...(isNavigationItemActive(child) ? styles.mobileSubMenuItemActive : {}),
+                                  ...(child.disabled ? styles.mobileSubMenuItemDisabled : {}),
+                                }}
                               >
-                                {item.label}
+                                <span>{child.label}</span>
+                                {child.note ? <span style={styles.mobileSoonTag}>{child.note}</span> : null}
                               </button>
                             ))}
                           </div>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      )
+                    })}
                   </div>
 
                   <button
                     type="button"
                     onClick={async () => {
                       setShowMobileMenu(false)
-                      setShowMobileSettings(false)
                       await handleLogout()
                     }}
                     style={styles.mobileLogoutButton}
@@ -1381,100 +1409,70 @@ export default function SchoolAdminDashboard() {
               </div>
             </div>
 
-            <div style={styles.topActions}>
-              <button
-                type="button"
-                onClick={() => navigate('/scores')}
-                onMouseEnter={() => setHoveredNav('/scores')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={getNavButtonStyle('/scores')}
-              >
-                Input Markah
-              </button>
+            <div style={styles.topActions} ref={settingsMenuRef}>
+              {adminNavigation.map((item) => {
+                if (!item.items) {
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => handleNavItemClick(item)}
+                      onMouseEnter={() => setHoveredNav(item.key)}
+                      onMouseLeave={() => setHoveredNav('')}
+                      disabled={item.disabled}
+                      title={item.title}
+                      style={getNavButtonStyle(item)}
+                    >
+                      {item.label}
+                    </button>
+                  )
+                }
 
-              <button
-                type="button"
-                onClick={() => navigate('/input-pbd')}
-                onMouseEnter={() => setHoveredNav('/input-pbd')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={getNavButtonStyle('/input-pbd')}
-              >
-                Input PBD
-              </button>
+                return (
+                  <div key={item.key} style={styles.desktopMenuWrap}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!item.disabled) {
+                          setActiveDesktopMenu((prev) => (prev === item.key ? '' : item.key))
+                        }
+                      }}
+                      onMouseEnter={() => setHoveredNav(item.key)}
+                      onMouseLeave={() => setHoveredNav('')}
+                      disabled={item.disabled}
+                      title={item.title}
+                      style={getNavButtonStyle(item)}
+                    >
+                      <span>{item.label}</span>
+                      <span aria-hidden="true" style={styles.desktopMenuChevron}>
+                        {activeDesktopMenu === item.key ? '▴' : '▾'}
+                      </span>
+                    </button>
 
-              <button
-                type="button"
-                onClick={() => navigate('/students')}
-                onMouseEnter={() => setHoveredNav('/students')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={{
-                  ...getNavButtonStyle('/students'),
-                  ...(!isSchoolAdmin ? styles.disabledTopButton : {}),
-                }}
-                disabled={!isSchoolAdmin}
-                title={!isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined}
-              >
-                Urus Murid
-              </button>
-
-              {isSchoolAdmin && (
-                <div style={{ position: 'relative' }} ref={settingsMenuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowSettingsMenu((prev) => !prev)}
-                    onMouseEnter={() => setHoveredNav('/settings')}
-                    onMouseLeave={() => setHoveredNav('')}
-                    style={getNavButtonStyle('/settings')}
-                  >
-                    Tetapan
-                  </button>
-
-                  {showSettingsMenu && (
-                    <div style={styles.settingsDropdown}>
-                      {settingsItems.map((item) => (
-                        <button
-                          key={item.key}
-                          type="button"
-                          onClick={item.onClick}
-                          style={styles.dropdownItem}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => navigate('/academic-targets')}
-                onMouseEnter={() => setHoveredNav('/academic-targets')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={getNavButtonStyle('/academic-targets')}
-              >
-                Sasaran Akademik
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/analysis')}
-                onMouseEnter={() => setHoveredNav('/analysis')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={getNavButtonStyle('/analysis')}
-              >
-                Analisis
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/pbs')}
-                onMouseEnter={() => setHoveredNav('/pbs')}
-                onMouseLeave={() => setHoveredNav('')}
-                style={getNavButtonStyle('/pbs')}
-              >
-                PBS
-              </button>
+                    {activeDesktopMenu === item.key && (
+                      <div style={styles.settingsDropdown}>
+                        {item.items.map((child) => (
+                          <button
+                            key={child.key}
+                            type="button"
+                            onClick={() => handleNavItemClick(child)}
+                            disabled={child.disabled}
+                            title={child.title || child.note}
+                            style={{
+                              ...styles.dropdownItem,
+                              ...(isNavigationItemActive(child) ? styles.dropdownItemActive : {}),
+                              ...(child.disabled ? styles.dropdownItemDisabled : {}),
+                            }}
+                          >
+                            <span>{child.label}</span>
+                            {child.note ? <span style={styles.dropdownNote}>{child.note}</span> : null}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               <button
                 type="button"
@@ -1578,7 +1576,7 @@ export default function SchoolAdminDashboard() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Input Markah</h3>
+                <h3 style={styles.quickActionTitle}>Peperiksaan</h3>
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
@@ -1587,7 +1585,7 @@ export default function SchoolAdminDashboard() {
             </div>
 
             <div
-              onClick={() => navigate('/analysis')}
+              onClick={() => navigate('/analysis/class')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1602,16 +1600,16 @@ export default function SchoolAdminDashboard() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Analisis Prestasi</h3>
+                <h3 style={styles.quickActionTitle}>Prestasi Kelas / GPMP</h3>
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
-                Lihat analisis kelas, individu dan prestasi subjek dengan lebih jelas.
+                Lihat ringkasan kelas, subjek dan GPMP peperiksaan dengan lebih jelas.
               </p>
             </div>
 
             <div
-              onClick={() => navigate('/pbs')}
+              onClick={() => navigate('/pbs/pajsk')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1626,11 +1624,11 @@ export default function SchoolAdminDashboard() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>PBS Bersepadu</h3>
+                <h3 style={styles.quickActionTitle}>PAJSK</h3>
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
-                Akses PBD, PAJSK, PPsi dan analisis PBS tanpa mengubah modul peperiksaan lama.
+                Akses input SEGAK, BMI dan komponen PAJSK yang tersedia.
               </p>
             </div>
 
@@ -1650,7 +1648,7 @@ export default function SchoolAdminDashboard() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Input PBD</h3>
+                <h3 style={styles.quickActionTitle}>PBD</h3>
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
@@ -1659,7 +1657,7 @@ export default function SchoolAdminDashboard() {
             </div>
 
             <div
-              onClick={() => navigate('/analisis-pbd')}
+              onClick={() => navigate('/academic-targets')}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1674,11 +1672,11 @@ export default function SchoolAdminDashboard() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={styles.quickActionTitle}>Analisis PBD</h3>
+                <h3 style={styles.quickActionTitle}>Sasaran Akademik</h3>
                 <span style={styles.quickActionArrow}>›</span>
               </div>
               <p style={styles.quickActionDesc}>
-                Lihat ringkasan TP semasa, snapshot Penggal 1, snapshot Penggal 2 dan perubahan murid.
+                Tetapkan profil sasaran OTR yang digunakan dalam analisis akademik.
               </p>
             </div>
 
@@ -1699,7 +1697,7 @@ export default function SchoolAdminDashboard() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h3 style={styles.quickActionTitle}>Urus Murid Subjek</h3>
+                  <h3 style={styles.quickActionTitle}>Subjek Murid</h3>
                   <span style={styles.quickActionArrow}>›</span>
                 </div>
                 <p style={styles.quickActionDesc}>
@@ -2090,7 +2088,7 @@ export default function SchoolAdminDashboard() {
         )}
 
         {isSchoolAdmin && (
-          <section style={styles.sectionCard}>
+          <section id="user-management-section" style={styles.sectionCard}>
             <div style={styles.sectionHeaderResponsive}>
               <h2 style={styles.cardTitle}>Pengurusan Pengguna</h2>
               <div style={styles.filterWrap}>
@@ -2267,11 +2265,15 @@ const styles = {
     flexWrap: 'wrap',
   },
   navButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
     border: '1px solid rgba(255,255,255,0.14)',
     borderRadius: '18px',
     background: 'rgba(255,255,255,0.04)',
     color: '#ffffff',
-    padding: '14px 26px',
+    padding: '13px 18px',
     fontSize: '15px',
     fontWeight: 700,
     cursor: 'pointer',
@@ -2298,11 +2300,19 @@ const styles = {
     opacity: 0.5,
     cursor: 'not-allowed',
   },
+  desktopMenuWrap: {
+    position: 'relative',
+  },
+  desktopMenuChevron: {
+    fontSize: '11px',
+    lineHeight: 1,
+    opacity: 0.8,
+  },
   settingsDropdown: {
     position: 'absolute',
     top: 'calc(100% + 8px)',
     left: 0,
-    minWidth: 220,
+    minWidth: 260,
     background: '#fff',
     border: '1px solid #e5e7eb',
     borderRadius: 14,
@@ -2312,6 +2322,10 @@ const styles = {
   },
   dropdownItem: {
     width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
     textAlign: 'left',
     padding: '10px 12px',
     border: 'none',
@@ -2320,6 +2334,23 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 600,
     color: '#0f172a',
+  },
+  dropdownItemActive: {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+  },
+  dropdownItemDisabled: {
+    color: '#94a3b8',
+    cursor: 'not-allowed',
+  },
+  dropdownNote: {
+    flexShrink: 0,
+    borderRadius: '999px',
+    background: '#f1f5f9',
+    color: '#64748b',
+    padding: '3px 7px',
+    fontSize: '10px',
+    fontWeight: 800,
   },
   mobileMenuButton: {
     width: '44px',
@@ -2397,6 +2428,7 @@ const styles = {
     background: '#0f3b63',
     color: '#ffffff',
     boxShadow: '18px 0 40px rgba(2, 8, 23, 0.32)',
+    overflowY: 'auto',
   },
   mobileDrawerCloseButton: {
     width: '38px',
@@ -2440,12 +2472,8 @@ const styles = {
   },
   mobileDrawerMenu: {
     display: 'grid',
-    gap: 0,
+    gap: '16px',
     marginTop: '8px',
-  },
-  mobileMenuGroup: {
-    display: 'grid',
-    gap: 0,
   },
   mobileMenuItem: {
     width: '100%',
@@ -2473,6 +2501,56 @@ const styles = {
   mobileMenuItemDisabled: {
     opacity: 0.48,
     cursor: 'not-allowed',
+  },
+  mobileMenuSection: {
+    display: 'grid',
+    gap: '6px',
+  },
+  mobileMenuSectionLabel: {
+    padding: '0 8px',
+    color: '#bae6fd',
+    fontSize: '11px',
+    fontWeight: 800,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  mobileSubMenuPanel: {
+    display: 'grid',
+    gap: 0,
+  },
+  mobileSubMenuItem: {
+    width: '100%',
+    minHeight: '38px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    border: 'none',
+    borderBottom: '1px solid rgba(163, 230, 53, 0.42)',
+    background: 'transparent',
+    color: 'rgba(255,255,255,0.9)',
+    padding: '9px 8px 9px 18px',
+    textAlign: 'left',
+    fontSize: '13px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  mobileSubMenuItemActive: {
+    background: 'rgba(255,255,255,0.08)',
+    color: '#d9f99d',
+  },
+  mobileSubMenuItemDisabled: {
+    color: 'rgba(226,232,240,0.5)',
+    cursor: 'not-allowed',
+  },
+  mobileSoonTag: {
+    flexShrink: 0,
+    borderRadius: '999px',
+    background: 'rgba(241,245,249,0.14)',
+    color: 'rgba(255,255,255,0.72)',
+    padding: '3px 7px',
+    fontSize: '10px',
+    fontWeight: 800,
   },
   mobileLogoutButton: {
     width: '100%',
