@@ -27,10 +27,10 @@ export default function PpsiPage() {
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/analysis/pbs')}
+              onClick={() => navigate('/analysis/psychometric')}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              Analisis PBS
+              Analisis Psikometrik
             </button>
           }
         />

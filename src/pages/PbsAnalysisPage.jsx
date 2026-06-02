@@ -3,10 +3,10 @@ import AppHeader from '../components/AppHeader.jsx'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
 const PBS_DIMENSIONS = [
-  'Peperiksaan Terkini',
-  'PBD Terkini',
-  'SEGAK Terkini',
-  'PAJSK Terkini',
+  'Peperiksaan',
+  'PBD',
+  'SEGAK',
+  'PAJSK',
 ]
 
 const PSYCHOMETRIC_DIMENSIONS = [
@@ -18,6 +18,19 @@ const PSYCHOMETRIC_DIMENSIONS = [
   'Interpersonal',
   'Intrapersonal',
   'Naturalis',
+]
+
+const EXAM_SUMMARY_ITEMS = [
+  'Ringkasan peperiksaan terkini',
+  'Prestasi akademik terkini',
+  'Gred / markah / GPMP / GPS',
+]
+
+const NON_EXAM_SUMMARY_ITEMS = [
+  'PBD terkini',
+  'PAJSK terkini',
+  'SEGAK terkini',
+  'Psikometrik terkini',
 ]
 
 export default function PbsAnalysisPage() {
@@ -55,10 +68,38 @@ export default function PbsAnalysisPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
-            Analisis holistik PBS disediakan untuk menyatukan dapatan akademik,
-            PBD, SEGAK dan PAJSK apabila data integrasi lengkap. Paparan ini tidak
-            mengubah formula atau proses input sedia ada.
+            Analisis holistik PBS disediakan untuk membezakan dapatan
+            peperiksaan dan bukan peperiksaan dalam satu paparan murid.
+            Paparan ini tidak mengubah formula atau proses input sedia ada.
           </p>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          {[
+            {
+              title: 'Peperiksaan',
+              description: 'Ringkasan akademik berasaskan peperiksaan apabila data tersedia.',
+              items: EXAM_SUMMARY_ITEMS,
+            },
+            {
+              title: 'Bukan Peperiksaan',
+              description: 'Ringkasan PBS bukan peperiksaan tanpa mencampurkan skor psikometrik ke radar utama.',
+              items: NON_EXAM_SUMMARY_ITEMS,
+            },
+          ].map((group) => (
+            <div key={group.title} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <h2 className="text-lg font-semibold text-slate-900">{group.title}</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">{group.description}</p>
+              <div className="mt-4 grid gap-3">
+                {group.items.map((item) => (
+                  <div key={item} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                    <span className="font-semibold text-slate-700">{item}</span>
+                    <span className="text-xs font-semibold text-slate-400">Data belum tersedia</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -95,7 +136,7 @@ export default function PbsAnalysisPage() {
                   <div key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="text-sm font-semibold text-slate-900">{item}</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      Menunggu pemetaan data terkini.
+                      Data belum tersedia.
                     </div>
                   </div>
                 ))}
@@ -119,21 +160,6 @@ export default function PbsAnalysisPage() {
                 ))}
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-          <h2 className="text-lg font-semibold text-slate-900">Integrasi PAJSK / SEGAK</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {['SEGAK / BMI', 'PAJSK', 'Psikometrik'].map((item) => (
-              <div key={item} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="font-semibold text-slate-900">{item}</div>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Struktur analisis disediakan. Data sebenar akan digunakan apabila
-                  modul input dan pemetaan skor lengkap.
-                </p>
-              </div>
-            ))}
           </div>
         </section>
       </div>

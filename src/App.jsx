@@ -31,6 +31,7 @@ import PajskSegakPage from './pages/PajskSegakPage.jsx'
 import PajskSegakInputPage from './pages/PajskSegakInputPage.jsx'
 import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
 import PpsiPage from './pages/PpsiPage.jsx'
+import PsychometricAnalysisPage from './pages/PsychometricAnalysisPage.jsx'
 import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
@@ -117,6 +118,7 @@ function App() {
         <Route path="/input-pbd" element={<PbdInputPage />} />
         <Route path="/pbs/pbd/analysis" element={<PbdAnalysisPage />} />
         <Route path="/analisis-pbd" element={<PbdAnalysisPage />} />
+        <Route path="/analysis/pbd" element={<PbdAnalysisPage />} />
         <Route path="/pbs/pbd/subject" element={<PbdAnalysisPage />} />
         <Route path="/pbs/pbd/student" element={<PbdAnalysisPage />} />
         <Route path="/pbs/pajsk" element={<PajskInputPage />} />
@@ -128,6 +130,8 @@ function App() {
         <Route path="/analysis/class" element={<AnalysisPage />} />
         <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />
         <Route path="/analysis/student-subject" element={<StudentSubjectTrendPage />} />
+        <Route path="/analysis/pajsk-segak" element={<PajskSegakAnalysisPage />} />
+        <Route path="/analysis/psychometric" element={<PsychometricAnalysisPage />} />
         <Route path="/analysis/pbs" element={<PbsAnalysisPage />} />
         <Route path="/pending" element={<PendingApprovalPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />

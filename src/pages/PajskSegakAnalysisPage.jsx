@@ -162,14 +162,14 @@ export default function PajskSegakAnalysisPage() {
   }, [rowsByTerm])
 
   if (checkingAuth || loading) {
-    return <div className="p-6 text-slate-600">Loading Analisis SEGAK...</div>
+    return <div className="p-6 text-slate-600">Loading Analisis PAJSK & SEGAK...</div>
   }
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
-          title="Analisis SEGAK / BMI"
+          title="Analisis PAJSK & SEGAK"
           actionLeft={
             <button
               type="button"
@@ -199,6 +199,27 @@ export default function PajskSegakAnalysisPage() {
             {errorMessage}
           </div>
         ) : null}
+
+        <section className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="font-semibold text-slate-900">Ringkasan PAJSK</div>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Data belum tersedia.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="font-semibold text-slate-900">Ringkasan SEGAK</div>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Analisis SEGAK menggunakan rekod sedia ada di bawah.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="font-semibold text-slate-900">BMI / kecergasan</div>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Paparan BMI dan skor kecergasan kekal menggunakan data SEGAK.
+            </p>
+          </div>
+        </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Penapis Analisis SEGAK</h2>

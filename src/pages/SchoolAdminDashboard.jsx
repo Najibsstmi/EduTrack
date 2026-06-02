@@ -1003,8 +1003,9 @@ export default function SchoolAdminDashboard() {
 
   const isNavigationItemActive = (item) => {
     if (!item) return false
-    if (item.path && isMobileNavActive(item.path)) return true
-    return (item.items || []).some((child) => child.path && isMobileNavActive(child.path))
+    const itemPaths = [item.path, ...(item.activePaths || [])].filter(Boolean)
+    if (itemPaths.some((path) => isMobileNavActive(path))) return true
+    return (item.items || []).some((child) => isNavigationItemActive(child))
   }
 
   const getMobileNavButtonStyle = (item) => {
@@ -1099,6 +1100,82 @@ export default function SchoolAdminDashboard() {
     if (item.path) handleNavNavigate(item.path)
   }
 
+  const renderMobileSubMenuItem = (child) => {
+    if (child.items) {
+      return (
+        <div key={child.key} style={styles.mobileNestedMenuGroup}>
+          <div
+            style={{
+              ...styles.mobileNestedMenuLabel,
+              ...(isNavigationItemActive(child) ? styles.mobileNestedMenuLabelActive : {}),
+            }}
+          >
+            {child.label}
+          </div>
+          <div style={styles.mobileNestedMenuItems}>
+            {child.items.map(renderMobileSubMenuItem)}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <button
+        key={child.key}
+        type="button"
+        onClick={() => handleNavItemClick(child)}
+        disabled={child.disabled}
+        title={child.title || child.note}
+        style={{
+          ...styles.mobileSubMenuItem,
+          ...(isNavigationItemActive(child) ? styles.mobileSubMenuItemActive : {}),
+          ...(child.disabled ? styles.mobileSubMenuItemDisabled : {}),
+        }}
+      >
+        <span>{child.label}</span>
+        {child.note ? <span style={styles.mobileSoonTag}>{child.note}</span> : null}
+      </button>
+    )
+  }
+
+  const renderDesktopDropdownItem = (child) => {
+    if (child.items) {
+      return (
+        <div key={child.key} style={styles.dropdownGroup}>
+          <div
+            style={{
+              ...styles.dropdownGroupLabel,
+              ...(isNavigationItemActive(child) ? styles.dropdownGroupLabelActive : {}),
+            }}
+          >
+            {child.label}
+          </div>
+          <div style={styles.dropdownGroupItems}>
+            {child.items.map(renderDesktopDropdownItem)}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <button
+        key={child.key}
+        type="button"
+        onClick={() => handleNavItemClick(child)}
+        disabled={child.disabled}
+        title={child.title || child.note}
+        style={{
+          ...styles.dropdownItem,
+          ...(isNavigationItemActive(child) ? styles.dropdownItemActive : {}),
+          ...(child.disabled ? styles.dropdownItemDisabled : {}),
+        }}
+      >
+        <span>{child.label}</span>
+        {child.note ? <span style={styles.dropdownNote}>{child.note}</span> : null}
+      </button>
+    )
+  }
+
   const assessmentItems = [
     { key: 'exam', label: 'Peperiksaan', path: '/scores' },
     { key: 'pbd', label: 'PBD', path: '/input-pbd' },
@@ -1123,12 +1200,37 @@ export default function SchoolAdminDashboard() {
     },
   ]
 
-  const analysisItems = [
+  const examAnalysisItems = [
     { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
     { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
     { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/class' },
     { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
+  ]
+
+  const nonExamAnalysisItems = [
+    {
+      key: 'pbd-analysis',
+      label: 'Analisis PBD',
+      path: '/analysis/pbd',
+      activePaths: ['/analisis-pbd', '/pbs/pbd/analysis'],
+    },
+    {
+      key: 'pajsk-segak-analysis',
+      label: 'Analisis PAJSK & SEGAK',
+      path: '/analysis/pajsk-segak',
+      activePaths: ['/pbs/pajsk/segak/analysis'],
+    },
+    {
+      key: 'psychometric-analysis',
+      label: 'Analisis Psikometrik',
+      path: '/analysis/psychometric',
+    },
     { key: 'pbs-integrated', label: 'PBS Bersepadu', path: '/analysis/pbs' },
+  ]
+
+  const analysisItems = [
+    { key: 'exam-analysis', label: 'Peperiksaan', items: examAnalysisItems },
+    { key: 'non-exam-analysis', label: 'Bukan Peperiksaan', items: nonExamAnalysisItems },
   ]
 
   const settingsItems = [
@@ -1361,23 +1463,7 @@ export default function SchoolAdminDashboard() {
                         <div key={item.key} style={styles.mobileMenuSection}>
                           <div style={styles.mobileMenuSectionLabel}>{item.label}</div>
                           <div style={styles.mobileSubMenuPanel}>
-                            {item.items.map((child) => (
-                              <button
-                                key={child.key}
-                                type="button"
-                                onClick={() => handleNavItemClick(child)}
-                                disabled={child.disabled}
-                                title={child.title || child.note}
-                                style={{
-                                  ...styles.mobileSubMenuItem,
-                                  ...(isNavigationItemActive(child) ? styles.mobileSubMenuItemActive : {}),
-                                  ...(child.disabled ? styles.mobileSubMenuItemDisabled : {}),
-                                }}
-                              >
-                                <span>{child.label}</span>
-                                {child.note ? <span style={styles.mobileSoonTag}>{child.note}</span> : null}
-                              </button>
-                            ))}
+                            {item.items.map(renderMobileSubMenuItem)}
                           </div>
                         </div>
                       )
@@ -1456,23 +1542,7 @@ export default function SchoolAdminDashboard() {
 
                     {activeDesktopMenu === item.key && (
                       <div style={styles.settingsDropdown}>
-                        {item.items.map((child) => (
-                          <button
-                            key={child.key}
-                            type="button"
-                            onClick={() => handleNavItemClick(child)}
-                            disabled={child.disabled}
-                            title={child.title || child.note}
-                            style={{
-                              ...styles.dropdownItem,
-                              ...(isNavigationItemActive(child) ? styles.dropdownItemActive : {}),
-                              ...(child.disabled ? styles.dropdownItemDisabled : {}),
-                            }}
-                          >
-                            <span>{child.label}</span>
-                            {child.note ? <span style={styles.dropdownNote}>{child.note}</span> : null}
-                          </button>
-                        ))}
+                        {item.items.map(renderDesktopDropdownItem)}
                       </div>
                     )}
                   </div>
@@ -2317,13 +2387,33 @@ const styles = {
     position: 'absolute',
     top: 'calc(100% + 8px)',
     left: 0,
-    minWidth: 260,
+    minWidth: 300,
     background: '#fff',
     border: '1px solid #e5e7eb',
     borderRadius: 14,
     boxShadow: '0 10px 30px rgba(15,23,42,0.12)',
     padding: 8,
     zIndex: 20,
+  },
+  dropdownGroup: {
+    display: 'grid',
+    gap: 4,
+    padding: '4px 0 8px',
+  },
+  dropdownGroupLabel: {
+    padding: '8px 10px 4px',
+    color: '#475569',
+    fontSize: '11px',
+    fontWeight: 800,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  dropdownGroupLabelActive: {
+    color: '#1d4ed8',
+  },
+  dropdownGroupItems: {
+    display: 'grid',
+    gap: 2,
   },
   dropdownItem: {
     width: '100%',
@@ -2520,6 +2610,26 @@ const styles = {
     textTransform: 'uppercase',
   },
   mobileSubMenuPanel: {
+    display: 'grid',
+    gap: 0,
+  },
+  mobileNestedMenuGroup: {
+    display: 'grid',
+    gap: 0,
+    padding: '3px 0 8px',
+  },
+  mobileNestedMenuLabel: {
+    padding: '10px 8px 6px 18px',
+    color: '#bae6fd',
+    fontSize: '11px',
+    fontWeight: 900,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  mobileNestedMenuLabelActive: {
+    color: '#d9f99d',
+  },
+  mobileNestedMenuItems: {
     display: 'grid',
     gap: 0,
   },

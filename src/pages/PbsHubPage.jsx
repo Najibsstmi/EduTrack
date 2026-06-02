@@ -24,7 +24,7 @@ const modules = [
   {
     title: 'Analisis PBS Bersepadu',
     description:
-      'Graf poligon peperiksaan, PBD, SEGAK, BMI, PAJSK dan ekstrakurikulum.',
+      'Radar holistik peperiksaan, PBD, SEGAK dan PAJSK dengan psikometrik berasingan.',
     path: '/analysis/pbs',
     tone: 'border-violet-200 bg-violet-50 text-violet-900',
   },
