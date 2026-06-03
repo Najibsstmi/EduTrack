@@ -68,19 +68,56 @@ const normalizeCompareText = (value) =>
   String(value || '')
     .trim()
     .replace(/\s+/g, ' ')
-    .toLowerCase()
-
-const normalizeGradeLabel = (value) =>
-  String(value || '')
-    .trim()
+    .replace(/[_./-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .toLowerCase()
 
+const getGradeNumber = (value) => {
+  const normalized = normalizeCompareText(value)
+  const match =
+    normalized.match(/^(?:tingkatan|tahun|form|f|t)?\s*(\d+)$/) ||
+    normalized.match(/\b(?:tingkatan|tahun|form|f|t)\s*(\d+)\b/)
+
+  return match?.[1] || ''
+}
+
+const normalizeGradeLabel = (value) => {
+  const normalized = normalizeCompareText(value)
+  const gradeNumber = getGradeNumber(normalized)
+  return gradeNumber ? `tingkatan ${gradeNumber}` : normalized
+}
+
+const normalizeClassLookupText = (kelas, tingkatan = '') => {
+  let normalized = normalizeCompareText(kelas)
+  const gradeNumber = getGradeNumber(tingkatan)
+  const gradeAliases = [
+    normalizeCompareText(tingkatan),
+    gradeNumber,
+    gradeNumber ? `tingkatan ${gradeNumber}` : '',
+    gradeNumber ? `tahun ${gradeNumber}` : '',
+    gradeNumber ? `form ${gradeNumber}` : '',
+    gradeNumber ? `f${gradeNumber}` : '',
+    gradeNumber ? `t${gradeNumber}` : '',
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+
+  gradeAliases.forEach((alias) => {
+    if (normalized === alias) {
+      normalized = ''
+    } else if (normalized.startsWith(`${alias} `)) {
+      normalized = normalized.slice(alias.length).trim()
+    }
+  })
+
+  return normalized
+}
+
 const buildClassLookupKey = (tingkatan, kelas) =>
-  `${normalizeCompareText(tingkatan)}__${normalizeCompareText(kelas)}`
+  `${normalizeGradeLabel(tingkatan)}__${normalizeClassLookupText(kelas, tingkatan)}`
 
 const buildGradeIcLookupKey = (tingkatan, noIc) =>
-  `${normalizeCompareText(tingkatan)}__${normalizeIC(noIc)}`
+  `${normalizeGradeLabel(tingkatan)}__${normalizeIC(noIc)}`
 
 function normalizeIC(ic) {
   const digits = String(ic || '')
@@ -152,16 +189,13 @@ const isSelectiveSubject = (subject) =>
 const isAllowedExamKey = (value) => {
   const key = normalizeExamKey(value)
 
-  if (key === 'TOV' || key === 'ETR') return true
-  if (/^AR\d+$/.test(key)) return true
-
   // OTR tak perlu import manual sebab sistem jana automatik
-  return false
+  return Boolean(key) && !key.startsWith('OTR')
 }
 
 const isScoreExamKey = (examKey) => {
   const key = normalizeExamKey(examKey)
-  return key === 'TOV' || /^AR\d+$/.test(key)
+  return Boolean(key) && key !== 'ETR' && !key.startsWith('OTR')
 }
 
 const getSubjectCsvHeader = (subject) =>
@@ -391,7 +425,7 @@ const validateCsvData = (headers, rows, expectedHeaders = REQUIRED_HEADERS) => {
       errors.push(`Baris ${row.__rowNumber}: jenis_peperiksaan kosong`)
     } else if (!isAllowedExamKey(examKey)) {
       errors.push(
-        `Baris ${row.__rowNumber}: jenis_peperiksaan '${examKey}' tidak sah. Guna TOV, ETR, AR1, AR2, AR3 dan seterusnya.`
+        `Baris ${row.__rowNumber}: jenis_peperiksaan '${examKey}' tidak sah. OTR dijana automatik dan tidak perlu diimport manual.`
       )
     }
 
@@ -1714,7 +1748,7 @@ export default function StudentScoresPage() {
         const tingkatan = selectedClassData.tingkatan || ''
         const matchedExamConfig = getMatchedExamConfig(examConfigData || [], tingkatan, examKey)
 
-        if ((examKey === 'TOV' || /^AR\d+$/.test(examKey)) && !matchedExamConfig?.id) {
+        if (isScoreExamKey(examKey) && !matchedExamConfig?.id) {
           const message = `Baris ${rowNumber}: konfigurasi peperiksaan '${examKey}' tidak ditemui untuk ${tingkatan}`
           if (csvImportPolicy === 'strict') {
             importErrors.push(message)
@@ -1989,11 +2023,20 @@ export default function StudentScoresPage() {
 
         if (!tingkatan || !kelas || !normalizedIc) return
 
-        const classIcKey = `${buildClassLookupKey(tingkatan, kelas)}__${normalizedIc}`
-        enrollmentByClassAndIc.set(classIcKey, {
+        const bundle = {
           enrollment,
           classRow,
           studentProfile,
+        }
+        const classAliases = [
+          kelas,
+          `${tingkatan} ${kelas}`,
+          getDisplayClassLabel(tingkatan, kelas, levelMappings),
+        ].filter(Boolean)
+
+        classAliases.forEach((classAlias) => {
+          const classIcKey = `${buildClassLookupKey(tingkatan, classAlias)}__${normalizedIc}`
+          enrollmentByClassAndIc.set(classIcKey, bundle)
         })
 
         const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
@@ -2001,11 +2044,7 @@ export default function StudentScoresPage() {
           enrollmentByGradeAndIc.set(gradeIcKey, [])
         }
 
-        enrollmentByGradeAndIc.get(gradeIcKey).push({
-          enrollment,
-          classRow,
-          studentProfile,
-        })
+        enrollmentByGradeAndIc.get(gradeIcKey).push(bundle)
       })
 
       const getActiveExamConfigForGrade = async (tingkatan, examKey) => {

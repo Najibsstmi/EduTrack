@@ -10,45 +10,68 @@ function normalizeSpaces(value) {
     .replace(/\s+/g, ' ')
 }
 
+function normalizeIcNumber(rawValue) {
+  const value = normalizeSpaces(rawValue)
+  const digits = value.replace(/\D/g, '')
+
+  if (value && /^[\d\s'-]+$/.test(value) && digits) {
+    return digits.padStart(12, '0')
+  }
+
+  return value.toUpperCase()
+}
+
+function getGradeNumber(rawValue) {
+  const value = normalizeSpaces(rawValue).toLowerCase()
+  const match =
+    value.match(/^(?:tingkatan|tahun|form|ting|f|t)?\s*(\d+)$/i) ||
+    value.match(/\b(?:tingkatan|tahun|form|ting|f|t)\s*(\d+)\b/i)
+
+  return match?.[1] || ''
+}
+
 function normalizeTingkatan(rawValue) {
   const value = normalizeSpaces(rawValue).toLowerCase()
+  const gradeNumber = getGradeNumber(rawValue)
 
   if (!value) return ''
 
-  // 1 / 2 / 3 / 4 / 5
-  if (/^\d+$/.test(value)) {
-    return `Tingkatan ${value}`
-  }
-
-  // t1, t2, t3...
-  const tMatch = value.match(/^t\s*(\d+)$/i)
-  if (tMatch) {
-    return `Tingkatan ${tMatch[1]}`
-  }
-
-  // f1, f2, f3...
-  const fMatch = value.match(/^f\s*(\d+)$/i)
-  if (fMatch) {
-    return `Tingkatan ${fMatch[1]}`
-  }
-
-  // form 1, form 2...
-  const formMatch = value.match(/^form\s*(\d+)$/i)
-  if (formMatch) {
-    return `Tingkatan ${formMatch[1]}`
-  }
-
-  // ting 1, tingkatan 1
-  const tingMatch = value.match(/^ting(?:katan)?\s*(\d+)$/i)
-  if (tingMatch) {
-    return `Tingkatan ${tingMatch[1]}`
+  if (gradeNumber) {
+    return `Tingkatan ${gradeNumber}`
   }
 
   return normalizeSpaces(rawValue)
 }
 
-function normalizeClassName(rawValue) {
-  return normalizeSpaces(rawValue).toLowerCase()
+function normalizeClassName(rawValue, tingkatan = '') {
+  let normalized = normalizeSpaces(rawValue)
+    .replace(/[_./-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+  const gradeNumber = getGradeNumber(tingkatan)
+  const aliases = [
+    normalizeSpaces(tingkatan).toLowerCase(),
+    gradeNumber,
+    gradeNumber ? `tingkatan ${gradeNumber}` : '',
+    gradeNumber ? `tahun ${gradeNumber}` : '',
+    gradeNumber ? `form ${gradeNumber}` : '',
+    gradeNumber ? `ting ${gradeNumber}` : '',
+    gradeNumber ? `f${gradeNumber}` : '',
+    gradeNumber ? `t${gradeNumber}` : '',
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+
+  aliases.forEach((alias) => {
+    if (normalized === alias) {
+      normalized = ''
+    } else if (normalized.startsWith(`${alias} `)) {
+      normalized = normalized.slice(alias.length).trim()
+    }
+  })
+
+  return normalized
 }
 
 function parseCsv(text) {
@@ -212,9 +235,16 @@ export default function StudentImportPage() {
 
     for (const item of classes) {
       const normalizedTingkatan = normalizeTingkatan(item.tingkatan)
-      const normalizedClass = normalizeClassName(item.class_name)
+      const classAliases = [
+        item.class_name,
+        `${item.tingkatan || ''} ${item.class_name || ''}`.trim(),
+        `${getGradeNumber(item.tingkatan)} ${item.class_name || ''}`.trim(),
+      ].filter(Boolean)
 
-      map.set(`${normalizedTingkatan}|||${normalizedClass}`, item)
+      classAliases.forEach((className) => {
+        const normalizedClass = normalizeClassName(className, normalizedTingkatan)
+        map.set(`${normalizedTingkatan}|||${normalizedClass}`, item)
+      })
     }
 
     return map
@@ -248,7 +278,7 @@ export default function StudentImportPage() {
 
       const row = {
         row_number: idx + 2,
-        ic_number: normalizeSpaces(cells[headerIndex.ic_number] || ''),
+        ic_number: normalizeIcNumber(cells[headerIndex.ic_number] || ''),
         full_name: normalizeSpaces(cells[headerIndex.full_name] || ''),
         gender: normalizeSpaces(cells[headerIndex.gender] || ''),
         tingkatan: normalizeTingkatan(rawTingkatan),
@@ -294,7 +324,7 @@ export default function StudentImportPage() {
         continue
       }
 
-      const classKey = `${normalizeTingkatan(row.tingkatan)}|||${normalizeClassName(row.class_name)}`
+      const classKey = `${normalizeTingkatan(row.tingkatan)}|||${normalizeClassName(row.class_name, row.tingkatan)}`
       const classRecord = classMap.get(classKey)
 
       if (!classRecord) {

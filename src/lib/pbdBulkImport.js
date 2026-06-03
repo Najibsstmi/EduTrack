@@ -38,6 +38,49 @@ export const normalizeSubjectMatchKey = (value) =>
     .toLocaleUpperCase('ms-MY')
     .replace(/\s+/g, ' ')
 
+const getGradeNumber = (value) => {
+  const normalized = normalizeSubjectMatchKey(value)
+  const match =
+    normalized.match(/^(?:TINGKATAN|TAHUN|FORM|F|T)?\s*(\d+)$/) ||
+    normalized.match(/\b(?:TINGKATAN|TAHUN|FORM|F|T)\s*(\d+)\b/)
+
+  return match?.[1] || ''
+}
+
+const normalizeGradeMatchKey = (value) => {
+  const gradeNumber = getGradeNumber(value)
+  return gradeNumber ? `TINGKATAN ${gradeNumber}` : normalizeSubjectMatchKey(value)
+}
+
+const normalizeClassMatchKey = (className, tingkatan = '') => {
+  let normalized = normalizeSubjectMatchKey(className)
+    .replace(/[_./-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const gradeNumber = getGradeNumber(tingkatan)
+  const aliases = [
+    normalizeSubjectMatchKey(tingkatan),
+    gradeNumber,
+    gradeNumber ? `TINGKATAN ${gradeNumber}` : '',
+    gradeNumber ? `TAHUN ${gradeNumber}` : '',
+    gradeNumber ? `FORM ${gradeNumber}` : '',
+    gradeNumber ? `F${gradeNumber}` : '',
+    gradeNumber ? `T${gradeNumber}` : '',
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+
+  aliases.forEach((alias) => {
+    if (normalized === alias) {
+      normalized = ''
+    } else if (normalized.startsWith(`${alias} `)) {
+      normalized = normalized.slice(alias.length).trim()
+    }
+  })
+
+  return normalized
+}
+
 export const parseCsvText = (text) => {
   const rows = []
   let currentRow = []
@@ -129,8 +172,8 @@ export const buildSubjectLookup = (subjects = []) => {
 const buildEnrollmentKey = ({ icNumber, className, tingkatan }) =>
   [
     normalizeSubjectMatchKey(icNumber),
-    normalizeSubjectMatchKey(className),
-    normalizeSubjectMatchKey(tingkatan),
+    normalizeClassMatchKey(className, tingkatan),
+    normalizeGradeMatchKey(tingkatan),
   ].join('__')
 
 export const buildEnrollmentLookup = (enrollments = [], classes = []) => {
@@ -142,15 +185,16 @@ export const buildEnrollmentLookup = (enrollments = [], classes = []) => {
     if (!classRow) return
 
     const icNumber = enrollment.student_profiles?.ic_number || ''
-    const className = classRow.class_name || ''
-    const displayClassName = `${classRow.tingkatan || ''} ${classRow.class_name || ''}`.trim()
     const tingkatan = classRow.tingkatan || ''
+    const classAliases = [
+      classRow.class_name || '',
+      `${classRow.tingkatan || ''} ${classRow.class_name || ''}`.trim(),
+    ].filter(Boolean)
     const payload = { enrollment, classRow }
 
-    lookup.set(buildEnrollmentKey({ icNumber, className, tingkatan }), payload)
-    if (displayClassName && displayClassName !== className) {
-      lookup.set(buildEnrollmentKey({ icNumber, className: displayClassName, tingkatan }), payload)
-    }
+    classAliases.forEach((className) => {
+      lookup.set(buildEnrollmentKey({ icNumber, className, tingkatan }), payload)
+    })
   })
 
   return lookup
