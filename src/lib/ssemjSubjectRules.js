@@ -131,6 +131,7 @@ export const shouldShowSubjectGpmp = ({
   examKey,
 }) => {
   if (!isSsemjUpperForm({ schoolInfo, tingkatan })) return true
+  if (!normalizeExamKey(examKey)) return true
   if (isEtrExam(examKey)) return true
 
   return isCoreAcademicSubject(subjectName) || isPjpkSubject(subjectName)
