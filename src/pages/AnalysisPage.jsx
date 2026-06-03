@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
@@ -14,6 +14,7 @@ import {
 import { normalizeSubjectRows } from '../lib/subjectLabels.js'
 import {
   getSubjectRuleName,
+  shouldCountInSchoolGps,
   shouldShowSubjectGpmp,
 } from '../lib/ssemjSubjectRules.js'
 
@@ -26,6 +27,29 @@ const ChevronLeftIcon = () => (
 const getExamMetric = (analysis, examKey) => {
   const key = String(examKey || '').toUpperCase()
   return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
+}
+
+const normalizeAnalysisExamKey = (value) =>
+  String(value || '').trim().toUpperCase()
+
+const getLevelNumber = (value) => {
+  const match = String(value || '').match(/\d+/)
+  return match ? Number(match[0]) : null
+}
+
+const isSameLevel = (a, b) => {
+  const textA = String(a || '').trim().toLowerCase()
+  const textB = String(b || '').trim().toLowerCase()
+  if (textA && textA === textB) return true
+
+  const numberA = getLevelNumber(a)
+  const numberB = getLevelNumber(b)
+  return numberA !== null && numberA === numberB
+}
+
+const isTargetExamKey = (value) => {
+  const key = normalizeAnalysisExamKey(value)
+  return key === 'ETR' || key.startsWith('OTR')
 }
 
 const getDefaultExamOrder = (examKey) => {
@@ -130,6 +154,93 @@ const normalizeMetric = (metric, tingkatan, gradeScales) => {
   }
 }
 
+const getMetricPoint = (metric, tingkatan, gradeScales) => {
+  const directPoint = metric?.grade_point
+  if (directPoint !== null && directPoint !== undefined && directPoint !== '' && !Number.isNaN(Number(directPoint))) {
+    return Number(directPoint)
+  }
+
+  return getCurrentGradePoint(metric?.grade_name, tingkatan, gradeScales)
+}
+
+const getMetricForExam = ({
+  scores,
+  targets,
+  enrollmentId,
+  subjectId,
+  examKey,
+  tingkatan,
+  gradeScales,
+}) => {
+  const normalizedExamKey = normalizeAnalysisExamKey(examKey)
+  const sourceRow = isTargetExamKey(normalizedExamKey)
+    ? (targets || []).find(
+        (target) =>
+          String(target.student_enrollment_id) === String(enrollmentId) &&
+          String(target.subject_id) === String(subjectId) &&
+          normalizeAnalysisExamKey(target.target_key) === normalizedExamKey
+      )
+    : (scores || []).find(
+        (score) =>
+          String(score.student_enrollment_id) === String(enrollmentId) &&
+          String(score.subject_id) === String(subjectId) &&
+          normalizeAnalysisExamKey(score.exam_key) === normalizedExamKey
+      )
+
+  if (!sourceRow) {
+    return { mark: null, grade_name: null, grade_point: null }
+  }
+
+  const rawMetric = isTargetExamKey(normalizedExamKey)
+    ? {
+        mark: sourceRow.target_mark,
+        grade_name: sourceRow.grade_name,
+        grade_point: sourceRow.grade_point,
+      }
+    : {
+        mark: sourceRow.mark,
+        grade_name: sourceRow.grade_name,
+        grade_point: sourceRow.grade_point,
+      }
+
+  const metric = normalizeMetric(rawMetric, tingkatan, gradeScales)
+
+  return {
+    ...metric,
+    grade_point: getMetricPoint(metric, tingkatan, gradeScales),
+  }
+}
+
+const getGradeBand = (grade) => {
+  const value = String(grade || '').trim().toUpperCase()
+  if (['A+', 'A', 'A-'].includes(value)) return 'A+/A'
+  if (['B+', 'B', 'B-'].includes(value)) return 'B'
+  if (['C+', 'C'].includes(value)) return 'C'
+  if (value === 'D') return 'D'
+  if (['E', 'F', 'G'].includes(value)) return 'E/G'
+  return ''
+}
+
+const average = (values = []) => {
+  const validValues = values
+    .filter((value) => value !== null && value !== undefined && !Number.isNaN(Number(value)))
+    .map(Number)
+
+  if (!validValues.length) return null
+
+  return validValues.reduce((sum, value) => sum + value, 0) / validValues.length
+}
+
+const formatDecimal = (value, digits = 2) =>
+  value === null || value === undefined || Number.isNaN(Number(value))
+    ? '-'
+    : Number(value).toFixed(digits)
+
+const formatPercent = (value) =>
+  value === null || value === undefined || Number.isNaN(Number(value))
+    ? '-'
+    : `${Number(value).toFixed(1)}%`
+
 export default function AnalysisPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -144,12 +255,14 @@ export default function AnalysisPage() {
   const [scores, setScores] = useState([])
   const [targets, setTargets] = useState([])
   const [gradeScales, setGradeScales] = useState([])
+  const [examConfigs, setExamConfigs] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
   const [levelMappings, setLevelMappings] = useState([])
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('all')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedClassExamKey, setSelectedClassExamKey] = useState('')
 
   const dashboardPath = getDashboardPath(profile)
   const isSubjectPerformancePage = location.pathname === '/analysis/subject'
@@ -162,6 +275,7 @@ export default function AnalysisPage() {
   useEffect(() => {
     setSelectedClassId('all')
     setSelectedSubjectId('')
+    setSelectedClassExamKey('')
   }, [selectedTingkatan])
 
   const loadInitialData = async () => {
@@ -313,6 +427,7 @@ export default function AnalysisPage() {
     setScores(scoresData || [])
     setTargets(targetsData || [])
     setGradeScales(gradeScalesData || [])
+    setExamConfigs(examConfigRows || [])
     setLevelMappings(loadedLevelMappings)
     setSetupConfig(
       normalizeSetupConfigWithExamConfigs(setupConfigRows?.[0] || null, examConfigRows || [])
@@ -346,6 +461,297 @@ export default function AnalysisPage() {
         })
       )
   }, [classes, selectedTingkatan])
+
+  const classExamOptions = useMemo(() => {
+    return (examConfigs || [])
+      .filter((exam) => exam?.is_active === true)
+      .filter((exam) => isSameLevel(exam?.grade_label, selectedTingkatan))
+      .map((exam) => ({
+        key: normalizeAnalysisExamKey(exam.exam_key),
+        name: exam.exam_name || exam.exam_key,
+        order: Number.isFinite(Number(exam.exam_order))
+          ? Number(exam.exam_order)
+          : getDefaultExamOrder(exam.exam_key),
+      }))
+      .filter((exam) => exam.key)
+      .sort((a, b) => {
+        const orderDiff = a.order - b.order
+        if (orderDiff !== 0) return orderDiff
+        return String(a.name || '').localeCompare(String(b.name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      })
+  }, [examConfigs, selectedTingkatan])
+
+  useEffect(() => {
+    if (isSubjectPerformancePage) return
+    if (!availableClasses.length) {
+      if (selectedClassId !== 'all') setSelectedClassId('all')
+      return
+    }
+
+    const selectedClassStillValid = availableClasses.some(
+      (item) => String(item.id) === String(selectedClassId)
+    )
+
+    if (!selectedClassStillValid || selectedClassId === 'all') {
+      setSelectedClassId(String(availableClasses[0].id))
+    }
+  }, [availableClasses, isSubjectPerformancePage, selectedClassId])
+
+  useEffect(() => {
+    if (isSubjectPerformancePage) return
+    if (!classExamOptions.length) {
+      if (selectedClassExamKey) setSelectedClassExamKey('')
+      return
+    }
+
+    const selectedExamStillValid = classExamOptions.some(
+      (exam) => exam.key === normalizeAnalysisExamKey(selectedClassExamKey)
+    )
+
+    if (!selectedExamStillValid) {
+      setSelectedClassExamKey(classExamOptions[0].key)
+    }
+  }, [classExamOptions, isSubjectPerformancePage, selectedClassExamKey])
+
+  const selectedClassData = useMemo(
+    () =>
+      availableClasses.find((item) => String(item.id) === String(selectedClassId)) ||
+      null,
+    [availableClasses, selectedClassId]
+  )
+
+  const classStudents = useMemo(() => {
+    if (!selectedClassData) return []
+
+    return studentRows
+      .filter((student) => String(student.class_id) === String(selectedClassData.id))
+      .sort((a, b) =>
+        String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      )
+  }, [studentRows, selectedClassData])
+
+  const classSubjectRows = useMemo(() => {
+    if (!selectedTingkatan || !selectedClassExamKey) {
+      return { chartSubjects: [], gpsSubjects: [] }
+    }
+
+    const baseSubjects = (subjects || [])
+      .filter((subject) => subject.tingkatan === selectedTingkatan)
+      .sort((a, b) =>
+        String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      )
+
+    return {
+      chartSubjects: baseSubjects.filter((subject) =>
+        shouldShowSubjectGpmp({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: selectedClassExamKey,
+        })
+      ),
+      gpsSubjects: baseSubjects.filter((subject) =>
+        shouldCountInSchoolGps({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: selectedClassExamKey,
+        })
+      ),
+    }
+  }, [subjects, selectedTingkatan, selectedClassExamKey, schoolInfo])
+
+  const getStudentSubjectResults = useCallback((student, subjectRows) =>
+    (subjectRows || []).map((subject) => ({
+      subject,
+      metric: getMetricForExam({
+        scores,
+        targets,
+        enrollmentId: student.enrollment_id,
+        subjectId: subject.id,
+        examKey: selectedClassExamKey,
+        tingkatan: student.tingkatan,
+        gradeScales,
+      }),
+    })),
+    [scores, targets, selectedClassExamKey, gradeScales]
+  )
+
+  const classStudentRankings = useMemo(() => {
+    return classStudents
+      .map((student) => {
+        const results = getStudentSubjectResults(student, classSubjectRows.gpsSubjects)
+        const scoredResults = results.filter(
+          ({ metric }) =>
+            metric?.grade_point !== null &&
+            metric?.grade_point !== undefined &&
+            !Number.isNaN(Number(metric.grade_point))
+        )
+        const gradePoints = scoredResults.map(({ metric }) => Number(metric.grade_point))
+        const grades = scoredResults.map(({ metric }) => metric.grade_name)
+        const gp = average(gradePoints)
+        const bilA = grades.filter((grade) =>
+          ['A+', 'A', 'A-'].includes(String(grade || '').trim().toUpperCase())
+        ).length
+        const bilLulus = grades.filter(isPassGrade).length
+
+        return {
+          ...student,
+          gp,
+          bilA,
+          bilLulus,
+          scoredSubjectCount: scoredResults.length,
+        }
+      })
+      .sort((a, b) => {
+        if (a.gp === null && b.gp !== null) return 1
+        if (a.gp !== null && b.gp === null) return -1
+        if (a.gp !== null && b.gp !== null && a.gp !== b.gp) return a.gp - b.gp
+        if (a.bilA !== b.bilA) return b.bilA - a.bilA
+        return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      })
+      .map((student, index) => ({ ...student, rank: index + 1 }))
+  }, [classStudents, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+
+  const classSubjectPerformanceRows = useMemo(() => {
+    return classSubjectRows.chartSubjects
+      .map((subject) => {
+        const metrics = classStudents.map((student) =>
+          getMetricForExam({
+            scores,
+            targets,
+            enrollmentId: student.enrollment_id,
+            subjectId: subject.id,
+            examKey: selectedClassExamKey,
+            tingkatan: student.tingkatan,
+            gradeScales,
+          })
+        )
+        const scoredMetrics = metrics.filter(
+          (metric) =>
+            metric?.grade_point !== null &&
+            metric?.grade_point !== undefined &&
+            !Number.isNaN(Number(metric.grade_point))
+        )
+        const gp = average(scoredMetrics.map((metric) => metric.grade_point))
+        const passCount = scoredMetrics.filter((metric) => isPassGrade(metric.grade_name)).length
+        const passRate = scoredMetrics.length ? (passCount / scoredMetrics.length) * 100 : null
+
+        return {
+          subject_id: subject.id,
+          subject_name: subject.subject_name || '-',
+          gp,
+          passRate,
+          scoredCount: scoredMetrics.length,
+        }
+      })
+      .filter((row) => row.scoredCount > 0)
+  }, [classSubjectRows.chartSubjects, classStudents, scores, targets, selectedClassExamKey, gradeScales])
+
+  const classGradeDistribution = useMemo(() => {
+    const counts = { 'A+/A': 0, B: 0, C: 0, D: 0, 'E/G': 0 }
+
+    classStudents.forEach((student) => {
+      getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
+        const band = getGradeBand(metric?.grade_name)
+        if (band) counts[band] += 1
+      })
+    })
+
+    return counts
+  }, [classStudents, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+
+  const classRankingRows = useMemo(() => {
+    return availableClasses
+      .map((classItem) => {
+        const studentsInClass = studentRows.filter(
+          (student) => String(student.class_id) === String(classItem.id)
+        )
+        const points = []
+
+        studentsInClass.forEach((student) => {
+          getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
+            if (
+              metric?.grade_point !== null &&
+              metric?.grade_point !== undefined &&
+              !Number.isNaN(Number(metric.grade_point))
+            ) {
+              points.push(Number(metric.grade_point))
+            }
+          })
+        })
+
+        return {
+          id: classItem.id,
+          class_name: classItem.class_name,
+          gps: average(points),
+          scoredCount: points.length,
+        }
+      })
+      .filter((row) => row.scoredCount > 0)
+      .sort((a, b) => {
+        if (a.gps !== b.gps) return a.gps - b.gps
+        return String(a.class_name || '').localeCompare(String(b.class_name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+      })
+      .map((row, index) => ({ ...row, rank: index + 1 }))
+  }, [availableClasses, studentRows, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+
+  const selectedClassRanking = useMemo(
+    () =>
+      classRankingRows.find((row) => String(row.id) === String(selectedClassData?.id)) ||
+      null,
+    [classRankingRows, selectedClassData]
+  )
+
+  const classSummary = useMemo(() => {
+    const gpsPoints = []
+    const marks = []
+    let passCount = 0
+    let gradedCount = 0
+
+    classStudents.forEach((student) => {
+      getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
+        if (
+          metric?.grade_point !== null &&
+          metric?.grade_point !== undefined &&
+          !Number.isNaN(Number(metric.grade_point))
+        ) {
+          gpsPoints.push(Number(metric.grade_point))
+          gradedCount += 1
+          if (isPassGrade(metric.grade_name)) passCount += 1
+        }
+
+        if (metric?.mark !== null && metric?.mark !== undefined && !Number.isNaN(Number(metric.mark))) {
+          marks.push(Number(metric.mark))
+        }
+      })
+    })
+
+    const studentsWithMarks = classStudentRankings.filter(
+      (student) => student.scoredSubjectCount > 0
+    ).length
+
+    return {
+      totalStudents: classStudents.length,
+      studentsWithMarks,
+      gps: average(gpsPoints),
+      passRate: gradedCount ? (passCount / gradedCount) * 100 : null,
+      classRank: selectedClassRanking?.rank || null,
+      classRankTotal: classRankingRows.length,
+      highest: marks.length ? Math.max(...marks) : null,
+      averageMark: average(marks),
+    }
+  }, [classStudents, classSubjectRows.gpsSubjects, classStudentRankings, selectedClassRanking, classRankingRows, getStudentSubjectResults])
 
   const subjectGpmpSubjects = useMemo(
     () =>
@@ -680,6 +1086,254 @@ export default function AnalysisPage() {
     return <div className="p-6">Loading {pageTitle}...</div>
   }
 
+  if (!isSubjectPerformancePage) {
+    const subjectGpRows = [...classSubjectPerformanceRows]
+      .filter((row) => row.gp !== null)
+      .sort((a, b) => a.gp - b.gp)
+      .map((row) => ({
+        label: row.subject_name,
+        value: row.gp,
+        meta: `${row.scoredCount} markah`,
+      }))
+
+    const subjectPassRows = [...classSubjectPerformanceRows]
+      .filter((row) => row.passRate !== null)
+      .sort((a, b) => a.passRate - b.passRate)
+      .map((row) => ({
+        label: row.subject_name,
+        value: row.passRate,
+        meta: `${row.scoredCount} markah`,
+      }))
+
+    const selectedClassExamLabel =
+      classExamOptions.find((exam) => exam.key === selectedClassExamKey)?.name ||
+      selectedClassExamKey ||
+      '-'
+
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  EduTrack
+                </p>
+                <h1 className="text-3xl font-bold text-slate-900">Prestasi Kelas</h1>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => navigate('/analysis/student')}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Prestasi Murid
+                </button>
+                <button
+                  onClick={() => navigate('/analysis/subject')}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Prestasi Subjek (GPMP)
+                </button>
+                <button
+                  onClick={() => navigate(dashboardPath)}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-1.5"
+                >
+                  <ChevronLeftIcon />
+                  <span>Dashboard</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+            <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Penapis Prestasi</h2>
+
+            <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-3">
+              <select
+                value={selectedTingkatan}
+                onChange={(e) => setSelectedTingkatan(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
+              >
+                {availableTingkatan.map((item) => (
+                  <option key={item} value={item}>
+                    {getDisplayLevel(item, levelMappings)}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
+              >
+                {availableClasses.length === 0 ? (
+                  <option value="all">Tiada kelas</option>
+                ) : (
+                  availableClasses.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.class_name}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <select
+                value={selectedClassExamKey}
+                onChange={(e) => setSelectedClassExamKey(e.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2.5 md:px-4 md:py-3 text-sm w-full"
+              >
+                {classExamOptions.length === 0 ? (
+                  <option value="">Tiada peperiksaan aktif</option>
+                ) : (
+                  classExamOptions.map((exam) => (
+                    <option key={exam.key} value={exam.key}>
+                      {exam.name || exam.key}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          </div>
+
+          {!selectedClassData || !selectedClassExamKey ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-slate-500">
+              Tiada data kelas atau peperiksaan aktif untuk paparan ini.
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-5">
+                <Card title="Bil Murid" value={classSummary.totalStudents} />
+                <Card title="Ada Markah" value={classSummary.studentsWithMarks} />
+                <Card title="GPS Kelas" value={formatDecimal(classSummary.gps)} />
+                <Card title="% Lulus" value={formatPercent(classSummary.passRate)} />
+                <Card
+                  title="Kedudukan"
+                  value={
+                    classSummary.classRank
+                      ? `${classSummary.classRank} / ${classSummary.classRankTotal}`
+                      : '-'
+                  }
+                />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <HorizontalBarChart
+                  title="GP Setiap Subjek"
+                  rows={subjectGpRows}
+                  valueFormatter={(value) => formatDecimal(value)}
+                  emptyText="Tiada data GP subjek untuk peperiksaan ini."
+                  tone="indigo"
+                />
+                <HorizontalBarChart
+                  title="Peratus Lulus Setiap Subjek"
+                  rows={subjectPassRows}
+                  valueFormatter={(value) => formatPercent(value)}
+                  maxValue={100}
+                  emptyText="Tiada data peratus lulus subjek untuk peperiksaan ini."
+                  tone="emerald"
+                />
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm lg:col-span-2">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg md:text-xl font-semibold text-slate-900">Kedudukan Murid</h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {selectedClassData.class_name} · {selectedClassExamLabel}
+                      </p>
+                    </div>
+                    <div className="text-xs md:text-sm text-slate-500">
+                      Rekod: <strong>{classStudentRankings.length}</strong>
+                    </div>
+                  </div>
+
+                  {classStudentRankings.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                      Tiada markah murid untuk peperiksaan ini.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto -mx-4 md:mx-0">
+                      <table className="min-w-full border-collapse text-xs md:text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="border-b px-3 py-3 text-left font-semibold">Kedudukan</th>
+                            <th className="border-b px-3 py-3 text-left font-semibold">Nama</th>
+                            <th className="border-b px-3 py-3 text-left font-semibold">GP Murid</th>
+                            <th className="border-b px-3 py-3 text-left font-semibold">Bil A</th>
+                            <th className="border-b px-3 py-3 text-left font-semibold">Bil Lulus</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {classStudentRankings.map((student) => (
+                            <tr key={student.enrollment_id} className="border-b border-slate-100">
+                              <td className="px-3 py-3 font-semibold text-slate-900">{student.rank}</td>
+                              <td className="px-3 py-3 font-medium text-slate-800">{student.full_name}</td>
+                              <td className="px-3 py-3">{formatDecimal(student.gp)}</td>
+                              <td className="px-3 py-3">{student.bilA}</td>
+                              <td className="px-3 py-3">{student.bilLulus}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+                    <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Taburan Gred Kelas</h2>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(classGradeDistribution).map(([grade, count]) => (
+                        <div key={grade} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-xs font-semibold text-slate-500">{grade}</div>
+                          <div className="mt-2 text-2xl font-bold text-slate-900">{count}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+                    <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Kedudukan Kelas Dalam Tingkatan</h2>
+                    {classRankingRows.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+                        Data belum mencukupi untuk ranking kelas.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {classRankingRows.map((row) => (
+                          <div
+                            key={row.id}
+                            className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+                              String(row.id) === String(selectedClassData.id)
+                                ? 'border-blue-200 bg-blue-50'
+                                : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">
+                                {row.rank}. {row.class_name}
+                              </div>
+                              <div className="text-xs text-slate-500">{row.scoredCount} markah</div>
+                            </div>
+                            <div className="text-sm font-bold text-slate-900">
+                              GPS {formatDecimal(row.gps)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -899,6 +1553,73 @@ function Card({ title, value }) {
     <div className={`rounded-lg border ${colors.bg} ${colors.border} p-4 md:p-5 shadow-sm`}>
       <div className={`text-xs md:text-sm ${colors.text} font-medium`}>{title}</div>
       <div className={`mt-2 text-xl md:text-2xl font-bold ${colors.value}`}>{value}</div>
+    </div>
+  )
+}
+
+function HorizontalBarChart({
+  title,
+  rows,
+  valueFormatter,
+  maxValue,
+  emptyText,
+  tone = 'indigo',
+}) {
+  const colors = {
+    indigo: 'bg-indigo-600',
+    emerald: 'bg-emerald-600',
+  }
+  const barColor = colors[tone] || colors.indigo
+  const calculatedMax =
+    maxValue ||
+    Math.max(
+      ...rows
+        .map((row) => Number(row.value))
+        .filter((value) => !Number.isNaN(value)),
+      1
+    )
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
+      <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">{title}</h2>
+
+      {!rows.length ? (
+        <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rows.map((row) => {
+            const numericValue = Number(row.value)
+            const width = Math.max(
+              4,
+              Math.min(100, calculatedMax ? (numericValue / calculatedMax) * 100 : 0)
+            )
+
+            return (
+              <div key={row.label} className="space-y-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="min-w-0 font-semibold text-slate-800">
+                    <span className="block truncate">{row.label}</span>
+                    {row.meta ? (
+                      <span className="text-xs font-medium text-slate-500">{row.meta}</span>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 font-bold text-slate-900">
+                    {valueFormatter(row.value)}
+                  </div>
+                </div>
+                <div className="h-3 rounded-full bg-slate-100">
+                  <div
+                    className={`h-3 rounded-full ${barColor}`}
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
