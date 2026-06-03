@@ -12,6 +12,10 @@ import {
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
 import { normalizeSubjectRows } from '../lib/subjectLabels.js'
+import {
+  getSubjectRuleName,
+  shouldShowSubjectGpmp,
+} from '../lib/ssemjSubjectRules.js'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -132,6 +136,7 @@ export default function AnalysisPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [schoolInfo, setSchoolInfo] = useState(null)
 
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -197,6 +202,7 @@ export default function AnalysisPage() {
       { data: targetsData, error: targetsError },
       { data: gradeScalesData, error: gradeScalesError },
       { data: setupConfigRows, error: setupConfigError },
+      { data: schoolData, error: schoolError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -256,6 +262,12 @@ export default function AnalysisPage() {
         .order('updated_at', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(1),
+
+      supabase
+        .from('schools')
+        .select('id, school_name, school_code, school_type')
+        .eq('id', schoolId)
+        .maybeSingle(),
     ])
 
     if (classesError) console.error(classesError)
@@ -265,6 +277,7 @@ export default function AnalysisPage() {
     if (targetsError) console.error(targetsError)
     if (gradeScalesError) console.error(gradeScalesError)
     if (setupConfigError) console.error(setupConfigError)
+    if (schoolError) console.error(schoolError)
 
     const currentAcademicYear =
       setupConfigRows?.[0]?.current_academic_year || currentYear
@@ -294,6 +307,7 @@ export default function AnalysisPage() {
     }))
 
     setClasses(classesData || [])
+    setSchoolInfo(schoolData || null)
     setSubjects(normalizeSubjectRows(subjectsData))
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
@@ -333,15 +347,54 @@ export default function AnalysisPage() {
       )
   }, [classes, selectedTingkatan])
 
+  const subjectGpmpSubjects = useMemo(
+    () =>
+      subjects.filter((subject) =>
+        shouldShowSubjectGpmp({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+        })
+      ),
+    [subjects, schoolInfo]
+  )
+
+  const examSubjectIdSet = useMemo(
+    () => new Set(subjectGpmpSubjects.map((subject) => String(subject.id))),
+    [subjectGpmpSubjects]
+  )
+
+  const examScores = useMemo(
+    () => scores.filter((score) => examSubjectIdSet.has(String(score.subject_id))),
+    [scores, examSubjectIdSet]
+  )
+
+  const examTargets = useMemo(
+    () => targets.filter((target) => examSubjectIdSet.has(String(target.subject_id))),
+    [targets, examSubjectIdSet]
+  )
+
   const availableSubjects = useMemo(() => {
-    return subjects
+    return subjectGpmpSubjects
       .filter((s) => s.tingkatan === selectedTingkatan)
       .sort((a, b) =>
         String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'ms', {
           sensitivity: 'base',
         })
       )
-  }, [subjects, selectedTingkatan])
+  }, [subjectGpmpSubjects, selectedTingkatan])
+
+  useEffect(() => {
+    if (!selectedSubjectId) return
+
+    const subjectStillAllowed = availableSubjects.some(
+      (subject) => String(subject.id) === String(selectedSubjectId)
+    )
+
+    if (!subjectStillAllowed) {
+      setSelectedSubjectId('')
+    }
+  }, [availableSubjects, selectedSubjectId])
 
   const filteredStudents = useMemo(() => {
     let result = [...studentRows]
@@ -413,7 +466,7 @@ export default function AnalysisPage() {
       filteredStudents.map((student) => student.enrollment_id)
     )
 
-    ;(scores || [])
+    ;(examScores || [])
       .filter(
         (score) =>
           (!selectedSubjectId || score.subject_id === selectedSubjectId) &&
@@ -423,7 +476,7 @@ export default function AnalysisPage() {
         addExam({ key: score.exam_key, name: score.exam_key })
       })
 
-    ;(targets || [])
+    ;(examTargets || [])
       .filter(
         (target) =>
           (!selectedSubjectId || target.subject_id === selectedSubjectId) &&
@@ -441,7 +494,7 @@ export default function AnalysisPage() {
         sensitivity: 'base',
       })
     })
-  }, [setupConfig, selectedTingkatan, filteredStudents, scores, targets, selectedSubjectId])
+  }, [setupConfig, selectedTingkatan, filteredStudents, examScores, examTargets, selectedSubjectId])
 
   const gradeColumns = useMemo(() => {
     return (gradeScales || [])
@@ -468,13 +521,13 @@ export default function AnalysisPage() {
     if (!selectedSubjectId) return []
 
     return filteredStudents.map((student) => {
-      const studentScores = scores.filter(
+      const studentScores = examScores.filter(
         (s) =>
           s.student_enrollment_id === student.enrollment_id &&
           s.subject_id === selectedSubjectId
       )
 
-      const studentTargets = targets.filter(
+      const studentTargets = examTargets.filter(
         (t) =>
           t.student_enrollment_id === student.enrollment_id &&
           t.subject_id === selectedSubjectId
@@ -511,7 +564,7 @@ export default function AnalysisPage() {
         analysis,
       }
     })
-  }, [filteredStudents, scores, targets, selectedSubjectId, analysisColumns, gradeScales])
+  }, [filteredStudents, examScores, examTargets, selectedSubjectId, analysisColumns, gradeScales])
 
   const summaryExamKey = useMemo(() => {
     const firstRealExam = analysisColumns.find((exam) => {

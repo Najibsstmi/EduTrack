@@ -4,6 +4,10 @@ import {
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
+import {
+  getSubjectRuleName,
+  shouldShowSubjectGpmp,
+} from '../lib/ssemjSubjectRules.js'
 
 const DEFAULT_GRADE_KEYS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
 
@@ -126,6 +130,7 @@ const buildExamList = ({ setupConfig, examConfigs, currentTingkatan, scores, tar
 
 export default function ClassSubjectAnalysisPanel({
   schoolId,
+  schoolInfo = null,
   classId,
   subjectId,
   refreshKey = 0,
@@ -165,6 +170,18 @@ export default function ClassSubjectAnalysisPanel({
           setLoading(false)
           return
         }
+
+        const schoolResult = schoolInfo
+          ? { data: schoolInfo, error: null }
+          : await supabase
+              .from('schools')
+              .select('id, school_name, school_code, school_type')
+              .eq('id', schoolId)
+              .maybeSingle()
+
+        if (schoolResult.error) throw schoolResult.error
+
+        const effectiveSchoolInfo = schoolResult.data || schoolInfo
 
         const { data: setupConfigRows, error: setupConfigError } = await supabase
           .from('school_setup_configs')
@@ -231,12 +248,23 @@ export default function ClassSubjectAnalysisPanel({
         // 4. Tentukan sama ada subjek ini selective atau core.
         const { data: subjectRow, error: subjectError } = await supabase
           .from('subjects')
-          .select('id, subject_type, is_core')
+          .select('id, subject_name, tingkatan, subject_type, is_core')
           .eq('school_id', schoolId)
           .eq('id', subjectId)
           .single()
 
         if (subjectError) throw subjectError
+
+        if (
+          !shouldShowSubjectGpmp({
+            schoolInfo: effectiveSchoolInfo,
+            tingkatan: currentTingkatan,
+            subjectName: getSubjectRuleName(subjectRow),
+          })
+        ) {
+          setRows([])
+          return
+        }
 
         const isSelective =
           String(subjectRow?.subject_type || '').trim().toLowerCase() === 'selective'
@@ -431,7 +459,7 @@ export default function ClassSubjectAnalysisPanel({
     }
 
     loadAnalysis()
-  }, [schoolId, classId, subjectId, refreshKey])
+  }, [schoolId, schoolInfo, classId, subjectId, refreshKey])
 
   if (!schoolId || !classId || !subjectId) return null
 

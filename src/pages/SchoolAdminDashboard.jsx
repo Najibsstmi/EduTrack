@@ -17,6 +17,10 @@ import {
   getDisplayLevel,
 } from '../lib/levelLabels'
 import { formatSubjectName } from '../lib/subjectLabels.js'
+import {
+  canInputExamMark,
+  getSubjectRuleName,
+} from '../lib/ssemjSubjectRules.js'
 
 const TABS = ['pending', 'approved', 'rejected', 'all']
 const COMPLETION_GRADE_GROUPS = [
@@ -330,6 +334,7 @@ export default function SchoolAdminDashboard() {
     const [
       { data: classRows, error: classError },
       { data: subjectRows, error: subjectError },
+      { data: matrixSchoolInfo, error: matrixSchoolError },
       { data: enrollmentRows, error: enrollmentError },
       { data: scoreRows, error: scoreError },
       { data: targetRows, error: targetError },
@@ -350,6 +355,12 @@ export default function SchoolAdminDashboard() {
         .eq('is_active', true)
         .order('tingkatan', { ascending: true })
         .order('subject_name', { ascending: true }),
+
+      supabase
+        .from('schools')
+        .select('id, school_name, school_code, school_type')
+        .eq('id', schoolId)
+        .maybeSingle(),
 
       supabase
         .from('student_enrollments')
@@ -387,6 +398,7 @@ export default function SchoolAdminDashboard() {
 
     if (classError) console.error('Class matrix error:', classError)
     if (subjectError) console.error('Subject matrix error:', subjectError)
+    if (matrixSchoolError) console.error('School matrix error:', matrixSchoolError)
     if (enrollmentError) console.error('Enrollment matrix error:', enrollmentError)
     if (scoreError) console.error('Score matrix error:', scoreError)
     if (targetError) console.error('Target matrix error:', targetError)
@@ -422,7 +434,15 @@ export default function SchoolAdminDashboard() {
     }
 
     const activeSubjects = (subjectRows || []).filter(
-      (item) => item && item.is_active !== false
+      (item) =>
+        item &&
+        item.is_active !== false &&
+        canInputExamMark({
+          schoolInfo: matrixSchoolInfo || schoolInfo,
+          tingkatan: item?.tingkatan,
+          subjectName: getSubjectRuleName(item),
+          examKey: selectedExamKey,
+        })
     )
 
     const subjectNames = Array.from(

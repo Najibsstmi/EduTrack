@@ -19,6 +19,10 @@ import {
 } from '../lib/levelLabels'
 import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 import { compareStudentsByGenderThenName } from '../lib/studentSorting.js'
+import {
+  canInputExamMark,
+  getSubjectRuleName,
+} from '../lib/ssemjSubjectRules.js'
 
 const REQUIRED_HEADERS = [
   'nama_murid',
@@ -582,6 +586,7 @@ export default function StudentScoresPage() {
   const bulkImportResultRef = useRef(null)
 
   const [profile, setProfile] = useState(null)
+  const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [gradeScales, setGradeScales] = useState([])
   const [levelMappings, setLevelMappings] = useState([])
@@ -678,6 +683,19 @@ export default function StudentScoresPage() {
     [activeExamOptions, selectedExam]
   )
 
+  const inputExamSubjects = useMemo(
+    () =>
+      subjects.filter((subject) =>
+        canInputExamMark({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: selectedExam,
+        })
+      ),
+    [subjects, schoolInfo, selectedExam]
+  )
+
   const loadActiveExamOptions = async (
     schoolId,
     gradeLabel,
@@ -731,8 +749,10 @@ export default function StudentScoresPage() {
   }
 
   const selectedSubjectData = useMemo(
-    () => subjects.find((item) => String(item.id) === String(selectedSubject)) || null,
-    [subjects, selectedSubject]
+    () =>
+      inputExamSubjects.find((item) => String(item.id) === String(selectedSubject)) ||
+      null,
+    [inputExamSubjects, selectedSubject]
   )
 
   const selectedClassLabel = getDisplayClassLabel(
@@ -937,11 +957,11 @@ export default function StudentScoresPage() {
     const normalizedSelectedGrade = normalizeGradeLabel(selectedGradeLabel)
 
     const filteredSubjects = normalizedSelectedGrade
-      ? subjects.filter(
+      ? inputExamSubjects.filter(
           (subject) =>
             normalizeGradeLabel(subject.tingkatan) === normalizedSelectedGrade
         )
-      : subjects
+      : inputExamSubjects
 
     return filteredSubjects.filter(
       (subject, index, arr) =>
@@ -952,7 +972,7 @@ export default function StudentScoresPage() {
             normalizeCompareText(subject.subject_name)
         )
     )
-  }, [subjects, selectedGradeLabel])
+  }, [inputExamSubjects, selectedGradeLabel])
 
   useEffect(() => {
     if (!selectedSubject) return
@@ -967,9 +987,9 @@ export default function StudentScoresPage() {
   }, [uniqueSubjects, selectedSubject])
 
   useEffect(() => {
-    if (!prefillSubjectName || !selectedClassData || !subjects.length) return
+    if (!prefillSubjectName || !selectedClassData || !inputExamSubjects.length) return
 
-    const matchedSubject = subjects.find(
+    const matchedSubject = inputExamSubjects.find(
       (item) =>
         normalizeCompareText(item.subject_name) === normalizeCompareText(prefillSubjectName) &&
         normalizeGradeLabel(item.tingkatan) === normalizeGradeLabel(selectedClassData.tingkatan)
@@ -978,7 +998,7 @@ export default function StudentScoresPage() {
     if (matchedSubject) {
       setSelectedSubject(matchedSubject.id)
     }
-  }, [prefillSubjectName, subjects, selectedClassData])
+  }, [prefillSubjectName, inputExamSubjects, selectedClassData])
 
   useEffect(() => {
     if (showIncompleteOnlyFromUrl) {
@@ -1037,6 +1057,18 @@ export default function StudentScoresPage() {
     }
 
     setProfile(profileData)
+
+    const { data: schoolData, error: schoolError } = await supabase
+      .from('schools')
+      .select('id, school_name, school_code, school_type')
+      .eq('id', profileData.school_id)
+      .maybeSingle()
+
+    if (schoolError) {
+      console.error(schoolError)
+    }
+
+    setSchoolInfo(schoolData || null)
 
     const { data: setupRows, error: setupError } = await supabase
       .from('school_setup_configs')
@@ -1190,9 +1222,15 @@ export default function StudentScoresPage() {
       gender: row.student_profiles?.gender || '',
     }))
 
-    const selectedSubjectRecord = subjects.find(
+    const selectedSubjectRecord = inputExamSubjects.find(
       (subject) => String(subject.id) === String(selectedSubject)
     )
+    if (!selectedSubjectRecord) {
+      setStudents([])
+      setScores({})
+      return
+    }
+
     const classEnrollmentIdSet = new Set(studentRows.map((student) => student.enrollment_id))
     const relevantEnrollmentIds = getRelevantEnrollmentIds({
       classId: selectedClass,
@@ -1257,7 +1295,7 @@ export default function StudentScoresPage() {
 
   useEffect(() => {
     loadStudentsAndScores()
-  }, [selectedClass, selectedSubject, selectedExam, profile?.school_id, scoresRefreshKey])
+  }, [selectedClass, selectedSubject, selectedExam, profile?.school_id, scoresRefreshKey, inputExamSubjects])
 
   const refreshCurrentMarksAndAnalysis = async () => {
     try {
@@ -1418,7 +1456,16 @@ export default function StudentScoresPage() {
         return
       }
 
-      const subjectHeaders = getUniqueSubjectHeaders(normalizeSubjectRows(subjectRows))
+      const subjectHeaders = getUniqueSubjectHeaders(
+        normalizeSubjectRows(subjectRows).filter((subject) =>
+          canInputExamMark({
+            schoolInfo,
+            tingkatan: subject?.tingkatan,
+            subjectName: getSubjectRuleName(subject),
+            examKey,
+          })
+        )
+      )
       const headers = [...DYNAMIC_BULK_TEMPLATE_HEADERS, ...subjectHeaders]
       const templateRows = (enrollmentRows || [])
         .map((enrollment) => {
@@ -1522,7 +1569,7 @@ export default function StudentScoresPage() {
     }
 
     if (detectedFormat.format === 'dynamic') {
-      const subjectLookup = buildSubjectLookupMaps(subjects)
+      const subjectLookup = buildSubjectLookupMaps(inputExamSubjects)
       const unknownSubjectHeaders = detectedFormat.subjectHeaders.filter(
         (header) => !subjectLookup.byHeader.has(normalizeSubjectLookupText(header.label))
       )
@@ -1621,6 +1668,20 @@ export default function StudentScoresPage() {
         if (!matchedSubject) {
           importErrors.push(
             `Baris ${row.__rowNumber}: subjek '${csvSubject}' tidak sepadan dengan ${selectedClassData.tingkatan}`
+          )
+          return
+        }
+
+        if (
+          !canInputExamMark({
+            schoolInfo,
+            tingkatan: selectedClassData.tingkatan,
+            subjectName: getSubjectRuleName(matchedSubject),
+            examKey,
+          })
+        ) {
+          importErrors.push(
+            `Baris ${row.__rowNumber}: subjek '${csvSubject}' tidak dibenarkan untuk ${examKey} bagi ${selectedClassData.tingkatan}`
           )
           return
         }
@@ -1792,7 +1853,7 @@ export default function StudentScoresPage() {
 
           existing.etr_mark = mark
           targetPairs.set(pairKey, existing)
-        } else if (examKey === 'TOV' || /^AR\d+$/.test(examKey)) {
+        } else if (isScoreExamKey(examKey)) {
           const gradeScalesForTingkatan = (gradeScalesData || []).filter((grade) => {
             const label =
               grade.tingkatan ??
@@ -2201,6 +2262,20 @@ export default function StudentScoresPage() {
           return false
         }
 
+        if (
+          !canInputExamMark({
+            schoolInfo,
+            tingkatan: matchedClass.tingkatan,
+            subjectName: getSubjectRuleName(matchedSubject),
+            examKey: normalizedExamKey,
+          })
+        ) {
+          errors.push(
+            `Baris ${rowNumber}: Subjek '${subjectLabel}' tidak dibenarkan untuk ${normalizedExamKey} bagi ${matchedClass.tingkatan}.`
+          )
+          return false
+        }
+
         const mark = Number(markRaw)
 
         if (Number.isNaN(mark) || mark < 0 || mark > 100) {
@@ -2496,6 +2571,10 @@ export default function StudentScoresPage() {
 
   const handleSave = async () => {
     if (!profile?.school_id || !selectedClass || !selectedSubject || !selectedExam) return
+    if (!selectedSubjectData) {
+      alert('Subjek ini tidak termasuk dalam subjek peperiksaan untuk tingkatan ini.')
+      return
+    }
 
     setSaving(true)
 
@@ -3411,6 +3490,7 @@ export default function StudentScoresPage() {
 
         <ClassSubjectAnalysisPanel
           schoolId={profile?.school_id}
+          schoolInfo={schoolInfo}
           classId={selectedClass}
           subjectId={selectedSubject}
           refreshKey={analysisRefreshKey}

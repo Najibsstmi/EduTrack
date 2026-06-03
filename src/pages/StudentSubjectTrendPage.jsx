@@ -12,6 +12,10 @@ import {
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
 import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
+import {
+  getSubjectRuleName,
+  shouldShowSubjectGpmp,
+} from '../lib/ssemjSubjectRules.js'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -51,6 +55,7 @@ export default function StudentSubjectTrendPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
 
   const [classes, setClasses] = useState([])
@@ -178,6 +183,7 @@ export default function StudentSubjectTrendPage() {
       { data: scoresData, error: scoresError },
       { data: targetsData, error: targetsError },
       { data: gradeScalesData, error: gradeScalesError },
+      { data: schoolData, error: schoolError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -231,6 +237,12 @@ export default function StudentSubjectTrendPage() {
         .from('grade_scales')
         .select('*')
         .eq('school_id', schoolId),
+
+      supabase
+        .from('schools')
+        .select('id, school_name, school_code, school_type')
+        .eq('id', schoolId)
+        .maybeSingle(),
     ])
 
     if (classesError) console.error(classesError)
@@ -239,6 +251,7 @@ export default function StudentSubjectTrendPage() {
     if (scoresError) console.error(scoresError)
     if (targetsError) console.error(targetsError)
     if (gradeScalesError) console.error(gradeScalesError)
+    if (schoolError) console.error(schoolError)
 
     const mappedStudents = (enrollmentsData || []).map((row) => ({
       enrollment_id: row.id,
@@ -252,6 +265,7 @@ export default function StudentSubjectTrendPage() {
     }))
 
     setClasses(classesData || [])
+    setSchoolInfo(schoolData || null)
     setSubjects(normalizeSubjectRows(subjectsData))
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
@@ -299,18 +313,39 @@ export default function StudentSubjectTrendPage() {
       )
   }, [studentRows, selectedTingkatan, selectedClassId])
 
+  const subjectGpmpSubjects = useMemo(
+    () =>
+      subjects.filter((subject) =>
+        shouldShowSubjectGpmp({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+        })
+      ),
+    [subjects, schoolInfo]
+  )
+
   const availableSubjects = useMemo(() => {
-    return subjects
+    return subjectGpmpSubjects
       .filter((s) => s.tingkatan === selectedTingkatan)
       .sort((a, b) =>
         String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'ms', {
           sensitivity: 'base',
         })
       )
-  }, [subjects, selectedTingkatan])
+  }, [subjectGpmpSubjects, selectedTingkatan])
 
   useEffect(() => {
-    if (!selectedSubjectId && availableSubjects.length > 0) {
+    if (availableSubjects.length === 0) {
+      if (selectedSubjectId) setSelectedSubjectId('')
+      return
+    }
+
+    const selectedStillAllowed = availableSubjects.some(
+      (subject) => String(subject.id) === String(selectedSubjectId)
+    )
+
+    if (!selectedSubjectId || !selectedStillAllowed) {
       setSelectedSubjectId(String(availableSubjects[0].id))
     }
   }, [availableSubjects, selectedSubjectId])

@@ -12,6 +12,11 @@ import {
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
 import { normalizeSubjectRows } from '../lib/subjectLabels.js'
+import {
+  canInputExamMark,
+  getSubjectRuleName,
+  shouldCountInStudentOverallGp,
+} from '../lib/ssemjSubjectRules.js'
 
 const ChevronLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -254,6 +259,7 @@ export default function StudentIndividualAnalysisPage() {
 
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
+  const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
 
   const [classes, setClasses] = useState([])
@@ -372,6 +378,7 @@ export default function StudentIndividualAnalysisPage() {
       { data: scoresData, error: scoresError },
       { data: targetsData, error: targetsError },
       { data: gradeScalesData, error: gradeScalesError },
+      { data: schoolData, error: schoolError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -425,6 +432,12 @@ export default function StudentIndividualAnalysisPage() {
         .from('grade_scales')
         .select('*')
         .eq('school_id', schoolId),
+
+      supabase
+        .from('schools')
+        .select('id, school_name, school_code, school_type')
+        .eq('id', schoolId)
+        .maybeSingle(),
     ])
 
     if (classesError) console.error(classesError)
@@ -433,6 +446,7 @@ export default function StudentIndividualAnalysisPage() {
     if (scoresError) console.error(scoresError)
     if (targetsError) console.error(targetsError)
     if (gradeScalesError) console.error(gradeScalesError)
+    if (schoolError) console.error(schoolError)
 
     const mappedStudents = (enrollmentsData || []).map((row) => ({
       enrollment_id: row.id,
@@ -446,6 +460,7 @@ export default function StudentIndividualAnalysisPage() {
     }))
 
     setClasses(classesData || [])
+    setSchoolInfo(schoolData || null)
     setSubjects(normalizeSubjectRows(subjectsData))
     setStudentRows(mappedStudents)
     setScores(scoresData || [])
@@ -497,6 +512,19 @@ export default function StudentIndividualAnalysisPage() {
     return getExamStructureForGrade(setupConfig, selectedTingkatan)
   }, [setupConfig, selectedTingkatan])
 
+  const subjectsForSelectedExam = useMemo(
+    () =>
+      subjects.filter((subject) =>
+        canInputExamMark({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: selectedExamKey,
+        })
+      ),
+    [subjects, schoolInfo, selectedExamKey]
+  )
+
   const selectedStudent = useMemo(() => {
     return availableStudents.find(
       (student) => String(student.enrollment_id) === String(selectedStudentId)
@@ -506,7 +534,7 @@ export default function StudentIndividualAnalysisPage() {
   const subjectAnalysisRows = useMemo(() => {
     if (!selectedStudent || !selectedExamKey) return []
 
-    const relevantSubjects = subjects
+    const relevantSubjects = subjectsForSelectedExam
       .filter((subject) => subject.tingkatan === selectedStudent.tingkatan)
       .sort((a, b) =>
         String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'ms', {
@@ -539,6 +567,12 @@ export default function StudentIndividualAnalysisPage() {
         subject_id: subject.id,
         subject_name: subject.subject_name || '-',
         subject_code: subject.subject_code || '',
+        countInOverallGp: shouldCountInStudentOverallGp({
+          schoolInfo,
+          tingkatan: selectedStudent.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: selectedExamKey,
+        }),
         mark: isTargetKey(selectedExamKey) ? metric?.target_mark ?? null : metric?.mark ?? null,
         grade_name: currentGradeName,
         grade_point: getCurrentGradePoint(
@@ -548,19 +582,21 @@ export default function StudentIndividualAnalysisPage() {
         ),
       }
     })
-  }, [selectedStudent, selectedExamKey, subjects, scores, targets, gradeScales])
+  }, [selectedStudent, selectedExamKey, subjectsForSelectedExam, scores, targets, gradeScales, schoolInfo])
 
   const summary = useMemo(() => {
     const rowsWithMark = subjectAnalysisRows.filter(
       (row) => row.mark !== null && row.mark !== undefined && !Number.isNaN(Number(row.mark))
     )
 
-    const gradePoints = subjectAnalysisRows
+    const rowsForOverallGp = subjectAnalysisRows.filter((row) => row.countInOverallGp)
+
+    const gradePoints = rowsForOverallGp
       .map((row) => row.grade_point)
       .filter((v) => v !== null && v !== undefined && !Number.isNaN(Number(v)))
       .map((v) => Number(v))
 
-    const grades = subjectAnalysisRows
+    const grades = rowsForOverallGp
       .map((row) => row.grade_name)
       .filter(Boolean)
 
