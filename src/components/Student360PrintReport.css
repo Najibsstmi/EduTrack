@@ -72,9 +72,10 @@
 
 .screen-report-shell .report-document-badge {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   align-self: stretch;
   align-content: center;
+  justify-items: center;
   padding: 8px;
   border-radius: 12px;
   background: #eef2ff;
@@ -82,9 +83,11 @@
   text-align: center;
 }
 
-.screen-report-shell .report-document-badge strong {
-  font-size: 11px;
-  letter-spacing: 0.08em;
+.screen-report-shell .report-document-logo {
+  display: block;
+  width: 68px;
+  height: 52px;
+  object-fit: contain;
 }
 
 .screen-report-shell .report-document-badge span {
@@ -326,6 +329,77 @@
   font-size: 9px;
 }
 
+.screen-report-shell .report-pbd-subject-section {
+  padding: 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.screen-report-shell .report-section-subtitle {
+  margin: -1px 0 5px;
+  color: #64748b;
+  font-size: 8px;
+}
+
+.screen-report-shell .report-pbd-subject-layout {
+  display: grid;
+  gap: 7px;
+}
+
+.screen-report-shell .report-pbd-subject-chart {
+  width: 100%;
+  height: 205px;
+  min-width: 0;
+}
+
+.screen-report-shell .report-pbd-subject-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.screen-report-shell .report-pbd-subject-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 6px;
+  border-left: 3px solid #6366f1;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.screen-report-shell .report-pbd-subject-item span {
+  color: #334155;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.screen-report-shell .report-pbd-subject-item strong {
+  flex: none;
+  color: #312e81;
+  font-size: 9px;
+}
+
+.report-pbd-tooltip {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: #334155;
+  font-size: 9px;
+}
+
+.report-pbd-tooltip span {
+  color: #4338ca;
+  font-weight: 800;
+}
+
 .screen-report-shell .report-imk-grid {
   display: grid;
   grid-template-columns: 235px minmax(0, 1fr);
@@ -476,6 +550,81 @@
 
   .report-subject-empty {
     padding: 1.5mm !important;
+  }
+
+  .report-pbd-subject-section {
+    padding: 1.5mm;
+    border: 0.6pt solid #e2e8f0;
+    border-radius: 2mm;
+  }
+
+  .report-section-subtitle {
+    margin: -0.8mm 0 0.5mm;
+    color: #64748b;
+    font-size: 5.5pt;
+    line-height: 1.15;
+  }
+
+  .report-pbd-subject-layout {
+    display: grid;
+    gap: 0.7mm;
+  }
+
+  .report-pbd-subject-chart {
+    width: 100%;
+    height: 30mm;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .report-pbd-subject-chart .recharts-polar-angle-axis-tick text {
+    font-size: 5px !important;
+  }
+
+  .report-pbd-subject-chart .recharts-polar-radius-axis-tick text {
+    font-size: 4.5px !important;
+  }
+
+  .report-pbd-subject-list {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6mm;
+  }
+
+  .report-pbd-subject-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8mm;
+    min-width: 0;
+    padding: 0.55mm 0.7mm;
+    border-left: 1pt solid #6366f1;
+    border-radius: 0.8mm;
+    background: #f8fafc;
+  }
+
+  .report-pbd-subject-item span {
+    color: #334155;
+    font-size: 5pt;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .report-pbd-subject-item strong {
+    flex: none;
+    color: #312e81;
+    font-size: 5.4pt;
+  }
+
+  .report-pbd-tooltip {
+    display: none;
+  }
+
+  .report-document-logo {
+    display: block;
+    width: 18mm;
+    height: 13mm;
+    object-fit: contain;
   }
 
   .report-radar {

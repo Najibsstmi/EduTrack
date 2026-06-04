@@ -337,6 +337,97 @@ const buildPbdSummary = (rows) => {
   }
 }
 
+const toPbdLevel = (value) => {
+  const numericValue = toNumericMark(value)
+  if (Number.isInteger(numericValue) && numericValue >= 1 && numericValue <= 6) {
+    return numericValue
+  }
+
+  const textMatch = normalizeKey(value).match(/^TP\s*([1-6])$/)
+  return textMatch ? Number(textMatch[1]) : null
+}
+
+const isSelectiveSubject = (subject) => {
+  const subjectType = String(subject?.subject_type || '').trim().toLowerCase()
+  if (subjectType === 'selective') return true
+  if (subjectType === 'core') return false
+  return subject?.is_core === false
+}
+
+const getPbdSubjectAxisLabel = (subject) => {
+  const subjectName = String(subject?.subject_name || subject?.subject_code || 'Subjek').trim()
+  const subjectCode = String(subject?.subject_code || '').trim()
+
+  if (subjectName.length <= 18) return subjectName
+  if (subjectCode) return subjectCode
+
+  const initials = subjectName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0))
+    .join('')
+
+  return initials.length >= 2 ? initials.slice(0, 8).toUpperCase() : `${subjectName.slice(0, 15)}...`
+}
+
+const buildPbdSubjectRadarData = ({
+  pbdCurrentRows,
+  pbdLegacyRows,
+  subjectEnrollmentRows,
+  scores,
+  subjects,
+  gradeLabel,
+}) => {
+  const subjectById = new Map(subjects.map((subject) => [String(subject.id), subject]))
+  const mappedSubjectIds = new Set(
+    (subjectEnrollmentRows || []).map((row) => String(row.subject_id || '')).filter(Boolean)
+  )
+  const scoredSubjectIds = new Set(
+    (scores || []).map((row) => String(row.subject_id || '')).filter(Boolean)
+  )
+  const pbdBySubject = new Map()
+
+  ;[...(pbdLegacyRows || []), ...(pbdCurrentRows || [])].forEach((row) => {
+    const subjectId = String(row.subject_id || '')
+    const tp = toPbdLevel(row.tp ?? row.tp_level)
+    if (!subjectId || tp === null) return
+    pbdBySubject.set(subjectId, tp)
+  })
+
+  return [...pbdBySubject.entries()]
+    .map(([subjectId, tp]) => {
+      const subject = subjectById.get(subjectId) || null
+      return {
+        subjectId,
+        subjectName: subject?.subject_name || subject?.subject_code || 'Subjek tidak dinamakan',
+        subjectCode: subject?.subject_code || '',
+        axisLabel: getPbdSubjectAxisLabel(subject),
+        tp,
+        subject,
+      }
+    })
+    .filter(({ subjectId, subject }) => {
+      if (!subject) return false
+      if (subject.tingkatan && !isSameGrade(subject.tingkatan, gradeLabel)) return false
+
+      return (
+        !isSelectiveSubject(subject) ||
+        mappedSubjectIds.has(subjectId) ||
+        scoredSubjectIds.has(subjectId)
+      )
+    })
+    .map((row) => ({
+      subjectId: row.subjectId,
+      subjectName: row.subjectName,
+      subjectCode: row.subjectCode,
+      axisLabel: row.axisLabel,
+      tp: row.tp,
+    }))
+    .sort((a, b) =>
+      a.subjectName.localeCompare(b.subjectName, 'ms', { sensitivity: 'base', numeric: true })
+    )
+}
+
 const getLatestSegakRow = (rows) =>
   [...rows].sort((a, b) => {
     const timeA = Date.parse(a.updated_at || a.assessment_date || '') || 0
@@ -521,6 +612,7 @@ const buildStudent360Profile = ({
   scores,
   pbdCurrentRows,
   pbdLegacyRows,
+  subjectEnrollmentRows,
   segakRows,
   pajskKokurikulumRows,
   pajskEkstraRows,
@@ -538,6 +630,14 @@ const buildStudent360Profile = ({
       gradeScales,
     })
   const pbd = buildPbdSummary(pbdCurrentRows.length ? pbdCurrentRows : pbdLegacyRows)
+  const pbdSubjectRadarData = buildPbdSubjectRadarData({
+    pbdCurrentRows,
+    pbdLegacyRows,
+    subjectEnrollmentRows,
+    scores,
+    subjects,
+    gradeLabel: classRow?.tingkatan,
+  })
   const segak = buildSegakSummary(segakRows)
   const pajsk = buildPajskSummary(pajskKokurikulumRows, pajskEkstraRows)
   const psychometric = buildPsychometricSummary(findPsychometricResult(psychometricResults, student))
@@ -585,6 +685,7 @@ const buildStudent360Profile = ({
     academic,
     classRanking: classRanking || null,
     pbd,
+    pbdSubjectRadarData,
     segak,
     pajsk,
     psychometric,
@@ -757,7 +858,7 @@ export default function PbsAnalysisPage() {
           .order('class_name', { ascending: true }),
         supabase
           .from('subjects')
-          .select('id, subject_name, subject_code, tingkatan, is_active')
+          .select('id, subject_name, subject_code, tingkatan, subject_type, is_core, is_active')
           .eq('school_id', profile.school_id)
           .eq('is_active', true)
           .order('subject_name', { ascending: true }),
@@ -889,6 +990,7 @@ export default function PbsAnalysisPage() {
 
       const [
         scoreResult,
+        studentSubjectResult,
         pbdCurrentResult,
         pbdLegacyResult,
         segakResult,
@@ -904,6 +1006,13 @@ export default function PbsAnalysisPage() {
           .eq('school_id', profile.school_id)
           .eq('academic_year', Number(academicYear))
           .in('student_enrollment_id', rankingEnrollmentIds),
+        supabase
+          .from('student_subject_enrollments')
+          .select('id, student_enrollment_id, subject_id, academic_year, is_active')
+          .eq('school_id', profile.school_id)
+          .eq('academic_year', Number(academicYear))
+          .eq('is_active', true)
+          .in('student_enrollment_id', reportEnrollmentIds),
         supabase
           .from('student_pbd_current')
           .select('id, student_enrollment_id, subject_id, tp, evidence_note, teacher_note, updated_at')
@@ -947,6 +1056,7 @@ export default function PbsAnalysisPage() {
         return result.data || []
       }
       const scoreRows = rowsFrom(scoreResult, 'akademik', true)
+      const studentSubjectRows = rowsFrom(studentSubjectResult, 'pemetaan subjek murid')
       const pbdCurrentRows = rowsFrom(pbdCurrentResult, 'PBD semasa')
       const pbdLegacyRows = rowsFrom(pbdLegacyResult, 'PBD lama')
       const segakRows = rowsFrom(segakResult, 'SEGAK')
@@ -954,6 +1064,7 @@ export default function PbsAnalysisPage() {
       const pajskEkstraRows = rowsFrom(pajskEkstraResult, 'PAJSK ekstrakurikulum')
       const psychometricRows = rowsFrom(psychometricResultRows, 'IMK')
       const scoresByEnrollment = groupRowsByEnrollment(scoreRows)
+      const studentSubjectsByEnrollment = groupRowsByEnrollment(studentSubjectRows)
       const pbdCurrentByEnrollment = groupRowsByEnrollment(pbdCurrentRows)
       const pbdLegacyByEnrollment = groupRowsByEnrollment(pbdLegacyRows)
       const segakByEnrollment = groupRowsByEnrollment(segakRows)
@@ -1019,6 +1130,7 @@ export default function PbsAnalysisPage() {
           scores: scoresByEnrollment.get(String(student.id)) || [],
           pbdCurrentRows: pbdCurrentByEnrollment.get(String(student.id)) || [],
           pbdLegacyRows: pbdLegacyByEnrollment.get(String(student.id)) || [],
+          subjectEnrollmentRows: studentSubjectsByEnrollment.get(String(student.id)) || [],
           segakRows: segakByEnrollment.get(String(student.id)) || [],
           pajskKokurikulumRows: pajskKokurikulumByEnrollment.get(String(student.id)) || [],
           pajskEkstraRows: pajskEkstraByEnrollment.get(String(student.id)) || [],

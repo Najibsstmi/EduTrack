@@ -1,3 +1,12 @@
+import {
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts'
 import './Student360PrintReport.css'
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
@@ -138,6 +147,70 @@ function SubjectResults({ results }) {
   )
 }
 
+function PbdSubjectTooltip({ active, payload }) {
+  const row = payload?.[0]?.payload
+  if (!active || !row) return null
+
+  return (
+    <div className="report-pbd-tooltip">
+      <strong>{row.subjectName}</strong>
+      <span>TP{row.tp}</span>
+    </div>
+  )
+}
+
+function PbdSubjectRadar({ data }) {
+  if (!data?.length) {
+    return <div className="report-empty-state">Data PBD mengikut subjek belum direkodkan.</div>
+  }
+
+  return (
+    <div className="report-pbd-subject-layout">
+      <div className="report-pbd-subject-chart">
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          minWidth={0}
+          initialDimension={{ width: 600, height: 112 }}
+        >
+          <RadarChart data={data} outerRadius="68%" margin={{ top: 12, right: 28, bottom: 12, left: 28 }}>
+            <PolarGrid stroke="#cbd5e1" />
+            <PolarAngleAxis
+              dataKey="axisLabel"
+              tick={{ fill: '#334155', fontSize: 9, fontWeight: 600 }}
+            />
+            <PolarRadiusAxis
+              angle={90}
+              domain={[0, 6]}
+              ticks={[1, 2, 3, 4, 5, 6]}
+              allowDataOverflow
+              tick={{ fill: '#64748b', fontSize: 8 }}
+            />
+            <Radar
+              name="Tahap Penguasaan PBD"
+              dataKey="tp"
+              stroke="#4f46e5"
+              fill="#6366f1"
+              fillOpacity={0.32}
+              strokeWidth={2}
+              isAnimationActive={false}
+            />
+            <Tooltip content={<PbdSubjectTooltip />} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="report-pbd-subject-list" aria-label="Senarai TP PBD mengikut subjek">
+        {data.map((row) => (
+          <div key={row.subjectId} className="report-pbd-subject-item">
+            <span title={row.subjectName}>{row.subjectName}</span>
+            <strong>TP{row.tp}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Student360PrintReport({ report, schoolInfo, academicYear }) {
   const logoUrl = schoolInfo?.logo_url || '/edutrack-logo.png'
 
@@ -156,7 +229,7 @@ export default function Student360PrintReport({ report, schoolInfo, academicYear
           <div className="report-subtitle">PBS Bersepadu | Tahun Akademik {academicYear}</div>
         </div>
         <div className="report-document-badge">
-          <strong>EDUTRACK</strong>
+          <img className="report-document-logo" src="/edutrack-logo.png" alt="Logo EduTrack" />
           <span>Laporan Individu</span>
         </div>
       </header>
@@ -265,8 +338,16 @@ export default function Student360PrintReport({ report, schoolInfo, academicYear
         </div>
       </section>
 
+      <section className="report-section report-pbd-subject-section">
+        <h2>4. Radar PBD Mengikut Subjek</h2>
+        <p className="report-section-subtitle">
+          Tahap Penguasaan PBD bagi subjek yang diambil oleh murid.
+        </p>
+        <PbdSubjectRadar data={report.pbdSubjectRadarData} />
+      </section>
+
       <section className="report-section report-imk-section">
-        <h2>4. Psikometrik / IMK</h2>
+        <h2>5. Psikometrik / IMK</h2>
         {!report.psychometric.hasData ? (
           <div className="report-empty-state">Data IMK belum tersedia.</div>
         ) : (
@@ -291,7 +372,7 @@ export default function Student360PrintReport({ report, schoolInfo, academicYear
       </section>
 
       <section className="report-section report-summary-section">
-        <h2>5. Rumusan Profil Murid</h2>
+        <h2>6. Rumusan Profil Murid</h2>
         <p>{report.summarySentences.join(' ')}</p>
       </section>
 

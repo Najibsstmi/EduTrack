@@ -186,6 +186,7 @@ body.has-install-prompt {
     gap: 1mm;
     align-self: stretch;
     align-content: center;
+    justify-items: center;
     padding: 2mm;
     border-radius: 2.5mm;
     background: #eef2ff;
@@ -193,9 +194,11 @@ body.has-install-prompt {
     text-align: center;
   }
 
-  .report-document-badge strong {
-    font-size: 8pt;
-    letter-spacing: 0.08em;
+  .report-document-logo {
+    display: block;
+    width: 18mm;
+    height: 13mm;
+    object-fit: contain;
   }
 
   .report-document-badge span {
