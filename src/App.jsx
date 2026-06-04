@@ -19,7 +19,6 @@ import StudentImportPage from './pages/StudentImportPage'
 import StudentScoresPage from './pages/StudentScoresPage'
 import TargetsPage from './pages/TargetsPage'
 import AnalysisPage from './pages/AnalysisPage'
-import AnalysisHubPage from './pages/AnalysisHubPage'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
@@ -29,7 +28,7 @@ import PajskInputPage from './pages/PajskInputPage.jsx'
 import PajskSegakPage from './pages/PajskSegakPage.jsx'
 import PajskSegakInputPage from './pages/PajskSegakInputPage.jsx'
 import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
-import PpsiPage from './pages/PpsiPage.jsx'
+import PsychometricInputPage from './pages/PsychometricInputPage.jsx'
 import PsychometricAnalysisPage from './pages/PsychometricAnalysisPage.jsx'
 import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
@@ -61,7 +60,7 @@ function AuthSessionWatcher() {
   return null
 }
 
-function LegacyPbsRedirect() {
+function DashboardRedirect() {
   const [targetPath, setTargetPath] = useState('')
 
   useEffect(() => {
@@ -157,7 +156,7 @@ function App() {
         <Route path="/manage-subject-students" element={<ManageSubjectStudentsPage />} />
         <Route path="/targets" element={<TargetsPage />} />
         <Route path="/academic-targets" element={<TargetsPage />} />
-        <Route path="/pbs" element={<LegacyPbsRedirect />} />
+        <Route path="/pbs" element={<DashboardRedirect />} />
         <Route path="/pbs/pbd" element={<PbdInputPage />} />
         <Route path="/pbs/pbd/input" element={<PbdInputPage />} />
         <Route path="/input-pbd" element={<PbdInputPage />} />
@@ -170,8 +169,11 @@ function App() {
         <Route path="/pbs/pajsk/segak" element={<PajskSegakPage />} />
         <Route path="/pbs/pajsk/segak/input" element={<PajskSegakInputPage />} />
         <Route path="/pbs/pajsk/segak/analysis" element={<PajskSegakAnalysisPage />} />
-        <Route path="/pbs/ppsi" element={<PpsiPage />} />
-        <Route path="/analysis" element={<AnalysisHubPage />} />
+        <Route path="/pbs/ppsi" element={<PsychometricInputPage />} />
+        <Route path="/pbs/ppsi/input" element={<PsychometricInputPage />} />
+        <Route path="/psikometrik/input" element={<PsychometricInputPage />} />
+        <Route path="/psychometric/input" element={<PsychometricInputPage />} />
+        <Route path="/analysis" element={<DashboardRedirect />} />
         <Route path="/analysis/class" element={<AnalysisPage />} />
         <Route path="/analysis/subject" element={<AnalysisPage />} />
         <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />

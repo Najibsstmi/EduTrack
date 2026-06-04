@@ -321,7 +321,7 @@ function DashboardPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/analysis')}
+              onClick={() => navigate('/analysis/class')}
               style={{
                 ...styles.quickActionCard,
                 ...styles.quickActionCardGreen,

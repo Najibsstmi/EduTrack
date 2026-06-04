@@ -1265,7 +1265,12 @@ export default function SchoolAdminDashboard() {
     { key: 'exam', label: 'Peperiksaan', path: '/scores' },
     { key: 'pbd', label: 'PBD', path: '/input-pbd' },
     { key: 'pajsk', label: 'PAJSK', path: '/pbs/pajsk' },
-    { key: 'psychometric', label: 'Psikometrik', path: '/pbs/ppsi' },
+    {
+      key: 'psychometric',
+      label: 'Psikometrik',
+      path: '/psikometrik/input',
+      activePaths: ['/pbs/ppsi', '/pbs/ppsi/input', '/psychometric/input'],
+    },
   ]
 
   const studentItems = [
