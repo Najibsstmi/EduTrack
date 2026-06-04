@@ -181,8 +181,10 @@ export function usePajskSegakData({ checkingAuth }) {
     segakRows,
     reload: () => {
       if (profile?.school_id && academicYear) {
-        loadYearData(profile.school_id, academicYear)
+        return loadYearData(profile.school_id, academicYear)
       }
+
+      return Promise.resolve()
     },
   }
 }

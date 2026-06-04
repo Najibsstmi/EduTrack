@@ -47,6 +47,8 @@ export default function StudentsPage() {
 
   const [classes, setClasses] = useState([])
   const [students, setStudents] = useState([])
+  const [editingStudent, setEditingStudent] = useState(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTingkatan, setSelectedTingkatan] = useState('Tingkatan 1')
@@ -59,8 +61,19 @@ export default function StudentsPage() {
     tingkatan: '',
     class_id: '',
   })
+  const [editForm, setEditForm] = useState({
+    full_name: '',
+    ic_number: '',
+    gender: '',
+    tingkatan: '',
+    class_id: '',
+  })
 
   const dashboardPath = profile?.role === 'master_admin' ? '/master-admin' : '/dashboard'
+  const isSchoolAdmin =
+    profile?.is_school_admin === true ||
+    profile?.role === 'admin' ||
+    profile?.role === 'school_admin'
 
   useEffect(() => {
     initPage()
@@ -167,6 +180,7 @@ export default function StudentsPage() {
       .from('student_enrollments')
       .select(`
         id,
+        school_id,
         academic_year,
         class_id,
         student_profile_id,
@@ -178,6 +192,7 @@ export default function StudentsPage() {
         ),
         student_profiles (
           id,
+          school_id,
           ic_number,
           full_name,
           gender
@@ -196,8 +211,12 @@ export default function StudentsPage() {
 
     const mappedStudents = (data || []).map((row) => ({
       enrollment_id: row.id,
+      school_id: row.school_id,
+      academic_year: row.academic_year,
+      class_id: row.class_id,
       id: row.student_profiles?.id,
       student_profile_id: row.student_profile_id,
+      student_profile_school_id: row.student_profiles?.school_id,
       full_name: row.student_profiles?.full_name || '',
       ic_number: row.student_profiles?.ic_number || '',
       gender: row.student_profiles?.gender || '',
@@ -212,6 +231,10 @@ export default function StudentsPage() {
   const availableClassesForForm = useMemo(() => {
     return classes.filter((c) => c.tingkatan === form.tingkatan)
   }, [classes, form.tingkatan])
+
+  const availableClassesForEdit = useMemo(() => {
+    return classes.filter((c) => c.tingkatan === editForm.tingkatan)
+  }, [classes, editForm.tingkatan])
 
   const availableTingkatan = useMemo(() => {
     const raw = [...new Set(classes.map((c) => c.tingkatan).filter(Boolean))]
@@ -242,6 +265,140 @@ export default function StudentsPage() {
       tingkatan,
       class_id: matchedClass?.id || '',
     }))
+  }
+
+  const handleEditGradeChange = (tingkatan) => {
+    const matchedClass = classes.find((c) => c.tingkatan === tingkatan)
+
+    setEditForm((prev) => ({
+      ...prev,
+      tingkatan,
+      class_id: matchedClass?.id || '',
+    }))
+  }
+
+  const openEditModal = (student) => {
+    if (!isSchoolAdmin) {
+      alert('Hanya admin sekolah boleh edit maklumat murid.')
+      return
+    }
+
+    if (
+      String(student.school_id) !== String(profile?.school_id) ||
+      String(student.student_profile_school_id) !== String(profile?.school_id) ||
+      Number(student.academic_year) !== Number(setupConfig?.current_academic_year) ||
+      student.status !== 'active'
+    ) {
+      alert('Murid ini tidak boleh diedit kerana bukan enrollment aktif sekolah anda.')
+      return
+    }
+
+    const matchedClass = classes.find(
+      (classRow) => String(classRow.id) === String(student.class_id)
+    )
+
+    setEditingStudent(student)
+    setEditForm({
+      full_name: student.full_name || '',
+      ic_number: student.ic_number || '',
+      gender: student.gender || '',
+      tingkatan: student.tingkatan || '',
+      class_id: matchedClass?.id || '',
+    })
+  }
+
+  const closeEditModal = () => {
+    if (savingEdit) return
+    setEditingStudent(null)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!isSchoolAdmin || !editingStudent) {
+      alert('Hanya admin sekolah boleh edit maklumat murid.')
+      return
+    }
+
+    if (!profile?.school_id || !setupConfig?.current_academic_year) {
+      alert('Maklumat sekolah belum lengkap.')
+      return
+    }
+
+    const fullName = editForm.full_name.trim()
+    const icNumber = editForm.ic_number.trim()
+    const selectedClass = classes.find(
+      (classRow) =>
+        String(classRow.id) === String(editForm.class_id) &&
+        classRow.tingkatan === editForm.tingkatan
+    )
+
+    if (!fullName) {
+      alert('Nama murid diperlukan.')
+      return
+    }
+
+    if (!icNumber) {
+      alert('No IC / MyKid / Dokumen diperlukan.')
+      return
+    }
+
+    if (!selectedClass) {
+      alert('Kelas yang dipilih tidak sah atau tidak selaras dengan tingkatan.')
+      return
+    }
+
+    if (
+      String(editingStudent.school_id) !== String(profile.school_id) ||
+      String(editingStudent.student_profile_school_id) !== String(profile.school_id) ||
+      Number(editingStudent.academic_year) !== Number(setupConfig.current_academic_year) ||
+      editingStudent.status !== 'active'
+    ) {
+      alert('Murid ini tidak boleh diedit kerana bukan enrollment aktif sekolah anda.')
+      return
+    }
+
+    setSavingEdit(true)
+
+    try {
+      const { data: duplicateProfile, error: duplicateError } = await supabase
+        .from('student_profiles')
+        .select('id')
+        .eq('school_id', profile.school_id)
+        .eq('ic_number', icNumber)
+        .neq('id', editingStudent.student_profile_id)
+        .limit(1)
+        .maybeSingle()
+
+      if (duplicateError) throw duplicateError
+      if (duplicateProfile?.id) {
+        alert('No IC / MyKid / Dokumen telah digunakan oleh murid lain dalam sekolah ini.')
+        return
+      }
+
+      const { error: updateError } = await supabase.rpc('update_school_student', {
+        target_enrollment_id: editingStudent.enrollment_id,
+        target_student_profile_id: editingStudent.student_profile_id,
+        target_academic_year: Number(setupConfig.current_academic_year),
+        new_full_name: fullName,
+        new_ic_number: icNumber,
+        new_gender: editForm.gender || null,
+        new_class_id: selectedClass.id,
+      })
+
+      if (updateError) throw updateError
+
+      await loadEnrollments(profile.school_id, setupConfig.current_academic_year)
+      setEditingStudent(null)
+      alert('Maklumat murid berjaya dikemaskini.')
+    } catch (error) {
+      console.error(error)
+      alert(
+        error.message?.includes('update_school_student')
+          ? 'Fungsi edit murid belum tersedia. Jalankan migration edit murid terkini di Supabase.'
+          : `Gagal kemaskini murid: ${error.message}`
+      )
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const handleAdd = async () => {
@@ -670,12 +827,24 @@ export default function StudentsPage() {
                           {student.status || 'active'}
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <button
-                            onClick={() => handleDeleteStudent(student)}
-                            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                          >
-                            Singkir
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            {isSchoolAdmin ? (
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(student)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStudent(student)}
+                              className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                              Singkir
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -696,6 +865,120 @@ export default function StudentsPage() {
           </div>
         </div>
       </div>
+
+      {editingStudent ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-student-title"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl md:p-6">
+            <div>
+              <h2 id="edit-student-title" className="text-xl font-bold text-slate-900">
+                Edit Maklumat Murid
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Kemas kini profil dan enrollment aktif bagi tahun{' '}
+                {setupConfig?.current_academic_year}.
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2 text-sm font-medium text-slate-700 md:col-span-2">
+                <span>Nama penuh murid</span>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, full_name: event.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-700">
+                <span>No IC / MyKid / Dokumen</span>
+                <input
+                  type="text"
+                  value={editForm.ic_number}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, ic_number: event.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-700">
+                <span>Jantina</span>
+                <select
+                  value={editForm.gender}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, gender: event.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                >
+                  <option value="">Tidak dinyatakan</option>
+                  <option value="Lelaki">Lelaki</option>
+                  <option value="Perempuan">Perempuan</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-700">
+                <span>Tingkatan</span>
+                <select
+                  value={editForm.tingkatan}
+                  onChange={(event) => handleEditGradeChange(event.target.value)}
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                >
+                  {availableTingkatan.map((tingkatan) => (
+                    <option key={tingkatan} value={tingkatan}>
+                      {getDisplayLevel(tingkatan, levelMappings)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-700">
+                <span>Kelas</span>
+                <select
+                  value={editForm.class_id}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, class_id: event.target.value }))
+                  }
+                  className="rounded-lg border border-slate-300 px-3 py-2"
+                >
+                  <option value="">Pilih kelas</option>
+                  {availableClassesForEdit.map((classRow) => (
+                    <option key={classRow.id} value={classRow.id}>
+                      {classRow.class_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                disabled={savingEdit}
+                className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="rounded-xl bg-slate-900 px-5 py-3 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
