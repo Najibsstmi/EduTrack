@@ -19,7 +19,7 @@ const buildYearOptions = (year) => {
 }
 
 const STATUS_LABELS = {
-  matched: 'Padanan dijumpai',
+  matched: 'Padanan Tepat',
   review: 'Perlu semakan',
   unmatched: 'Tidak dijumpai',
 }
@@ -28,6 +28,55 @@ const STATUS_STYLES = {
   matched: 'bg-emerald-100 text-emerald-800',
   review: 'bg-amber-100 text-amber-800',
   unmatched: 'bg-slate-200 text-slate-700',
+}
+
+const DIMENSION_DESCRIPTIONS = {
+  R: 'Minat terhadap aktiviti praktikal, teknikal, mesin, alat dan kerja lapangan.',
+  I: 'Minat menyiasat, menganalisis, sains, matematik dan penyelesaian masalah.',
+  A: 'Minat kreativiti, seni, reka bentuk, muzik, lakonan, tarian dan ekspresi.',
+  S: 'Minat membantu, membimbing, mengajar, berkomunikasi dan bekerja dengan manusia.',
+  E: 'Minat memimpin, mempengaruhi, berniaga, mengurus dan membuat keputusan.',
+  K: 'Minat kerja tersusun, data, rekod, pentadbiran, prosedur dan ketelitian.',
+}
+
+const DIMENSION_BAR_STYLES = {
+  R: 'bg-amber-600',
+  I: 'bg-sky-600',
+  A: 'bg-fuchsia-600',
+  S: 'bg-emerald-600',
+  E: 'bg-orange-600',
+  K: 'bg-indigo-600',
+}
+
+const ARTISTIC_GENERAL_NOTE =
+  'Kecenderungan Artistik sesuai dikaitkan dengan bidang seni seperti Seni Halus, Reka Bentuk, Multimedia Kreatif, Muzik, Tari, Teater atau Produksi Seni Persembahan bergantung kepada kombinasi kod Holland murid.'
+
+const ARTISTIC_COMBINATION_NOTES = {
+  S: 'Gabungan Artistik dan Sosial sesuai untuk bidang yang melibatkan ekspresi seni dan interaksi manusia seperti lakonan, tari, pendidikan seni dan aktiviti persembahan.',
+  K: 'Gabungan Artistik dan Konvensional sesuai untuk reka bentuk grafik, multimedia, produksi dan kerja kreatif yang memerlukan susunan serta ketelitian.',
+  I: 'Gabungan Artistik dan Investigatif sesuai untuk multimedia kreatif, reka bentuk digital, teknologi seni dan penghasilan karya berasaskan kajian.',
+}
+
+const normalizeSearchText = (value) =>
+  String(value || '')
+    .trim()
+    .toLocaleUpperCase('ms-MY')
+    .replace(/\s+/g, ' ')
+
+const toScoreOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+const getDifferenceIndex = (rawData) => {
+  const found = Object.entries(rawData || {}).find(([key, value]) => {
+    if (value === null || value === undefined || value === '') return false
+    const normalizedKey = String(key).toLocaleLowerCase('ms-MY').replace(/[^a-z0-9]/g, '')
+    return ['indeksperbezaan', 'differenceindex'].includes(normalizedKey)
+  })
+
+  return found?.[1] ?? null
 }
 
 export default function PsychometricAnalysisPage() {
@@ -39,9 +88,15 @@ export default function PsychometricAnalysisPage() {
   const [profile, setProfile] = useState(null)
   const [academicYear, setAcademicYear] = useState('')
   const [classes, setClasses] = useState([])
+  const [enrollments, setEnrollments] = useState([])
   const [results, setResults] = useState([])
   const [selectedGrade, setSelectedGrade] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
+  const [selectedStudentEnrollmentId, setSelectedStudentEnrollmentId] = useState('')
+  const [individualResult, setIndividualResult] = useState(null)
+  const [individualLoading, setIndividualLoading] = useState(false)
+  const [individualErrorMessage, setIndividualErrorMessage] = useState('')
 
   const initPage = useCallback(async () => {
     setLoading(true)
@@ -104,7 +159,10 @@ export default function PsychometricAnalysisPage() {
           class_name,
           source_student_name,
           source_ic_number,
+          student_profile_id,
+          student_enrollment_id,
           match_status,
+          match_note,
           raw_data,
           dominant_code,
           primary_dimension,
@@ -129,6 +187,7 @@ export default function PsychometricAnalysisPage() {
 
       const [
         { data: classData, error: classError },
+        { data: enrollmentData, error: enrollmentError },
         { data: resultData, error: resultError },
       ] = await Promise.all([
         supabase
@@ -139,13 +198,30 @@ export default function PsychometricAnalysisPage() {
           .eq('is_active', true)
           .order('tingkatan', { ascending: true })
           .order('class_name', { ascending: true }),
+        supabase
+          .from('student_enrollments')
+          .select(`
+            id,
+            class_id,
+            student_profile_id,
+            student_profiles (
+              id,
+              full_name,
+              ic_number
+            )
+          `)
+          .eq('school_id', profile.school_id)
+          .eq('academic_year', Number(academicYear))
+          .eq('is_active', true),
         resultQuery,
       ])
 
       if (classError) throw classError
+      if (enrollmentError) throw enrollmentError
       if (resultError) throw resultError
 
       setClasses(classData || [])
+      setEnrollments(enrollmentData || [])
       setResults(resultData || [])
     } catch (error) {
       console.error(error)
@@ -195,6 +271,228 @@ export default function PsychometricAnalysisPage() {
         ),
     [classes, selectedGrade]
   )
+
+  const classById = useMemo(
+    () => new Map(classes.map((classRow) => [String(classRow.id), classRow])),
+    [classes]
+  )
+
+  const availableStudents = useMemo(
+    () =>
+      enrollments
+        .filter((enrollment) => {
+          const classRow = classById.get(String(enrollment.class_id))
+          if (!classRow) return false
+          if (selectedGrade && classRow.tingkatan !== selectedGrade) return false
+          if (selectedClassId && String(enrollment.class_id) !== String(selectedClassId)) return false
+          return true
+        })
+        .sort((a, b) => {
+          const classA = classById.get(String(a.class_id))
+          const classB = classById.get(String(b.class_id))
+          const classCompare = getDisplayClassLabel(
+            classA?.tingkatan,
+            classA?.class_name
+          ).localeCompare(
+            getDisplayClassLabel(classB?.tingkatan, classB?.class_name),
+            'ms',
+            { sensitivity: 'base', numeric: true }
+          )
+
+          if (classCompare !== 0) return classCompare
+
+          return String(a.student_profiles?.full_name || '').localeCompare(
+            String(b.student_profiles?.full_name || ''),
+            'ms',
+            { sensitivity: 'base' }
+          )
+        }),
+    [classById, enrollments, selectedClassId, selectedGrade]
+  )
+
+  const visibleStudents = useMemo(() => {
+    const searchKey = normalizeSearchText(studentSearch)
+    if (!searchKey) return availableStudents
+
+    return availableStudents.filter((enrollment) => {
+      if (String(enrollment.id) === String(selectedStudentEnrollmentId)) return true
+
+      const classRow = classById.get(String(enrollment.class_id))
+      const searchable = normalizeSearchText(
+        [
+          enrollment.student_profiles?.full_name,
+          enrollment.student_profiles?.ic_number,
+          getDisplayClassLabel(classRow?.tingkatan, classRow?.class_name),
+        ].join(' ')
+      )
+      return searchable.includes(searchKey)
+    })
+  }, [availableStudents, classById, selectedStudentEnrollmentId, studentSearch])
+
+  const selectedStudent = useMemo(
+    () =>
+      availableStudents.find(
+        (enrollment) => String(enrollment.id) === String(selectedStudentEnrollmentId)
+      ) || null,
+    [availableStudents, selectedStudentEnrollmentId]
+  )
+
+  const cachedSelectedStudentResult = useMemo(
+    () => {
+      if (!selectedStudent) return null
+
+      return (
+        results.find(
+          (row) =>
+            String(row.student_enrollment_id) === String(selectedStudentEnrollmentId)
+        ) ||
+        results.find(
+          (row) =>
+            !row.student_enrollment_id &&
+            String(row.student_profile_id) === String(selectedStudent.student_profile_id) &&
+            String(row.class_id) === String(selectedStudent.class_id)
+        ) ||
+        null
+      )
+    },
+    [results, selectedStudent, selectedStudentEnrollmentId]
+  )
+  const selectedStudentResult = individualResult || cachedSelectedStudentResult
+
+  const selectedStudentClass = selectedStudent
+    ? classById.get(String(selectedStudent.class_id))
+    : null
+  const individualScores = useMemo(() => {
+    if (!selectedStudentResult) return []
+
+    return HOLLAND_DIMENSIONS.map((dimension, index) => ({
+      ...dimension,
+      index,
+      score: toScoreOrNull(selectedStudentResult.raw_data?.[dimension.key]),
+    }))
+      .filter((dimension) => dimension.score !== null)
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+  }, [selectedStudentResult])
+
+  const primaryDimensionKey =
+    String(selectedStudentResult?.dominant_code || '').charAt(0) ||
+    individualScores[0]?.key ||
+    ''
+  const primaryDimension =
+    HOLLAND_DIMENSIONS.find((dimension) => dimension.key === primaryDimensionKey) || null
+  const individualMaxScore = Math.max(...individualScores.map((dimension) => dimension.score), 0)
+  const differenceIndex = getDifferenceIndex(selectedStudentResult?.raw_data)
+  const artisticNotes = useMemo(() => {
+    const dominantCode = String(selectedStudentResult?.dominant_code || '')
+    if (!dominantCode.includes('A')) return []
+
+    return [
+      ARTISTIC_GENERAL_NOTE,
+      ...Object.entries(ARTISTIC_COMBINATION_NOTES)
+        .filter(([dimensionKey]) => dominantCode.includes(dimensionKey))
+        .map(([, note]) => note),
+    ]
+  }, [selectedStudentResult?.dominant_code])
+
+  useEffect(() => {
+    if (!profile?.school_id || !academicYear || !selectedStudent) {
+      setIndividualResult(null)
+      setIndividualLoading(false)
+      setIndividualErrorMessage('')
+      return
+    }
+
+    let cancelled = false
+
+    const loadIndividualResult = async () => {
+      setIndividualLoading(true)
+      setIndividualErrorMessage('')
+
+      try {
+        const baseQuery = () =>
+          supabase
+            .from('psychometric_results')
+            .select(`
+              id,
+              grade_label,
+              class_id,
+              class_name,
+              source_student_name,
+              source_ic_number,
+              student_profile_id,
+              student_enrollment_id,
+              match_status,
+              match_note,
+              raw_data,
+              dominant_code,
+              primary_dimension,
+              secondary_dimension,
+              tertiary_dimension,
+              updated_at
+            `)
+            .eq('school_id', profile.school_id)
+            .eq('academic_year', Number(academicYear))
+            .eq('assessment_type', 'career_interest')
+            .eq('assessment_name', 'IMK')
+
+        const { data: enrollmentResult, error: enrollmentResultError } = await baseQuery()
+          .eq('student_enrollment_id', selectedStudent.id)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (enrollmentResultError) throw enrollmentResultError
+
+        let result = enrollmentResult
+
+        if (!result && selectedStudent.student_profile_id && selectedStudent.class_id) {
+          const { data: profileResult, error: profileResultError } = await baseQuery()
+            .is('student_enrollment_id', null)
+            .eq('student_profile_id', selectedStudent.student_profile_id)
+            .eq('class_id', selectedStudent.class_id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (profileResultError) throw profileResultError
+          result = profileResult
+        }
+
+        if (!cancelled) setIndividualResult(result || null)
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) {
+          setIndividualResult(cachedSelectedStudentResult)
+          setIndividualErrorMessage(
+            cachedSelectedStudentResult ? '' : 'Gagal memuatkan data IMK murid ini.'
+          )
+        }
+      } finally {
+        if (!cancelled) setIndividualLoading(false)
+      }
+    }
+
+    loadIndividualResult()
+
+    return () => {
+      cancelled = true
+    }
+  }, [academicYear, cachedSelectedStudentResult, profile?.school_id, selectedStudent])
+
+  useEffect(() => {
+    if (
+      selectedStudentEnrollmentId &&
+      !availableStudents.some(
+        (enrollment) => String(enrollment.id) === String(selectedStudentEnrollmentId)
+      )
+    ) {
+      setSelectedStudentEnrollmentId('')
+      setStudentSearch('')
+      setIndividualResult(null)
+      setIndividualLoading(false)
+      setIndividualErrorMessage('')
+    }
+  }, [availableStudents, selectedStudentEnrollmentId])
 
   const dimensionSummary = useMemo(() => {
     const counts = Object.fromEntries(HOLLAND_DIMENSIONS.map((dimension) => [dimension.key, 0]))
@@ -284,6 +582,11 @@ export default function PsychometricAnalysisPage() {
                 setAcademicYear(event.target.value)
                 setSelectedGrade('')
                 setSelectedClassId('')
+                setSelectedStudentEnrollmentId('')
+                setStudentSearch('')
+                setIndividualResult(null)
+                setIndividualLoading(false)
+                setIndividualErrorMessage('')
               }}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
@@ -299,6 +602,11 @@ export default function PsychometricAnalysisPage() {
               onChange={(event) => {
                 setSelectedGrade(event.target.value)
                 setSelectedClassId('')
+                setSelectedStudentEnrollmentId('')
+                setStudentSearch('')
+                setIndividualResult(null)
+                setIndividualLoading(false)
+                setIndividualErrorMessage('')
               }}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
@@ -312,7 +620,14 @@ export default function PsychometricAnalysisPage() {
 
             <select
               value={selectedClassId}
-              onChange={(event) => setSelectedClassId(event.target.value)}
+              onChange={(event) => {
+                setSelectedClassId(event.target.value)
+                setSelectedStudentEnrollmentId('')
+                setStudentSearch('')
+                setIndividualResult(null)
+                setIndividualLoading(false)
+                setIndividualErrorMessage('')
+              }}
               className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
               <option value="">Semua Kelas</option>
@@ -391,6 +706,215 @@ export default function PsychometricAnalysisPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Analisis IMK Individu</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Pilih murid berdasarkan tahun, tingkatan dan kelas semasa untuk melihat profil
+              Holland individu.
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+              Cari murid
+              <input
+                type="search"
+                value={studentSearch}
+                onChange={(event) => setStudentSearch(event.target.value)}
+                placeholder="Cari nama, nombor kad pengenalan atau kelas"
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+              Pilih murid
+              <select
+                value={selectedStudentEnrollmentId}
+                onChange={(event) => {
+                  setSelectedStudentEnrollmentId(event.target.value)
+                  setIndividualResult(null)
+                  setIndividualLoading(Boolean(event.target.value))
+                  setIndividualErrorMessage('')
+                }}
+                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="">
+                  {visibleStudents.length
+                    ? `Pilih daripada ${visibleStudents.length} murid`
+                    : 'Tiada murid sepadan'}
+                </option>
+                {visibleStudents.map((enrollment) => {
+                  const classRow = classById.get(String(enrollment.class_id))
+                  return (
+                    <option key={enrollment.id} value={enrollment.id}>
+                      {enrollment.student_profiles?.full_name || 'Nama murid tidak tersedia'} -{' '}
+                      {getDisplayClassLabel(classRow?.tingkatan, classRow?.class_name)}
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          </div>
+
+          {!selectedStudent ? (
+            <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              Pilih murid untuk melihat analisis IMK individu.
+            </div>
+          ) : individualLoading ? (
+            <div className="mt-5 rounded-xl border border-dashed border-indigo-200 bg-indigo-50 p-8 text-center text-sm text-indigo-700">
+              Memuatkan analisis IMK murid...
+            </div>
+          ) : individualErrorMessage ? (
+            <div className="mt-5 rounded-xl border border-dashed border-rose-300 bg-rose-50 p-8 text-center text-sm text-rose-700">
+              {individualErrorMessage}
+            </div>
+          ) : !selectedStudentResult ? (
+            <div className="mt-5 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-8 text-center text-sm text-amber-800">
+              Data IMK murid ini belum tersedia.
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-5">
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 md:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                      Profil Murid
+                    </div>
+                    <h3 className="mt-1 text-xl font-bold text-slate-950">
+                      {selectedStudent.student_profiles?.full_name ||
+                        selectedStudentResult.source_student_name ||
+                        '-'}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {getDisplayClassLabel(
+                        selectedStudentClass?.tingkatan,
+                        selectedStudentClass?.class_name
+                      )}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                      STATUS_STYLES[selectedStudentResult.match_status] ||
+                      STATUS_STYLES.unmatched
+                    }`}
+                  >
+                    {STATUS_LABELS[selectedStudentResult.match_status] ||
+                      selectedStudentResult.match_status}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <IndividualSummary
+                    label="Kod Holland"
+                    value={selectedStudentResult.dominant_code || '-'}
+                    valueClassName="tracking-widest text-indigo-700"
+                  />
+                  <IndividualSummary
+                    label="Dominan"
+                    value={primaryDimension?.label || selectedStudentResult.primary_dimension || '-'}
+                  />
+                  <IndividualSummary
+                    label="Status"
+                    value={
+                      STATUS_LABELS[selectedStudentResult.match_status] ||
+                      selectedStudentResult.match_status ||
+                      '-'
+                    }
+                  />
+                  {differenceIndex !== null ? (
+                    <IndividualSummary label="Indeks Perbezaan" value={differenceIndex} />
+                  ) : null}
+                </div>
+
+                {selectedStudentResult.match_note ? (
+                  <p className="mt-3 text-xs text-slate-600">{selectedStudentResult.match_note}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+                <div className="rounded-2xl border border-slate-200 p-4 md:p-5">
+                  <h3 className="font-semibold text-slate-900">Skor RIASEK Individu</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Disusun daripada skor tertinggi kepada skor terendah.
+                  </p>
+
+                  {individualScores.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
+                      Skor RIASEK individu belum tersedia.
+                    </div>
+                  ) : (
+                    <div className="mt-5 grid gap-4">
+                      {individualScores.map((dimension) => {
+                        const width = individualMaxScore
+                          ? Math.max((dimension.score / individualMaxScore) * 100, 0)
+                          : 0
+
+                        return (
+                          <div key={dimension.key} className="grid gap-2">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                              <span className="font-medium text-slate-700">
+                                {dimension.label} ({dimension.key})
+                              </span>
+                              <span className="font-bold tabular-nums text-slate-900">
+                                {dimension.score}
+                              </span>
+                            </div>
+                            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  DIMENSION_BAR_STYLES[dimension.key]
+                                }`}
+                                style={{ width: `${Math.min(width, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid content-start gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-indigo-700 text-lg font-bold text-white">
+                        {primaryDimensionKey || '-'}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Huraian Dominan
+                        </div>
+                        <h3 className="font-semibold text-slate-900">
+                          {primaryDimension?.label ||
+                            selectedStudentResult.primary_dimension ||
+                            'Belum tersedia'}
+                        </h3>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm leading-6 text-slate-700">
+                      {DIMENSION_DESCRIPTIONS[primaryDimensionKey] ||
+                        'Huraian kecenderungan dominan belum tersedia.'}
+                    </p>
+                  </div>
+
+                  {artisticNotes.map((note, index) => (
+                    <div
+                      key={note}
+                      className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 p-4 text-sm leading-6 text-fuchsia-950 md:p-5"
+                    >
+                      <div className="font-semibold">
+                        {index === 0 ? 'Cadangan Padanan Sekolah Seni' : 'Gabungan Kecenderungan'}
+                      </div>
+                      <p className="mt-1">{note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Senarai Keputusan IMK</h2>
           {results.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
@@ -461,6 +985,15 @@ function SummaryCard({ title, value, tone = 'slate' }) {
     <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
       <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{title}</div>
       <div className="mt-2 text-2xl font-bold">{value}</div>
+    </div>
+  )
+}
+
+function IndividualSummary({ label, value, valueClassName = '' }) {
+  return (
+    <div className="rounded-xl border border-white/80 bg-white px-4 py-3 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-1 font-bold text-slate-900 ${valueClassName}`}>{value}</div>
     </div>
   )
 }
