@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
+import PbdClassSlipPrint from '../components/PbdClassSlipPrint.jsx'
 import { PbdTpBarChart } from '../components/PbdCharts.jsx'
 import PbdTabs from '../components/PbdTabs.jsx'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath.js'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix.js'
+import { buildPbdClassSlips } from '../lib/pbdClassSlips.js'
 import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
@@ -131,6 +133,7 @@ export default function PbdAnalysisPage() {
   const [errorMessage, setErrorMessage] = useState('')
 
   const [profile, setProfile] = useState(null)
+  const [schoolInfo, setSchoolInfo] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [academicYear, setAcademicYear] = useState('')
   const [levelMappings, setLevelMappings] = useState([])
@@ -141,6 +144,10 @@ export default function PbdAnalysisPage() {
   const [pbdWindows, setPbdWindows] = useState([])
   const [currentRows, setCurrentRows] = useState([])
   const [snapshotRows, setSnapshotRows] = useState([])
+  const [tpDescriptors, setTpDescriptors] = useState([])
+  const [printSlips, setPrintSlips] = useState([])
+  const [printDatasetLabel, setPrintDatasetLabel] = useState('')
+  const [isPreparingPbdSlips, setIsPreparingPbdSlips] = useState(false)
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
@@ -174,20 +181,32 @@ export default function PbdAnalysisPage() {
         return
       }
 
-      const { data: setupRows, error: setupError } = await supabase
-        .from('school_setup_configs')
-        .select('current_academic_year, active_grade_labels')
-        .eq('school_id', profileData.school_id)
-        .order('updated_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1)
+      const [
+        { data: setupRows, error: setupError },
+        { data: schoolData, error: schoolError },
+      ] = await Promise.all([
+        supabase
+          .from('school_setup_configs')
+          .select('current_academic_year, active_grade_labels')
+          .eq('school_id', profileData.school_id)
+          .order('updated_at', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('schools')
+          .select('id, school_name, school_code, logo_url')
+          .eq('id', profileData.school_id)
+          .maybeSingle(),
+      ])
 
       if (setupError) throw setupError
+      if (schoolError) throw schoolError
 
       const setupData = setupRows?.[0] || null
       const currentYear = setupData?.current_academic_year || new Date().getFullYear()
 
       setProfile(profileData)
+      setSchoolInfo(schoolData || null)
       setSetupConfig(setupData)
       setAcademicYear(currentYear)
     } catch (error) {
@@ -214,6 +233,7 @@ export default function PbdAnalysisPage() {
         { data: windowData, error: windowError },
         { data: currentData, error: currentError },
         { data: snapshotData, error: snapshotError },
+        { data: descriptorData, error: descriptorError },
       ] = await Promise.all([
         fetchSchoolLevelLabels({ schoolId, academicYear: year }),
         supabase
@@ -270,6 +290,12 @@ export default function PbdAnalysisPage() {
           .select('*')
           .eq('school_id', schoolId)
           .eq('academic_year', year),
+        supabase
+          .from('pbd_tp_descriptors')
+          .select('id, school_id, tingkatan, subject_name, tp_level, statement')
+          .or(`school_id.is.null,school_id.eq.${schoolId}`)
+          .order('subject_name', { ascending: true })
+          .order('tp_level', { ascending: true }),
       ])
 
       if (classError) throw classError
@@ -280,6 +306,10 @@ export default function PbdAnalysisPage() {
       if (currentError) throw currentError
       if (snapshotError) throw snapshotError
 
+      if (descriptorError) {
+        console.warn('PBD TP descriptors are not available yet:', descriptorError.message)
+      }
+
       setLevelMappings(loadedLevelMappings || [])
       setClasses(classData || [])
       setSubjects(normalizeSubjectRows(subjectData))
@@ -288,6 +318,7 @@ export default function PbdAnalysisPage() {
       setPbdWindows(windowData || [])
       setCurrentRows(currentData || [])
       setSnapshotRows(snapshotData || [])
+      setTpDescriptors(descriptorError ? [] : descriptorData || [])
     } catch (error) {
       console.error(error)
       const missingPbdTable =
@@ -623,13 +654,119 @@ export default function PbdAnalysisPage() {
     return labels.join(' | ')
   }, [pbdWindows])
   const dashboardPath = getDashboardPath(profile)
+  const canPrintPbdClass = Boolean(
+    academicYear &&
+      selectedTingkatan &&
+      selectedClassId &&
+      !dataLoading &&
+      activeDatasetKey !== 'COMPARE'
+  )
+
+  const handlePrintPbdClass = useCallback(async () => {
+    if (!canPrintPbdClass || !profile?.school_id || !selectedClass) return
+
+    setIsPreparingPbdSlips(true)
+    setPrintSlips([])
+    setErrorMessage('')
+
+    await Promise.resolve()
+
+    try {
+      const slips = buildPbdClassSlips({
+        schoolId: profile.school_id,
+        classRow: selectedClass,
+        classLabel: getDisplayClassLabel(
+          selectedClass.tingkatan,
+          selectedClass.class_name,
+          levelMappings
+        ),
+        levelLabel: getDisplayLevel(selectedClass.tingkatan, levelMappings),
+        enrollments,
+        subjects,
+        studentSubjectEnrollments,
+        sourceRows: sourceRowsByDataset[activeDatasetKey] || [],
+        descriptors: tpDescriptors,
+      })
+
+      if (!slips.length) {
+        setErrorMessage('Tiada murid aktif dalam kelas yang dipilih untuk dicetak.')
+        return
+      }
+
+      setPrintDatasetLabel(DATASET_LABELS[activeDatasetKey] || DATASET_LABELS.CURRENT)
+      setPrintSlips(slips)
+    } catch (error) {
+      console.error(error)
+      setPrintSlips([])
+      setErrorMessage(error.message || 'Gagal menyediakan slip PBD kelas.')
+    } finally {
+      setIsPreparingPbdSlips(false)
+    }
+  }, [
+    activeDatasetKey,
+    canPrintPbdClass,
+    enrollments,
+    levelMappings,
+    profile?.school_id,
+    selectedClass,
+    sourceRowsByDataset,
+    studentSubjectEnrollments,
+    subjects,
+    tpDescriptors,
+  ])
+
+  useEffect(() => {
+    const resetPrintState = () => {
+      setPrintSlips([])
+      setPrintDatasetLabel('')
+      setIsPreparingPbdSlips(false)
+    }
+
+    window.addEventListener('afterprint', resetPrintState)
+    return () => window.removeEventListener('afterprint', resetPrintState)
+  }, [])
+
+  useEffect(() => {
+    if (isPreparingPbdSlips || !printSlips.length) return undefined
+
+    let cancelled = false
+    let printTimer
+    let printScheduled = false
+    const schedulePrint = () => {
+      if (cancelled || printScheduled) return
+      printScheduled = true
+      printTimer = window.setTimeout(() => window.print(), 100)
+    }
+    const imageWaitTimer = window.setTimeout(schedulePrint, 1500)
+    const images = [...document.querySelectorAll('.pbd-slip-print-root img')]
+    const imagePromises = images.map((image) => {
+      if (image.complete) return Promise.resolve()
+
+      return new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true })
+        image.addEventListener('error', resolve, { once: true })
+      })
+    })
+
+    Promise.all(imagePromises).then(() => {
+      window.clearTimeout(imageWaitTimer)
+      schedulePrint()
+    })
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(imageWaitTimer)
+      if (printTimer) window.clearTimeout(printTimer)
+    }
+  }, [isPreparingPbdSlips, printSlips.length])
 
   if (checkingAuth || loading) {
     return <div className="p-6 text-slate-600">Loading analisis PBD...</div>
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <>
+    <div className="pbd-analysis-screen min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PBD"
@@ -658,14 +795,24 @@ export default function PbdAnalysisPage() {
               <h2 className="text-lg font-semibold text-slate-900">Penapis Analisis</h2>
               <p className="mt-1 text-sm text-slate-500">{windowStatus}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => loadAnalysisData(profile.school_id, academicYear)}
-              disabled={dataLoading}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {dataLoading ? 'Memuat...' : 'Refresh'}
-            </button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={handlePrintPbdClass}
+                disabled={!canPrintPbdClass || isPreparingPbdSlips}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isPreparingPbdSlips ? 'Menjana slip...' : 'Cetak Slip PBD Kelas'}
+              </button>
+              <button
+                type="button"
+                onClick={() => loadAnalysisData(profile.school_id, academicYear)}
+                disabled={dataLoading}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {dataLoading ? 'Memuat...' : 'Refresh'}
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -781,6 +928,13 @@ export default function PbdAnalysisPage() {
         )}
       </div>
     </div>
+    <PbdClassSlipPrint
+      slips={printSlips}
+      schoolInfo={schoolInfo}
+      academicYear={academicYear}
+      datasetLabel={printDatasetLabel}
+    />
+    </>
   )
 }
 

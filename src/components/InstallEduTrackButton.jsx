@@ -99,7 +99,7 @@ export default function InstallEduTrackButton() {
     <button
       type="button"
       onClick={handleButtonClick}
-      className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-center text-sm font-bold leading-tight text-white shadow-xl shadow-slate-300/80 transition hover:-translate-y-0.5 hover:bg-slate-800 sm:left-auto sm:right-4 sm:w-auto sm:rounded-full sm:px-5"
+      className="install-edutrack-button fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-center text-sm font-bold leading-tight text-white shadow-xl shadow-slate-300/80 transition hover:-translate-y-0.5 hover:bg-slate-800 sm:left-auto sm:right-4 sm:w-auto sm:rounded-full sm:px-5"
     >
       {buttonLabel}
     </button>
