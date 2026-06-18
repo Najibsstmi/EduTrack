@@ -260,14 +260,15 @@
   .pbd-slip-signature-name {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    width: 100%;
     margin-top: 1.5mm;
     font-size: 7pt;
   }
 
   .pbd-slip-signature-name span {
-    display: inline-block;
-    width: 42mm;
+    flex: 1;
+    min-width: 0;
   }
 
   .pbd-slip-footer {
