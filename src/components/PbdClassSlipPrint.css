@@ -28,19 +28,20 @@
     display: flex;
     flex-direction: column;
     width: 190mm;
-    height: 277mm;
-    max-height: 277mm;
+    min-height: 277mm;
+    height: auto;
+    max-height: none;
     margin: 0;
     padding: 7mm 7mm 5mm;
-    overflow: hidden;
+    overflow: visible;
     background: #ffffff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 8.2pt;
     line-height: 1.25;
     page-break-after: always;
     break-after: page;
-    page-break-inside: avoid;
-    break-inside: avoid-page;
+    page-break-inside: auto;
+    break-inside: auto;
   }
 
   .pbd-slip-page:last-child {
@@ -183,6 +184,15 @@
     table-layout: fixed;
   }
 
+  .pbd-slip-results thead {
+    display: table-header-group;
+  }
+
+  .pbd-slip-results tbody tr {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
   .pbd-slip-col-number { width: 8mm; }
   .pbd-slip-col-subject { width: 47mm; }
   .pbd-slip-col-tp { width: 13mm; }
@@ -222,10 +232,10 @@
   }
 
   .pbd-slip-statement {
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+    display: block;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
   }
 
   .pbd-slip-empty {
@@ -242,6 +252,8 @@
     padding: 7mm 12mm 0;
     color: #0f172a;
     font-size: 7.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
   }
 
   .pbd-slip-signature-block {
@@ -280,6 +292,8 @@
     border-top: 0.5pt solid #cbd5e1;
     color: #64748b;
     font-size: 6.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
   }
 
   .pbd-slip-page--dense {
@@ -290,11 +304,6 @@
   .pbd-slip-page--dense .pbd-slip-results td {
     padding-top: 1.2mm;
     padding-bottom: 1.2mm;
-  }
-
-  .pbd-slip-page--dense .pbd-slip-statement,
-  .pbd-slip-page--very-dense .pbd-slip-statement {
-    -webkit-line-clamp: 2;
   }
 
   .pbd-slip-page--very-dense {

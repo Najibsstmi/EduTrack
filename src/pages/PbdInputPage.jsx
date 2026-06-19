@@ -543,38 +543,18 @@ export default function PbdInputPage() {
     return true
   }
 
-  const handleDownloadTemplate = async ({ withCurrentData = false }) => {
+  const handleDownloadTemplate = () => {
     if (!ensureBulkTemplateReady()) return
 
-    const mode = withCurrentData ? 'data-semasa' : 'kosong'
-    setTemplateDownloading(mode)
+    setTemplateDownloading('kosong')
     setErrorMessage('')
 
     try {
-      let currentPbdRows = []
-
-      if (withCurrentData && tingkatanEnrollments.length > 0 && tingkatanSubjects.length > 0) {
-        const { data, error } = await supabase
-          .from('student_pbd_current')
-          .select('student_enrollment_id, subject_id, tp')
-          .eq('school_id', profile.school_id)
-          .eq('academic_year', academicYear)
-          .in('student_enrollment_id', tingkatanEnrollments.map((enrollment) => enrollment.id))
-          .in('subject_id', tingkatanSubjects.map((subject) => subject.id))
-
-        if (error) throw error
-        currentPbdRows = data || []
-      }
-
       const rows = generatePbdTemplateRows({
-        enrollments: tingkatanEnrollments,
-        classes: tingkatanClasses,
         subjects: tingkatanSubjects,
-        currentPbdRows,
-        selectedTingkatan,
       })
       const safeTingkatan = String(selectedTingkatan).replace(/\s+/g, '-').toLocaleLowerCase('ms-MY')
-      downloadCsv(`template-pbd-${safeTingkatan}-${academicYear}-${mode}.csv`, rows)
+      downloadCsv(`template-pbd-${safeTingkatan}-${academicYear}-kosong.csv`, rows)
     } catch (error) {
       console.error(error)
       setErrorMessage(error.message || 'Gagal menjana template PBD.')
@@ -699,7 +679,7 @@ export default function PbdInputPage() {
 
           if (!tp) {
             errors.push(
-              `Baris ${rowNumber}: TP untuk ${studentName || matched.enrollment.student_profiles?.full_name || '-'} - ${buildSubjectHeader(subject)} mesti antara TP1 hingga TP6.`
+              `Baris ${rowNumber}: TP untuk ${studentName || matched.enrollment.student_profiles?.full_name || '-'} - ${buildSubjectHeader(subject)} mesti antara 1 hingga 6 atau TP1 hingga TP6.`
             )
             return
           }
@@ -900,9 +880,10 @@ export default function PbdInputPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Import PBD Pukal</h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                Template PBD dijana mengikut tingkatan, murid aktif dan subjek aktif yang
-                didaftarkan oleh admin sekolah. Import pukal tidak memadam TP lama untuk sel
-                kosong, row yang tiada, atau column subjek yang tidak dihantar.
+                Template kosong hanya mengandungi tajuk kolum wajib dan subjek aktif bagi
+                tingkatan dipilih. Isi TP sebagai nombor 1 hingga 6 atau TP1 hingga TP6. Import
+                pukal tidak memadam TP lama untuk sel kosong, row yang tiada, atau column subjek
+                yang tidak dihantar.
               </p>
             </div>
             <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -910,25 +891,15 @@ export default function PbdInputPage() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
+            <div>
               <button
                 type="button"
-                onClick={() => handleDownloadTemplate({ withCurrentData: false })}
+                onClick={handleDownloadTemplate}
                 disabled={!selectedTingkatan || templateDownloading || tingkatanSubjects.length === 0}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {templateDownloading === 'kosong' ? 'Menjana...' : 'Muat Turun Template Kosong'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDownloadTemplate({ withCurrentData: true })}
-                disabled={!selectedTingkatan || templateDownloading || tingkatanSubjects.length === 0}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {templateDownloading === 'data-semasa'
-                  ? 'Menjana...'
-                  : 'Muat Turun Template Dengan Data Semasa'}
               </button>
             </div>
 

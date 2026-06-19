@@ -9,6 +9,10 @@ import { getDashboardPath } from '../lib/dashboardPath.js'
 import { getRelevantEnrollmentIds } from '../lib/completionMatrix.js'
 import { buildPbdClassSlips } from '../lib/pbdClassSlips.js'
 import {
+  loadPbdTpDescriptorsFromWorkbook,
+  mergePbdTpDescriptors,
+} from '../lib/pbdTpDescriptors.js'
+import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
   getDisplayLevel,
@@ -234,6 +238,7 @@ export default function PbdAnalysisPage() {
         { data: currentData, error: currentError },
         { data: snapshotData, error: snapshotError },
         { data: descriptorData, error: descriptorError },
+        workbookDescriptorResult,
       ] = await Promise.all([
         fetchSchoolLevelLabels({ schoolId, academicYear: year }),
         supabase
@@ -296,6 +301,9 @@ export default function PbdAnalysisPage() {
           .or(`school_id.is.null,school_id.eq.${schoolId}`)
           .order('subject_name', { ascending: true })
           .order('tp_level', { ascending: true }),
+        loadPbdTpDescriptorsFromWorkbook()
+          .then((data) => ({ data, error: null }))
+          .catch((error) => ({ data: [], error })),
       ])
 
       if (classError) throw classError
@@ -309,6 +317,12 @@ export default function PbdAnalysisPage() {
       if (descriptorError) {
         console.warn('PBD TP descriptors are not available yet:', descriptorError.message)
       }
+      if (workbookDescriptorResult.error) {
+        console.warn(
+          'PBD TP descriptor workbook could not be loaded:',
+          workbookDescriptorResult.error.message
+        )
+      }
 
       setLevelMappings(loadedLevelMappings || [])
       setClasses(classData || [])
@@ -318,7 +332,12 @@ export default function PbdAnalysisPage() {
       setPbdWindows(windowData || [])
       setCurrentRows(currentData || [])
       setSnapshotRows(snapshotData || [])
-      setTpDescriptors(descriptorError ? [] : descriptorData || [])
+      setTpDescriptors(
+        mergePbdTpDescriptors({
+          databaseDescriptors: descriptorError ? [] : descriptorData || [],
+          workbookDescriptors: workbookDescriptorResult.data,
+        })
+      )
     } catch (error) {
       console.error(error)
       const missingPbdTable =

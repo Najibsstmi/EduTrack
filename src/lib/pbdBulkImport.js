@@ -1,5 +1,3 @@
-import { compareStudentsByGenderThenName } from './studentSorting.js'
-
 const MANDATORY_HEADER_MAP = {
   no_ic: new Set([
     'noic',
@@ -149,7 +147,7 @@ export const downloadCsv = (filename, rows) => {
 
 export const normalizeTpValue = (value) => {
   const normalized = String(value || '').trim().toLocaleUpperCase('ms-MY').replace(/\s+/g, '')
-  const match = normalized.match(/^TP?([1-6])$/)
+  const match = normalized.match(/^(?:TP)?([1-6])$/)
   return match ? Number(match[1]) : null
 }
 
@@ -204,19 +202,8 @@ export const findEnrollmentFromLookup = ({ lookup, icNumber, className, tingkata
   lookup.get(buildEnrollmentKey({ icNumber, className, tingkatan })) || null
 
 export const generatePbdTemplateRows = ({
-  enrollments = [],
-  classes = [],
   subjects = [],
-  currentPbdRows = [],
-  selectedTingkatan = '',
 }) => {
-  const classById = new Map((classes || []).map((classRow) => [String(classRow.id), classRow]))
-  const pbdMap = new Map(
-    (currentPbdRows || []).map((row) => [
-      `${row.student_enrollment_id}__${row.subject_id}`,
-      row.tp ? String(row.tp) : '',
-    ])
-  )
   const header = [
     'NO KAD PENGENALAN',
     'NAMA MURID',
@@ -225,43 +212,5 @@ export const generatePbdTemplateRows = ({
     ...subjects.map((subject) => buildSubjectHeader(subject)),
   ]
 
-  const bodyRows = (enrollments || [])
-    .filter((enrollment) => {
-      const classRow = classById.get(String(enrollment.class_id))
-      return classRow?.tingkatan === selectedTingkatan
-    })
-    .sort((a, b) => {
-      const classA = classById.get(String(a.class_id))
-      const classB = classById.get(String(b.class_id))
-      const studentCompare = compareStudentsByGenderThenName(
-        {
-          full_name: a.student_profiles?.full_name || '',
-          gender: a.student_profiles?.gender || '',
-        },
-        {
-          full_name: b.student_profiles?.full_name || '',
-          gender: b.student_profiles?.gender || '',
-        }
-      )
-
-      if (studentCompare !== 0) return studentCompare
-
-      return String(classA?.class_name || '').localeCompare(String(classB?.class_name || ''), 'ms', {
-        sensitivity: 'base',
-        numeric: true,
-      })
-    })
-    .map((enrollment) => {
-      const classRow = classById.get(String(enrollment.class_id))
-
-      return [
-        enrollment.student_profiles?.ic_number || '',
-        enrollment.student_profiles?.full_name || '',
-        classRow?.class_name || '',
-        classRow?.tingkatan || '',
-        ...subjects.map((subject) => pbdMap.get(`${enrollment.id}__${subject.id}`) || ''),
-      ]
-    })
-
-  return [header, ...bodyRows]
+  return [header]
 }
