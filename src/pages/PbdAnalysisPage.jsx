@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
+import PbdAnalysisPrintView from '../components/PbdAnalysisPrintView.jsx'
 import PbdClassSlipPrint from '../components/PbdClassSlipPrint.jsx'
 import { PbdTpBarChart } from '../components/PbdCharts.jsx'
 import PbdTabs from '../components/PbdTabs.jsx'
@@ -152,6 +153,7 @@ export default function PbdAnalysisPage() {
   const [printSlips, setPrintSlips] = useState([])
   const [printDatasetLabel, setPrintDatasetLabel] = useState('')
   const [isPreparingPbdSlips, setIsPreparingPbdSlips] = useState(false)
+  const [isPrintingAnalysis, setIsPrintingAnalysis] = useState(false)
 
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
@@ -602,6 +604,36 @@ export default function PbdAnalysisPage() {
     [buildClassSummaries]
   )
 
+  const comparisonGradeGroups = useMemo(
+    () => ({
+      PENGGAL_1: buildGroupsFromClassSummaries(
+        comparisonClassSummaries.PENGGAL_1,
+        levelMappings
+      ),
+      PENGGAL_2: buildGroupsFromClassSummaries(
+        comparisonClassSummaries.PENGGAL_2,
+        levelMappings
+      ),
+    }),
+    [comparisonClassSummaries, levelMappings]
+  )
+
+  const comparisonOverallSummaries = useMemo(
+    () => ({
+      PENGGAL_1: sumSummaries(
+        comparisonGradeGroups.PENGGAL_1.map((group) => group.total),
+        'Jumlah',
+        'print-compare-p1'
+      ),
+      PENGGAL_2: sumSummaries(
+        comparisonGradeGroups.PENGGAL_2.map((group) => group.total),
+        'Jumlah',
+        'print-compare-p2'
+      ),
+    }),
+    [comparisonGradeGroups]
+  )
+
   const movementRows = useMemo(() => {
     if (!selectedSubjectKey) return []
 
@@ -680,6 +712,34 @@ export default function PbdAnalysisPage() {
       !dataLoading &&
       activeDatasetKey !== 'COMPARE'
   )
+  const canPrintAnalysis = Boolean(
+    selectedSubjectKey && !dataLoading && !isPreparingPbdSlips && !isPrintingAnalysis
+  )
+
+  const analysisFilterLabels = useMemo(
+    () => ({
+      tingkatan: selectedTingkatan
+        ? getDisplayLevel(selectedTingkatan, levelMappings)
+        : 'Semua Tingkatan',
+      className: selectedClass
+        ? getDisplayClassLabel(
+            selectedClass.tingkatan,
+            selectedClass.class_name,
+            levelMappings
+          )
+        : 'Semua Kelas',
+      tp: tpFilter ? `TP${tpFilter}` : 'Semua TP',
+    }),
+    [levelMappings, selectedClass, selectedTingkatan, tpFilter]
+  )
+
+  const handlePrintAnalysis = useCallback(() => {
+    if (!canPrintAnalysis || !profile?.school_id) return
+
+    setPrintSlips([])
+    setPrintDatasetLabel('')
+    setIsPrintingAnalysis(true)
+  }, [canPrintAnalysis, profile?.school_id])
 
   const handlePrintPbdClass = useCallback(async () => {
     if (!canPrintPbdClass || !profile?.school_id || !selectedClass) return
@@ -779,14 +839,58 @@ export default function PbdAnalysisPage() {
     }
   }, [isPreparingPbdSlips, printSlips.length])
 
+  useEffect(() => {
+    const stopPrintingAnalysis = () => setIsPrintingAnalysis(false)
+    window.addEventListener('afterprint', stopPrintingAnalysis)
+    return () => window.removeEventListener('afterprint', stopPrintingAnalysis)
+  }, [])
+
+  useEffect(() => {
+    if (!isPrintingAnalysis) return undefined
+
+    document.body.classList.add('pbd-analysis-print-mode')
+    let cancelled = false
+    let printTimer
+    let printScheduled = false
+
+    const schedulePrint = () => {
+      if (cancelled || printScheduled) return
+      printScheduled = true
+      printTimer = window.setTimeout(() => window.print(), 100)
+    }
+
+    const imageWaitTimer = window.setTimeout(schedulePrint, 1500)
+    const images = [...document.querySelectorAll('.pbd-analysis-print-root img')]
+    const imagePromises = images.map((image) => {
+      if (image.complete) return Promise.resolve()
+
+      return new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true })
+        image.addEventListener('error', resolve, { once: true })
+      })
+    })
+
+    Promise.all(imagePromises).then(() => {
+      window.clearTimeout(imageWaitTimer)
+      schedulePrint()
+    })
+
+    return () => {
+      cancelled = true
+      document.body.classList.remove('pbd-analysis-print-mode')
+      window.clearTimeout(imageWaitTimer)
+      if (printTimer) window.clearTimeout(printTimer)
+    }
+  }, [isPrintingAnalysis])
+
   if (checkingAuth || loading) {
     return <div className="p-6 text-slate-600">Loading analisis PBD...</div>
   }
 
   return (
     <>
-    <div className="pbd-analysis-screen min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="pbd-analysis-screen min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PBD"
           actionRight={
@@ -814,11 +918,19 @@ export default function PbdAnalysisPage() {
               <h2 className="text-lg font-semibold text-slate-900">Penapis Analisis</h2>
               <p className="mt-1 text-sm text-slate-500">{windowStatus}</p>
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                onClick={handlePrintAnalysis}
+                disabled={!canPrintAnalysis}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isPrintingAnalysis ? 'Menyediakan cetakan...' : 'Cetak Analisis'}
+              </button>
               <button
                 type="button"
                 onClick={handlePrintPbdClass}
-                disabled={!canPrintPbdClass || isPreparingPbdSlips}
+                disabled={!canPrintPbdClass || isPreparingPbdSlips || isPrintingAnalysis}
                 className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isPreparingPbdSlips ? 'Menjana slip...' : 'Cetak Slip PBD Kelas'}
@@ -905,13 +1017,15 @@ export default function PbdAnalysisPage() {
           </div>
         </section>
 
-        <section className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <section className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex sm:flex-wrap">
           {DATASET_TABS.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActiveDatasetKey(tab.key)}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+              className={`min-h-11 rounded-xl px-3 py-2 text-xs font-semibold leading-snug sm:px-4 sm:text-sm ${
+                tab.key === 'COMPARE' ? 'col-span-2' : ''
+              } ${
                 activeDatasetKey === tab.key
                   ? 'bg-slate-900 text-white'
                   : 'border border-slate-300 text-slate-700 hover:bg-slate-100'
@@ -953,6 +1067,21 @@ export default function PbdAnalysisPage() {
       academicYear={academicYear}
       datasetLabel={printDatasetLabel}
     />
+    {isPrintingAnalysis ? (
+      <PbdAnalysisPrintView
+        schoolInfo={schoolInfo}
+        academicYear={academicYear}
+        selectedSubjectName={selectedSubjectName}
+        activeDatasetKey={activeDatasetKey}
+        activeGradeGroups={activeGradeGroups}
+        activeOverallSummary={activeOverallSummary}
+        activeDistribution={activeDistribution}
+        movementRows={movementRows}
+        comparisonGradeGroups={comparisonGradeGroups}
+        comparisonOverallSummaries={comparisonOverallSummaries}
+        filterLabels={analysisFilterLabels}
+      />
+    ) : null}
     </>
   )
 }
@@ -971,7 +1100,7 @@ function ReportSection({
 
   return (
     <>
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <SummaryCard title="Jumlah Murid" value={overallSummary.totalStudents} />
         <SummaryCard title="Telah Diisi" value={overallSummary.assessedCount} />
         <SummaryCard title="TD" value={overallSummary.tdCount} />
@@ -979,7 +1108,7 @@ function ReportSection({
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.46fr)]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:p-5">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:p-5">
           <ReportHeading title={reportTitle} subject={titleSubject} />
           <GradeDistributionTable
             gradeSummaries={gradeGroups.map((group) => group.total)}
@@ -987,7 +1116,7 @@ function ReportSection({
           />
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h3 className="text-base font-semibold text-slate-900">Carta Taburan TP</h3>
           <PbdTpBarChart distribution={activeDistribution} />
         </div>
@@ -1110,7 +1239,18 @@ function GradeDistributionTable({ gradeSummaries, overallSummary }) {
   const rows = [...gradeSummaries, overallSummary]
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <>
+    <div className="mt-4 space-y-3 lg:hidden">
+      {rows.map((row, index) => (
+        <MobileDistributionCard
+          key={row.id}
+          row={row}
+          label={index === rows.length - 1 ? 'JUMLAH' : formatReportGradeLabel(row.label)}
+          emphasized={index === rows.length - 1}
+        />
+      ))}
+    </div>
+    <div className="mt-4 hidden overflow-x-auto lg:block">
       <table className="min-w-[1120px] border-collapse text-sm text-slate-950">
         <thead>
           <tr>
@@ -1170,6 +1310,7 @@ function GradeDistributionTable({ gradeSummaries, overallSummary }) {
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -1185,10 +1326,20 @@ function ClassDistributionBlocks({ gradeGroups }) {
   return (
     <div className="mt-4 space-y-5">
       {gradeGroups.map((group) => (
-        <div key={group.tingkatan} className="overflow-x-auto">
+        <div key={group.tingkatan} className="min-w-0">
           <div className="mb-1 text-sm font-bold uppercase text-slate-950">
             {formatReportGradeLabel(group.label)}:
           </div>
+          <div className="mt-3 space-y-3 lg:hidden">
+            {[...group.rows, { ...group.total, label: 'JUMLAH' }].map((row) => (
+              <MobileClassDistributionCard
+                key={row.id || row.label}
+                row={row}
+                emphasized={row.label === 'JUMLAH'}
+              />
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto lg:block">
             <table className="min-w-[780px] border-collapse text-xs text-slate-950 md:text-sm">
               <thead>
                 <tr>
@@ -1229,6 +1380,7 @@ function ClassDistributionBlocks({ gradeGroups }) {
                 ))}
               </tbody>
             </table>
+          </div>
         </div>
       ))}
     </div>
@@ -1239,7 +1391,19 @@ function MinimumAchievementTable({ gradeSummaries, overallSummary }) {
   const rows = [...gradeSummaries, overallSummary]
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <>
+    <div className="mt-4 space-y-3 lg:hidden">
+      {rows.map((row, index) => (
+        <MobileDistributionCard
+          key={row.id}
+          row={row}
+          label={index === rows.length - 1 ? 'JUMLAH' : formatReportGradeLabel(row.label)}
+          emphasized={index === rows.length - 1}
+          showMinimum
+        />
+      ))}
+    </div>
+    <div className="mt-4 hidden overflow-x-auto lg:block">
       <table className="min-w-[1120px] border-collapse text-xs text-slate-950 md:text-sm">
         <thead>
           <tr>
@@ -1299,6 +1463,84 @@ function MinimumAchievementTable({ gradeSummaries, overallSummary }) {
         </tbody>
       </table>
     </div>
+    </>
+  )
+}
+
+function MobileDistributionCard({ row, label, emphasized = false, showMinimum = false }) {
+  return (
+    <article
+      className={`overflow-hidden rounded-xl border ${
+        emphasized ? 'border-blue-200 bg-blue-50/70' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2.5">
+        <div className="text-sm font-bold text-slate-900">{label}</div>
+        <div className="shrink-0 rounded-full bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">
+          {row.totalStudents} murid
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 p-3">
+        {TP_LEVELS.map((level) => (
+          <MobileTpMetric
+            key={level}
+            label={`TP${level}`}
+            count={row.counts?.[level] || 0}
+            percent={row.percentages?.[level] || 0}
+            highlight={REPORT_TP_HIGHLIGHT_LEVELS.has(level)}
+          />
+        ))}
+        <MobileTpMetric label="TD" count={row.tdCount} percent={row.tdPercent} />
+      </div>
+      {showMinimum ? (
+        <div className="mx-3 mb-3 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900 ring-1 ring-inset ring-emerald-200">
+          <span className="text-xs font-semibold">Minimum TP3–TP6</span>
+          <strong className="text-sm">{row.minimumCount} ({formatReportPercent(row.minimumPercent)}%)</strong>
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+function MobileTpMetric({ label, count, percent, highlight = false }) {
+  return (
+    <div className={`rounded-lg p-2 text-center ${highlight ? 'bg-amber-100' : 'bg-slate-100'}`}>
+      <div className="text-[11px] font-bold text-slate-600">{label}</div>
+      <div className="mt-0.5 text-base font-extrabold text-slate-950">{count}</div>
+      <div className="text-[10px] font-medium text-slate-500">{formatReportPercent(percent)}%</div>
+    </div>
+  )
+}
+
+function MobileClassDistributionCard({ row, emphasized = false }) {
+  return (
+    <article
+      className={`rounded-xl border p-3 ${
+        emphasized ? 'border-blue-200 bg-blue-50/70' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-bold text-slate-900">{formatReportClassLabel(row.label)}</div>
+        <div className="text-xs font-semibold text-slate-500">{row.totalStudents} murid</div>
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        {TP_LEVELS.map((level) => (
+          <div
+            key={level}
+            className={`rounded-lg px-2 py-2 text-center ${
+              REPORT_TP_HIGHLIGHT_LEVELS.has(level) ? 'bg-amber-100' : 'bg-slate-100'
+            }`}
+          >
+            <div className="text-[10px] font-bold text-slate-500">TP{level}</div>
+            <div className="text-sm font-extrabold text-slate-900">{row.counts?.[level] || 0}</div>
+          </div>
+        ))}
+        <div className="rounded-lg bg-slate-100 px-2 py-2 text-center">
+          <div className="text-[10px] font-bold text-slate-500">TD</div>
+          <div className="text-sm font-extrabold text-slate-900">{row.tdCount}</div>
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -1340,7 +1582,35 @@ function CountCell({ count, highlight = false }) {
 
 function MovementTable({ rows }) {
   return (
-    <div className="mt-4 overflow-x-auto">
+    <>
+    <div className="mt-4 space-y-3 lg:hidden">
+      {rows.map((row) => (
+        <article key={row.key} className="rounded-xl border border-slate-200 bg-white p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-slate-900">{row.studentName}</div>
+              <div className="mt-0.5 text-xs text-slate-500">{row.className} · {row.subjectName}</div>
+            </div>
+            <span className={getStatusBadgeClass(row.status)}>{row.status}</span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 divide-x divide-slate-200 rounded-lg bg-slate-50 py-2 text-center">
+            <div>
+              <div className="text-[10px] font-semibold uppercase text-slate-500">Penggal 1</div>
+              <div className="text-sm font-bold text-slate-900">TP{row.tp1}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase text-slate-500">Penggal 2</div>
+              <div className="text-sm font-bold text-slate-900">TP{row.tp2}</div>
+            </div>
+            <div>
+              <div className="text-[10px] font-semibold uppercase text-slate-500">Perubahan</div>
+              <div className="text-sm font-bold text-slate-900">{row.delta > 0 ? `+${row.delta}` : row.delta}</div>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+    <div className="mt-4 hidden overflow-x-auto lg:block">
       <table className="min-w-full border-collapse text-sm">
         <thead className="bg-slate-50">
           <tr>
@@ -1386,14 +1656,15 @@ function MovementTable({ rows }) {
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
 function SummaryCard({ title, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-sm font-medium text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+      <div className="text-xs font-medium leading-snug text-slate-500 sm:text-sm">{title}</div>
+      <div className="mt-1.5 break-words text-xl font-bold text-slate-900 sm:mt-2 sm:text-2xl">{value}</div>
     </div>
   )
 }

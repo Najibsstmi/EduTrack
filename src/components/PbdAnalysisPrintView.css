@@ -1,0 +1,344 @@
+.pbd-analysis-print-root {
+  display: none;
+}
+
+@media print {
+  body.pbd-analysis-print-mode {
+    background: #ffffff !important;
+  }
+
+  body.pbd-analysis-print-mode .pbd-analysis-screen,
+  body.pbd-analysis-print-mode .pbd-slip-print-root,
+  body.pbd-analysis-print-mode .install-edutrack-button,
+  body.pbd-analysis-print-mode .print-reports-root {
+    display: none !important;
+  }
+
+  body.pbd-analysis-print-mode .pbd-analysis-print-root {
+    display: block !important;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    color: #0f172a;
+    background: #ffffff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  .pbd-analysis-print-document {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .pbd-analysis-school-header {
+    display: grid;
+    grid-template-columns: 15mm minmax(0, 1fr) auto 20mm;
+    gap: 3mm;
+    align-items: center;
+    padding-bottom: 2mm;
+    border-bottom: 1.2pt solid #0f172a;
+  }
+
+  .pbd-analysis-school-logo {
+    display: grid;
+    width: 13mm;
+    height: 13mm;
+    place-items: center;
+    overflow: hidden;
+    border: 0.6pt solid #cbd5e1;
+    border-radius: 1.5mm;
+    color: #94a3b8;
+    font-size: 5px;
+    text-align: center;
+  }
+
+  .pbd-analysis-school-logo img,
+  .pbd-analysis-edutrack-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .pbd-analysis-school-name {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .pbd-analysis-school-copy > div:last-child {
+    margin-top: 0.5mm;
+    color: #64748b;
+    font-size: 7px;
+  }
+
+  .pbd-analysis-filter-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 1mm;
+    max-width: 100mm;
+  }
+
+  .pbd-analysis-filter-summary span {
+    padding: 1mm 1.5mm;
+    border: 0.5pt solid #cbd5e1;
+    border-radius: 1mm;
+    background: #f8fafc;
+    font-size: 7px;
+    font-weight: 600;
+  }
+
+  .pbd-analysis-edutrack-mark {
+    display: grid;
+    justify-items: center;
+    color: #475569;
+    font-size: 5.5px;
+    text-align: center;
+  }
+
+  .pbd-analysis-edutrack-mark img {
+    width: 16mm;
+    height: 7mm;
+    margin-bottom: 0.5mm;
+  }
+
+  .pbd-analysis-report-block {
+    margin-top: 2.5mm;
+  }
+
+  .pbd-analysis-report-block + .pbd-analysis-report-block {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .pbd-analysis-overall-summary,
+  .pbd-analysis-screen-style-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .pbd-analysis-overall-summary th,
+  .pbd-analysis-overall-summary td {
+    border: 0.6pt solid #64748b;
+    padding: 2px 3px;
+    font-size: 8px;
+    text-align: center;
+  }
+
+  .pbd-analysis-overall-summary th {
+    background: #d9d9d9;
+    font-weight: 700;
+  }
+
+  .pbd-analysis-overall-summary td {
+    background: #ffffff;
+    font-weight: 800;
+  }
+
+  .pbd-analysis-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(50mm, 0.55fr);
+    gap: 2.5mm;
+    align-items: stretch;
+    margin-top: 2.5mm;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .pbd-analysis-print-panel {
+    min-width: 0;
+    padding: 2mm;
+    border: 0.6pt solid #cbd5e1;
+    border-radius: 1.5mm;
+    background: #ffffff;
+  }
+
+  .pbd-analysis-report-heading {
+    margin-bottom: 2mm;
+    color: #020617;
+    font-size: 9px;
+    font-style: italic;
+    font-weight: 800;
+    line-height: 1.35;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .pbd-analysis-report-heading > div + div {
+    margin-top: 0.7mm;
+  }
+
+  .pbd-analysis-chart-panel h3,
+  .pbd-analysis-minimum-panel h3 {
+    margin: 0 0 2mm;
+    color: #0f172a;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: none;
+  }
+
+  .pbd-analysis-screen-style-table th,
+  .pbd-analysis-screen-style-table td {
+    border: 0.6pt solid #334155;
+    padding: 3px;
+    font-size: 9px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    text-align: center;
+    vertical-align: middle;
+    word-break: break-word;
+  }
+
+  .pbd-analysis-screen-style-table thead {
+    display: table-header-group;
+  }
+
+  .pbd-analysis-screen-style-table thead th {
+    background: #cfcfcf;
+    color: #0f172a;
+    font-weight: 800;
+  }
+
+  .pbd-analysis-screen-style-table thead tr:nth-child(2) th {
+    background: #d9d9d9;
+  }
+
+  .pbd-analysis-screen-style-table tbody th {
+    background: #ffffff;
+    font-weight: 800;
+    text-align: left;
+  }
+
+  .pbd-analysis-screen-style-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .pbd-analysis-screen-style-table .is-highlight {
+    background: #ffe699;
+  }
+
+  .pbd-analysis-screen-style-table .is-total th,
+  .pbd-analysis-screen-style-table .is-total td {
+    background: #b7d7f0 !important;
+    font-weight: 800;
+  }
+
+  .pbd-analysis-screen-style-table .is-bold {
+    font-weight: 800;
+  }
+
+  .pbd-analysis-screen-style-table .is-minimum-count {
+    color: #e11d48;
+    font-weight: 800;
+  }
+
+  .pbd-analysis-col-number { width: 4%; }
+  .pbd-analysis-col-level { width: 15%; }
+  .pbd-analysis-col-students { width: 7%; }
+  .pbd-analysis-col-class-name { width: 27%; }
+  .pbd-analysis-col-minimum { width: 8%; }
+
+  .pbd-analysis-print-chart {
+    display: block;
+    width: 100%;
+    height: 52mm;
+  }
+
+  .pbd-analysis-chart-grid {
+    stroke: #e2e8f0;
+    stroke-dasharray: 3 3;
+    stroke-width: 1;
+  }
+
+  .pbd-analysis-chart-axis {
+    stroke: #94a3b8;
+    stroke-width: 1;
+  }
+
+  .pbd-analysis-chart-axis-label,
+  .pbd-analysis-chart-label {
+    fill: #475569;
+    font-size: 8px;
+  }
+
+  .pbd-analysis-chart-value {
+    fill: #1e3a8a;
+    font-size: 8px;
+    font-weight: 700;
+  }
+
+  .pbd-analysis-chart-bar {
+    fill: #2563eb;
+  }
+
+  .pbd-analysis-class-panel,
+  .pbd-analysis-minimum-panel,
+  .pbd-analysis-movement-panel {
+    margin-top: 2.5mm;
+  }
+
+  .pbd-analysis-class-panel {
+    page-break-before: auto;
+    break-before: auto;
+  }
+
+  .pbd-analysis-class-groups {
+    display: grid;
+    gap: 2.5mm;
+  }
+
+  .pbd-analysis-class-group {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .pbd-analysis-class-group-title {
+    margin-bottom: 1mm;
+    font-size: 8px;
+    font-weight: 800;
+  }
+
+  .pbd-analysis-class-table th,
+  .pbd-analysis-class-table td {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  .pbd-analysis-minimum-panel {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .pbd-analysis-print-empty {
+    padding: 5mm !important;
+    color: #64748b;
+    text-align: center !important;
+  }
+
+  .pbd-analysis-movement-panel {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .pbd-analysis-movement-table th:first-child,
+  .pbd-analysis-movement-table td:first-child {
+    width: 24%;
+    text-align: left;
+  }
+
+  .pbd-analysis-print-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    margin-top: 2.5mm;
+    padding-top: 1.5mm;
+    border-top: 0.5pt solid #cbd5e1;
+    color: #64748b;
+    font-size: 6.5px;
+  }
+}
