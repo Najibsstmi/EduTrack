@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Menu, X } from 'lucide-react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
 import {
@@ -1185,6 +1185,20 @@ export default function SchoolAdminDashboard() {
     if (item.path) handleNavNavigate(item.path)
   }
 
+  const handleDesktopMenuLinkClick = (event, item) => {
+    if (
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    setActiveDesktopMenu((prev) => (prev === item.key ? '' : item.key))
+  }
+
   const renderMobileSubMenuItem = (child) => {
     if (child.items) {
       return (
@@ -1204,6 +1218,33 @@ export default function SchoolAdminDashboard() {
       )
     }
 
+    const itemStyle = {
+      ...styles.mobileSubMenuItem,
+      ...(isNavigationItemActive(child) ? styles.mobileSubMenuItemActive : {}),
+      ...(child.disabled ? styles.mobileSubMenuItemDisabled : {}),
+    }
+
+    const content = (
+      <>
+        <span>{child.label}</span>
+        {child.note ? <span style={styles.mobileSoonTag}>{child.note}</span> : null}
+      </>
+    )
+
+    if (child.path && !child.disabled) {
+      return (
+        <Link
+          key={child.key}
+          to={child.path}
+          onClick={closeNavigationMenus}
+          title={child.title || child.note}
+          style={itemStyle}
+        >
+          {content}
+        </Link>
+      )
+    }
+
     return (
       <button
         key={child.key}
@@ -1211,14 +1252,9 @@ export default function SchoolAdminDashboard() {
         onClick={() => handleNavItemClick(child)}
         disabled={child.disabled}
         title={child.title || child.note}
-        style={{
-          ...styles.mobileSubMenuItem,
-          ...(isNavigationItemActive(child) ? styles.mobileSubMenuItemActive : {}),
-          ...(child.disabled ? styles.mobileSubMenuItemDisabled : {}),
-        }}
+        style={itemStyle}
       >
-        <span>{child.label}</span>
-        {child.note ? <span style={styles.mobileSoonTag}>{child.note}</span> : null}
+        {content}
       </button>
     )
   }
@@ -1242,6 +1278,33 @@ export default function SchoolAdminDashboard() {
       )
     }
 
+    const itemStyle = {
+      ...styles.dropdownItem,
+      ...(isNavigationItemActive(child) ? styles.dropdownItemActive : {}),
+      ...(child.disabled ? styles.dropdownItemDisabled : {}),
+    }
+
+    const content = (
+      <>
+        <span>{child.label}</span>
+        {child.note ? <span style={styles.dropdownNote}>{child.note}</span> : null}
+      </>
+    )
+
+    if (child.path && !child.disabled) {
+      return (
+        <Link
+          key={child.key}
+          to={child.path}
+          onClick={closeNavigationMenus}
+          title={child.title || child.note}
+          style={itemStyle}
+        >
+          {content}
+        </Link>
+      )
+    }
+
     return (
       <button
         key={child.key}
@@ -1249,14 +1312,9 @@ export default function SchoolAdminDashboard() {
         onClick={() => handleNavItemClick(child)}
         disabled={child.disabled}
         title={child.title || child.note}
-        style={{
-          ...styles.dropdownItem,
-          ...(isNavigationItemActive(child) ? styles.dropdownItemActive : {}),
-          ...(child.disabled ? styles.dropdownItemDisabled : {}),
-        }}
+        style={itemStyle}
       >
-        <span>{child.label}</span>
-        {child.note ? <span style={styles.dropdownNote}>{child.note}</span> : null}
+        {content}
       </button>
     )
   }
@@ -1363,12 +1421,13 @@ export default function SchoolAdminDashboard() {
 
   const adminNavigation = [
     { key: 'dashboard', label: 'Dashboard', path: '/dashboard' },
-    { key: 'assessment', label: 'Pentaksiran', items: assessmentItems },
-    { key: 'students', label: 'Murid', items: studentItems },
-    { key: 'analysis', label: 'Analisis', items: analysisItems },
+    { key: 'assessment', label: 'Pentaksiran', path: '/scores', items: assessmentItems },
+    { key: 'students', label: 'Murid', path: '/students', items: studentItems },
+    { key: 'analysis', label: 'Analisis', path: '/analysis/class', items: analysisItems },
     {
       key: 'settings',
       label: 'Tetapan',
+      path: '/school-setup',
       items: settingsItems,
       disabled: !isSchoolAdmin,
       title: !isSchoolAdmin ? 'Hanya admin sekolah boleh akses halaman ini' : undefined,
@@ -1540,6 +1599,20 @@ export default function SchoolAdminDashboard() {
                   <div style={styles.mobileDrawerMenu}>
                     {adminNavigation.map((item) => {
                       if (!item.items) {
+                        if (item.path && !item.disabled) {
+                          return (
+                            <Link
+                              key={item.key}
+                              to={item.path}
+                              onClick={closeNavigationMenus}
+                              title={item.title}
+                              style={getMobileNavButtonStyle(item)}
+                            >
+                              {item.label}
+                            </Link>
+                          )
+                        }
+
                         return (
                           <button
                             key={item.key}
@@ -1598,6 +1671,22 @@ export default function SchoolAdminDashboard() {
             <div style={styles.topActions} ref={settingsMenuRef}>
               {adminNavigation.map((item) => {
                 if (!item.items) {
+                  if (item.path && !item.disabled) {
+                    return (
+                      <Link
+                        key={item.key}
+                        to={item.path}
+                        onClick={closeNavigationMenus}
+                        onMouseEnter={() => setHoveredNav(item.key)}
+                        onMouseLeave={() => setHoveredNav('')}
+                        title={item.title}
+                        style={getNavButtonStyle(item)}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  }
+
                   return (
                     <button
                       key={item.key}
@@ -1616,24 +1705,42 @@ export default function SchoolAdminDashboard() {
 
                 return (
                   <div key={item.key} style={styles.desktopMenuWrap}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!item.disabled) {
-                          setActiveDesktopMenu((prev) => (prev === item.key ? '' : item.key))
-                        }
-                      }}
-                      onMouseEnter={() => setHoveredNav(item.key)}
-                      onMouseLeave={() => setHoveredNav('')}
-                      disabled={item.disabled}
-                      title={item.title}
-                      style={getNavButtonStyle(item)}
-                    >
-                      <span>{item.label}</span>
-                      <span aria-hidden="true" style={styles.desktopMenuChevron}>
-                        {activeDesktopMenu === item.key ? '▴' : '▾'}
-                      </span>
-                    </button>
+                    {item.path && !item.disabled ? (
+                      <Link
+                        to={item.path}
+                        onClick={(event) => handleDesktopMenuLinkClick(event, item)}
+                        onMouseEnter={() => setHoveredNav(item.key)}
+                        onMouseLeave={() => setHoveredNav('')}
+                        title={item.title}
+                        style={getNavButtonStyle(item)}
+                        aria-haspopup="menu"
+                        aria-expanded={activeDesktopMenu === item.key}
+                      >
+                        <span>{item.label}</span>
+                        <span aria-hidden="true" style={styles.desktopMenuChevron}>
+                          {activeDesktopMenu === item.key ? '▴' : '▾'}
+                        </span>
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!item.disabled) {
+                            setActiveDesktopMenu((prev) => (prev === item.key ? '' : item.key))
+                          }
+                        }}
+                        onMouseEnter={() => setHoveredNav(item.key)}
+                        onMouseLeave={() => setHoveredNav('')}
+                        disabled={item.disabled}
+                        title={item.title}
+                        style={getNavButtonStyle(item)}
+                      >
+                        <span>{item.label}</span>
+                        <span aria-hidden="true" style={styles.desktopMenuChevron}>
+                          {activeDesktopMenu === item.key ? '▴' : '▾'}
+                        </span>
+                      </button>
+                    )}
 
                     {activeDesktopMenu === item.key && (
                       <div style={styles.settingsDropdown}>
@@ -1730,8 +1837,8 @@ export default function SchoolAdminDashboard() {
           </p>
 
           <div style={styles.quickActionGrid}>
-            <div
-              onClick={() => navigate('/scores')}
+            <Link
+              to="/scores"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1752,10 +1859,10 @@ export default function SchoolAdminDashboard() {
               <p style={styles.quickActionDesc}>
                 Masukkan markah peperiksaan murid dengan lebih cepat dan tersusun.
               </p>
-            </div>
+            </Link>
 
-            <div
-              onClick={() => navigate('/analysis/class')}
+            <Link
+              to="/analysis/class"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1776,10 +1883,10 @@ export default function SchoolAdminDashboard() {
               <p style={styles.quickActionDesc}>
                 Lihat ringkasan kelas, subjek dan GPMP peperiksaan dengan lebih jelas.
               </p>
-            </div>
+            </Link>
 
-            <div
-              onClick={() => navigate('/pbs/pajsk')}
+            <Link
+              to="/pbs/pajsk"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1800,10 +1907,10 @@ export default function SchoolAdminDashboard() {
               <p style={styles.quickActionDesc}>
                 Akses input SEGAK, BMI dan komponen PAJSK yang tersedia.
               </p>
-            </div>
+            </Link>
 
-            <div
-              onClick={() => navigate('/input-pbd')}
+            <Link
+              to="/input-pbd"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1824,10 +1931,10 @@ export default function SchoolAdminDashboard() {
               <p style={styles.quickActionDesc}>
                 Isi TP semasa murid menggunakan window PBD yang dibuka oleh admin sekolah.
               </p>
-            </div>
+            </Link>
 
-            <div
-              onClick={() => navigate('/academic-targets')}
+            <Link
+              to="/academic-targets"
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1848,11 +1955,11 @@ export default function SchoolAdminDashboard() {
               <p style={styles.quickActionDesc}>
                 Tetapkan profil sasaran OTR yang digunakan dalam analisis akademik.
               </p>
-            </div>
+            </Link>
 
             {isSchoolAdmin && (
-              <div
-                onClick={() => navigate('/manage-subject-students')}
+              <Link
+                to="/manage-subject-students"
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)'
                   e.currentTarget.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.08)'
@@ -1874,7 +1981,7 @@ export default function SchoolAdminDashboard() {
                   Tetapkan murid yang mengambil subjek selective seperti Pendidikan Islam,
                   Pendidikan Moral atau subjek elektif lain.
                 </p>
-              </div>
+              </Link>
             )}
           </div>
         </section>
@@ -2448,6 +2555,7 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    textDecoration: 'none',
   },
   navButtonHover: {
     background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
@@ -2524,6 +2632,7 @@ const styles = {
     cursor: 'pointer',
     fontWeight: 600,
     color: '#0f172a',
+    textDecoration: 'none',
   },
   dropdownItemActive: {
     background: '#eff6ff',
@@ -2683,6 +2792,7 @@ const styles = {
     fontWeight: 800,
     letterSpacing: '0.01em',
     cursor: 'pointer',
+    textDecoration: 'none',
   },
   mobileMenuItemActive: {
     background: 'rgba(255, 255, 255, 0.08)',
@@ -2744,6 +2854,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: 700,
     cursor: 'pointer',
+    textDecoration: 'none',
   },
   mobileSubMenuItemActive: {
     background: 'rgba(255,255,255,0.08)',
@@ -3004,6 +3115,8 @@ const styles = {
     flexDirection: 'column',
     gap: '10px',
     minHeight: '120px',
+    color: 'inherit',
+    textDecoration: 'none',
   },
   quickActionCardBlue: {
     background: 'linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%)',
