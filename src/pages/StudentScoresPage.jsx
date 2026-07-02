@@ -47,8 +47,19 @@ const DYNAMIC_BULK_TEMPLATE_HEADERS = [
   'TINGKATAN',
 ]
 
+const ABSENT_MARK_TEXT = 'TH'
+
 const normalizeText = (value) =>
-  String(value || '').trim()
+  String(value ?? '').trim()
+
+const isAbsentMarkInput = (value) =>
+  normalizeText(value).toUpperCase() === ABSENT_MARK_TEXT
+
+const isBlankMarkInput = (value) =>
+  value === '' || value === null || value === undefined
+
+const normalizeScoreInputValue = (value) =>
+  isAbsentMarkInput(value) ? ABSENT_MARK_TEXT : value
 
 const normalizeCompareText = (value) =>
   String(value || '')
@@ -391,6 +402,9 @@ const findGradeFromMark = (mark, gradeScales = []) => {
   if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
 
   const matched = gradeScales.find((grade) => {
+    const gradeName = String(grade.grade_name ?? grade.grade ?? '').trim().toUpperCase()
+    if (gradeName === ABSENT_MARK_TEXT) return false
+
     const min = Number(grade.min_mark ?? grade.min_score ?? 0)
     const max = Number(grade.max_mark ?? grade.max_score ?? 100)
     return numericMark >= min && numericMark <= max
@@ -855,7 +869,7 @@ export default function StudentScoresPage() {
 
         let scoreQuery = supabase
           .from('student_scores')
-          .select('student_enrollment_id, exam_key, exam_config_id, mark')
+          .select('student_enrollment_id, exam_key, exam_config_id, mark, is_absent')
           .eq('school_id', profile.school_id)
           .eq('class_id', selectedClass)
           .eq('subject_id', selectedSubject)
@@ -873,7 +887,8 @@ export default function StudentScoresPage() {
 
         const mapped = {}
         ;(data || []).forEach((row) => {
-          mapped[row.student_enrollment_id] = row.mark
+          mapped[row.student_enrollment_id] =
+            row.is_absent === true ? ABSENT_MARK_TEXT : row.mark
         })
 
         setGuideMarks(mapped)
@@ -1220,7 +1235,11 @@ export default function StudentScoresPage() {
     const scoreMap = {}
     scoreData?.forEach((s) => {
       const scoreStudentId = s.student_profile_id || s.student_id
-      if (scoreStudentId) scoreMap[scoreStudentId] = s
+      if (scoreStudentId) {
+        scoreMap[scoreStudentId] = s.is_absent === true
+          ? { ...s, mark: ABSENT_MARK_TEXT }
+          : s
+      }
     })
 
     setScores(scoreMap)
@@ -1244,7 +1263,7 @@ export default function StudentScoresPage() {
       ...prev,
       [studentId]: {
         ...prev[studentId],
-        mark: value,
+        mark: normalizeScoreInputValue(value),
       },
     }))
   }
@@ -1704,6 +1723,7 @@ export default function StudentScoresPage() {
       const rowNumber = row.__rowNumber
       const normalizedExamKey = normalizeExamKey(examKey)
       const markRaw = normalizeText(markValue)
+      const isAbsentMark = isAbsentMarkInput(markRaw)
       const matchedStudentEnrollment = matchedBundle.enrollment
       const matchedClass = matchedBundle.classRow
       const matchedStudentProfile = matchedBundle.studentProfile
@@ -1768,15 +1788,29 @@ export default function StudentScoresPage() {
         return false
       }
 
-      const mark = Number(markRaw)
-
-      if (Number.isNaN(mark) || mark < 0 || mark > 100) {
+      if (isAbsentMark && normalizedExamKey === 'ETR') {
         recordError(
           row,
-          `Baris ${rowNumber}: Markah untuk ${studentName} - ${subjectLabel} mesti antara 0 hingga 100.`,
+          `Baris ${rowNumber}: TH hanya dibenarkan untuk peperiksaan markah, bukan ETR.`,
           { subject: subjectLabel, mark: markValue }
         )
         return false
+      }
+
+      let mark = null
+      let gradeInfo = { grade_name: null, grade_point: null }
+
+      if (!isAbsentMark) {
+        mark = Number(markRaw)
+
+        if (Number.isNaN(mark) || mark < 0 || mark > 100) {
+          recordError(
+            row,
+            `Baris ${rowNumber}: Markah untuk ${studentName} - ${subjectLabel} mesti antara 0 hingga 100 atau TH.`,
+            { subject: subjectLabel, mark: markValue }
+          )
+          return false
+        }
       }
 
       const matchedExamConfig = await getActiveExamConfigForGrade(
@@ -1807,17 +1841,19 @@ export default function StudentScoresPage() {
         return false
       }
 
-      const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
-        const label =
-          grade.tingkatan ??
-          grade.grade_label ??
-          grade.form_level ??
-          grade.level ??
-          ''
+      if (!isAbsentMark) {
+        const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
+          const label =
+            grade.tingkatan ??
+            grade.grade_label ??
+            grade.form_level ??
+            grade.level ??
+            ''
 
-        return normalizeGradeLabel(label) === normalizeGradeLabel(matchedClass.tingkatan)
-      })
-      const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+          return normalizeGradeLabel(label) === normalizeGradeLabel(matchedClass.tingkatan)
+        })
+        gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+      }
 
       if (normalizedExamKey === 'ETR') {
         targetRowsToUpsert.push({
@@ -1850,7 +1886,7 @@ export default function StudentScoresPage() {
           mark,
           grade_name: gradeInfo.grade_name,
           grade_point: gradeInfo.grade_point,
-          is_absent: false,
+          is_absent: isAbsentMark,
           remarks: null,
           entered_by: profile.id,
           verified_by: null,
@@ -1859,14 +1895,16 @@ export default function StudentScoresPage() {
         })
       }
 
-      addOtrCandidatePair({
-        matchedClass,
-        matchedStudentEnrollment,
-        matchedStudentProfile,
-        matchedSubject,
-        examKey: normalizedExamKey,
-        mark,
-      })
+      if (!isAbsentMark) {
+        addOtrCandidatePair({
+          matchedClass,
+          matchedStudentEnrollment,
+          matchedStudentProfile,
+          matchedSubject,
+          examKey: normalizedExamKey,
+          mark,
+        })
+      }
 
       processedCount += 1
       validRowNumbers.add(rowNumber)
@@ -2272,39 +2310,66 @@ export default function StudentScoresPage() {
       return String(label).trim().toLowerCase() === String(selectedGradeLabel).trim().toLowerCase()
     })
 
-    const payload = displayedStudents
-      .filter((student) => {
-        if (!displayedEnrollmentIdSet.has(String(student.enrollment_id))) {
-          return false
-        }
+    const normalizedSelectedExam = normalizeExamKey(selectedExam)
+    const inputRows = displayedStudents.filter((student) =>
+      displayedEnrollmentIdSet.has(String(student.enrollment_id))
+    )
+    const rowsWithInput = inputRows.filter((student) => {
+      const rawMark = scores[student.student_id]?.mark
+      return !isBlankMarkInput(rawMark)
+    })
+    const invalidRows = rowsWithInput.filter((student) => {
+      const rawMark = scores[student.student_id]?.mark
+      if (isAbsentMarkInput(rawMark)) return false
 
-        const rawMark = scores[student.student_id]?.mark
-        return rawMark !== '' && rawMark !== null && rawMark !== undefined && !Number.isNaN(Number(rawMark))
-      })
-      .map((student) => {
-        const mark = Number(scores[student.student_id]?.mark)
-        const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+      const markText = normalizeText(rawMark)
+      const mark = Number(markText)
+      return markText === '' || Number.isNaN(mark) || mark < 0 || mark > 100
+    })
+    const absentRows = rowsWithInput.filter((student) =>
+      isAbsentMarkInput(scores[student.student_id]?.mark)
+    )
 
-        return {
-          student_enrollment_id: student.enrollment_id,
-          student_profile_id: student.student_id,
-          class_id: selectedClass,
-          subject_id: selectedSubject,
-          exam_config_id: selectedExamConfigId,
-          exam_key: selectedExam,
-          mark,
-          grade_name: gradeInfo.grade_name,
-          grade_point: gradeInfo.grade_point,
-          is_absent: false,
-          remarks: null,
-          entered_by: profile.id,
-          verified_by: null,
-          verified_at: null,
-          school_id: profile.school_id,
-          academic_year: currentYear,
-          updated_at: new Date().toISOString(),
-        }
-      })
+    if (invalidRows.length > 0) {
+      setSaving(false)
+      alert('Markah mesti antara 0 hingga 100, atau taip TH untuk tidak hadir.')
+      return
+    }
+
+    if (normalizedSelectedExam === 'ETR' && absentRows.length > 0) {
+      setSaving(false)
+      alert('TH hanya dibenarkan untuk peperiksaan markah, bukan ETR.')
+      return
+    }
+
+    const payload = rowsWithInput.map((student) => {
+      const rawMark = scores[student.student_id]?.mark
+      const isAbsent = isAbsentMarkInput(rawMark)
+      const mark = isAbsent ? null : Number(normalizeText(rawMark))
+      const gradeInfo = isAbsent
+        ? { grade_name: null, grade_point: null }
+        : findGradeFromMark(mark, gradeScalesForTingkatan)
+
+      return {
+        student_enrollment_id: student.enrollment_id,
+        student_profile_id: student.student_id,
+        class_id: selectedClass,
+        subject_id: selectedSubject,
+        exam_config_id: selectedExamConfigId,
+        exam_key: selectedExam,
+        mark,
+        grade_name: gradeInfo.grade_name,
+        grade_point: gradeInfo.grade_point,
+        is_absent: isAbsent,
+        remarks: null,
+        entered_by: profile.id,
+        verified_by: null,
+        verified_at: null,
+        school_id: profile.school_id,
+        academic_year: currentYear,
+        updated_at: new Date().toISOString(),
+      }
+    })
 
     const deleteIds = displayedStudents
       .filter((student) => displayedEnrollmentIdSet.has(String(student.enrollment_id)))
@@ -2337,7 +2402,6 @@ export default function StudentScoresPage() {
       return
     }
 
-    const normalizedSelectedExam = normalizeExamKey(selectedExam)
     let error = null
 
     if (normalizedSelectedExam === 'ETR') {
@@ -2924,10 +2988,9 @@ export default function StudentScoresPage() {
                           )}
 
                           <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="1"
+                            type="text"
+                            inputMode="text"
+                            placeholder="0-100 / TH"
                             value={scores[student.student_id]?.mark ?? ''}
                             onFocus={() => setEditingStudentId(student.student_id)}
                             onBlur={() => setEditingStudentId(null)}

@@ -40,6 +40,9 @@ const findGradeFromMark = (mark, gradeScales = []) => {
   if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
 
   const matched = (gradeScales || []).find((grade) => {
+    const gradeName = String(grade.grade_name ?? grade.grade ?? '').trim().toUpperCase()
+    if (gradeName === 'TH') return false
+
     const min = Number(grade.min_mark ?? grade.min_score ?? 0)
     const max = Number(grade.max_mark ?? grade.max_score ?? 100)
     return numericMark >= min && numericMark <= max
@@ -441,9 +444,9 @@ export default function ClassSubjectAnalysisPanel({
             takHadir,
             ...gradeCounts,
             lulus,
-            peratusLulus: totalStudents > 0 ? (lulus / totalStudents) * 100 : 0,
+            peratusLulus: hadir > 0 ? (lulus / hadir) * 100 : 0,
             gagal,
-            peratusGagal: totalStudents > 0 ? (gagal / totalStudents) * 100 : 0,
+            peratusGagal: hadir > 0 ? (gagal / hadir) * 100 : 0,
             gpmp: gpmpCount > 0 ? gpmpTotal / gpmpCount : null,
           }
         })

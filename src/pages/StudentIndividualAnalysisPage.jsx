@@ -561,7 +561,8 @@ export default function StudentIndividualAnalysisPage() {
         )
       }
 
-      const currentGradeName = metric?.grade_name ?? null
+      const isAbsent = !isTargetKey(selectedExamKey) && metric?.is_absent === true
+      const currentGradeName = isAbsent ? 'TH' : metric?.grade_name ?? null
 
       return {
         subject_id: subject.id,
@@ -573,13 +574,20 @@ export default function StudentIndividualAnalysisPage() {
           subjectName: getSubjectRuleName(subject),
           examKey: selectedExamKey,
         }),
-        mark: isTargetKey(selectedExamKey) ? metric?.target_mark ?? null : metric?.mark ?? null,
+        mark: isAbsent
+          ? 'TH'
+          : isTargetKey(selectedExamKey)
+          ? metric?.target_mark ?? null
+          : metric?.mark ?? null,
         grade_name: currentGradeName,
-        grade_point: getCurrentGradePoint(
-          currentGradeName,
-          selectedStudent.tingkatan,
-          gradeScales
-        ),
+        grade_point: isAbsent
+          ? null
+          : getCurrentGradePoint(
+              currentGradeName,
+              selectedStudent.tingkatan,
+              gradeScales
+            ),
+        is_absent: isAbsent,
       }
     })
   }, [selectedStudent, selectedExamKey, subjectsForSelectedExam, scores, targets, gradeScales, schoolInfo])

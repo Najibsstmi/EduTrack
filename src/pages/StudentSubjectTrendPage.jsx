@@ -383,14 +383,22 @@ export default function StudentSubjectTrendPage() {
         )
       }
 
-      const gradeName = metric?.grade_name ?? null
+      const isAbsent = !isTargetKey(examKey) && metric?.is_absent === true
+      const gradeName = isAbsent ? 'TH' : metric?.grade_name ?? null
 
       return {
         examKey,
         examLabel: exam.name || examKey,
-        mark: isTargetKey(examKey) ? metric?.target_mark ?? null : metric?.mark ?? null,
+        mark: isAbsent
+          ? 'TH'
+          : isTargetKey(examKey)
+          ? metric?.target_mark ?? null
+          : metric?.mark ?? null,
         grade_name: gradeName,
-        grade_point: getCurrentGradePoint(gradeName, selectedStudent.tingkatan, gradeScales),
+        grade_point: isAbsent
+          ? null
+          : getCurrentGradePoint(gradeName, selectedStudent.tingkatan, gradeScales),
+        is_absent: isAbsent,
       }
     })
   }, [selectedStudent, selectedSubjectId, examOptions, scores, targets, gradeScales])

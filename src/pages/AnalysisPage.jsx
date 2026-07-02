@@ -26,7 +26,7 @@ const ChevronLeftIcon = () => (
 
 const getExamMetric = (analysis, examKey) => {
   const key = String(examKey || '').toUpperCase()
-  return analysis?.[key] || { mark: null, grade_name: null, grade_point: null }
+  return analysis?.[key] || { mark: null, grade_name: null, grade_point: null, is_absent: false }
 }
 
 const normalizeAnalysisExamKey = (value) =>
@@ -81,6 +81,12 @@ const isTHGrade = (grade) => {
   return String(grade || '').trim().toUpperCase() === 'TH'
 }
 
+const formatMetricMark = (metric) =>
+  metric?.is_absent === true ? 'TH' : metric?.mark ?? '-'
+
+const formatMetricGrade = (metric) =>
+  metric?.is_absent === true ? 'TH' : metric?.grade_name ?? '-'
+
 const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
   const grade = String(gradeName || '').trim().toUpperCase()
   const form = String(tingkatan || '').trim().toLowerCase()
@@ -108,6 +114,9 @@ const findGradeFromMark = (mark, tingkatan, gradeScales) => {
 
   const form = String(tingkatan || '').trim().toLowerCase()
   const matched = (gradeScales || []).find((item) => {
+    const gradeName = String(item.grade_name ?? item.grade ?? '').trim().toUpperCase()
+    if (gradeName === 'TH') return false
+
     const itemForm = String(
       item.tingkatan ?? item.grade_label ?? item.form_level ?? item.level ?? ''
     )
@@ -132,6 +141,16 @@ const findGradeFromMark = (mark, tingkatan, gradeScales) => {
 }
 
 const normalizeMetric = (metric, tingkatan, gradeScales) => {
+  if (metric?.is_absent === true) {
+    return {
+      mark: null,
+      grade_name: 'TH',
+      grade_point: null,
+      is_absent: true,
+      label: metric?.label,
+    }
+  }
+
   const mark = metric?.mark
 
   if (mark === null || mark === undefined || mark === '' || Number.isNaN(Number(mark))) {
@@ -139,6 +158,7 @@ const normalizeMetric = (metric, tingkatan, gradeScales) => {
       mark: mark ?? null,
       grade_name: metric?.grade_name ?? null,
       grade_point: metric?.grade_point ?? null,
+      is_absent: false,
       label: metric?.label,
     }
   }
@@ -196,11 +216,13 @@ const getMetricForExam = ({
         mark: sourceRow.target_mark,
         grade_name: sourceRow.grade_name,
         grade_point: sourceRow.grade_point,
+        is_absent: false,
       }
     : {
         mark: sourceRow.mark,
         grade_name: sourceRow.grade_name,
         grade_point: sourceRow.grade_point,
+        is_absent: sourceRow.is_absent === true,
       }
 
   const metric = normalizeMetric(rawMetric, tingkatan, gradeScales)
@@ -951,6 +973,7 @@ export default function AnalysisPage() {
             mark: targetRow?.target_mark ?? null,
             grade_name: targetRow?.grade_name ?? null,
             grade_point: targetRow?.grade_point ?? null,
+            is_absent: false,
             label: exam.name || key,
           }, student.tingkatan, gradeScales)
         } else {
@@ -960,6 +983,7 @@ export default function AnalysisPage() {
             mark: scoreRow?.mark ?? null,
             grade_name: scoreRow?.grade_name ?? null,
             grade_point: scoreRow?.grade_point ?? null,
+            is_absent: scoreRow?.is_absent === true,
             label: exam.name || key,
           }, student.tingkatan, gradeScales)
         }
@@ -1074,9 +1098,9 @@ export default function AnalysisPage() {
         tidakHadir,
         ...gradeCounts,
         lulus,
-        peratusLulus: jumlahMurid ? Number(((lulus / jumlahMurid) * 100).toFixed(2)) : 0,
+        peratusLulus: hadir ? Number(((lulus / hadir) * 100).toFixed(2)) : 0,
         gagal,
-        peratusGagal: jumlahMurid ? Number(((gagal / jumlahMurid) * 100).toFixed(2)) : 0,
+        peratusGagal: hadir ? Number(((gagal / hadir) * 100).toFixed(2)) : 0,
         gpmp,
       }
     })
@@ -1515,13 +1539,14 @@ export default function AnalysisPage() {
                       <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">{row.class_name}</td>
                       {analysisColumns.map((exam) => {
                         const key = String(exam.key || '').toUpperCase()
+                        const metric = row.analysis?.[key]
                         return (
                           <React.Fragment key={key}>
                             <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {row.analysis?.[key]?.mark ?? '-'}
+                              {formatMetricMark(metric)}
                             </td>
                             <td className="px-2 md:px-4 py-2 md:py-3 text-xs md:text-sm">
-                              {row.analysis?.[key]?.grade_name ?? '-'}
+                              {formatMetricGrade(metric)}
                             </td>
                           </React.Fragment>
                         )
