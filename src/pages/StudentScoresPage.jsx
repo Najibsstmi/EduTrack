@@ -24,26 +24,8 @@ import {
   getSubjectRuleName,
 } from '../lib/ssemjSubjectRules.js'
 
-const REQUIRED_HEADERS = [
-  'nama_murid',
-  'no_ic',
-  'subjek',
-  'jenis_peperiksaan',
-  'markah',
-]
-
 const BULK_REQUIRED_HEADERS = [
   'tingkatan',
-  'no_ic',
-  'nama_murid',
-  'subjek',
-  'jenis_peperiksaan',
-  'markah',
-]
-
-const BULK_TEMPLATE_HEADERS = [
-  'tingkatan',
-  'kelas',
   'no_ic',
   'nama_murid',
   'subjek',
@@ -260,6 +242,11 @@ const getUniqueSubjectHeaders = (subjectRows = []) => {
 const escapeCsvValue = (value) =>
   `"${String(value ?? '').replace(/"/g, '""')}"`
 
+const formatIcForCsvTemplate = (icNumber) => {
+  const normalizedIc = normalizeIC(icNumber)
+  return normalizedIc ? `="${normalizedIc}"` : ''
+}
+
 const downloadCsv = (filename, headers, rows) => {
   const csvLines = [
     headers.map(escapeCsvValue).join(','),
@@ -393,62 +380,6 @@ const detectBulkCsvFormat = (headers = [], rawHeaders = []) => {
   }
 }
 
-const validateCsvData = (headers, rows, expectedHeaders = REQUIRED_HEADERS) => {
-  const errors = []
-
-  const missingHeaders = expectedHeaders.filter(
-    (header) => !headers.includes(header)
-  )
-
-  if (missingHeaders.length > 0) {
-    errors.push(
-      `Header wajib tiada: ${missingHeaders.join(', ')}`
-    )
-  }
-
-  rows.forEach((row) => {
-    const nama = normalizeText(row.nama_murid)
-    const ic = normalizeText(row.no_ic)
-    const subjek = normalizeText(row.subjek)
-    const examKey = normalizeExamKey(row.jenis_peperiksaan)
-    const markahRaw = normalizeText(row.markah)
-
-    if (!nama) {
-      errors.push(`Baris ${row.__rowNumber}: nama_murid kosong`)
-    }
-
-    if (!ic) {
-      errors.push(`Baris ${row.__rowNumber}: no_ic kosong`)
-    }
-
-    if (!subjek) {
-      errors.push(`Baris ${row.__rowNumber}: subjek kosong`)
-    }
-
-    if (!examKey) {
-      errors.push(`Baris ${row.__rowNumber}: jenis_peperiksaan kosong`)
-    } else if (!isAllowedExamKey(examKey)) {
-      errors.push(
-        `Baris ${row.__rowNumber}: jenis_peperiksaan '${examKey}' tidak sah. OTR dijana automatik dan tidak perlu diimport manual.`
-      )
-    }
-
-    if (markahRaw === '') {
-      errors.push(`Baris ${row.__rowNumber}: markah kosong`)
-    } else {
-      const markah = Number(markahRaw)
-
-      if (Number.isNaN(markah)) {
-        errors.push(`Baris ${row.__rowNumber}: markah bukan nombor`)
-      } else if (markah < 0 || markah > 100) {
-        errors.push(`Baris ${row.__rowNumber}: markah mesti antara 0 hingga 100`)
-      }
-    }
-  })
-
-  return errors
-}
-
 const findGradeFromMark = (mark, gradeScales = []) => {
   const numericMark = Number(mark)
   if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
@@ -468,14 +399,6 @@ const findGradeFromMark = (mark, gradeScales = []) => {
     grade_point: matched.grade_point ?? matched.point_value ?? matched.grade_value ?? null,
   }
 }
-
-const getMatchedExamConfig = (examConfigs = [], gradeLabel, examKey) =>
-  (examConfigs || []).find(
-    (item) =>
-      normalizeGradeLabel(item?.grade_label) === normalizeGradeLabel(gradeLabel) &&
-      normalizeExamKey(item?.exam_key) === normalizeExamKey(examKey) &&
-      item?.is_active !== false
-  ) || null
 
 const applySmartExamScoreFilter = (query, examKey, examConfigId) => {
   const normalizedExamKey = normalizeExamKey(examKey)
@@ -600,6 +523,8 @@ export default function StudentScoresPage() {
   const [selectedSubject, setSelectedSubject] = useState('')
   const [selectedExam, setSelectedExam] = useState('')
   const [activeExamOptions, setActiveExamOptions] = useState([])
+  const [bulkSelectedExam, setBulkSelectedExam] = useState('')
+  const [bulkExamOptions, setBulkExamOptions] = useState([])
 
   const [students, setStudents] = useState([])
   const [scores, setScores] = useState({})
@@ -610,13 +535,6 @@ export default function StudentScoresPage() {
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
   const [editingStudentId, setEditingStudentId] = useState(null)
 
-  const [csvRows, setCsvRows] = useState([])
-  const [csvErrors, setCsvErrors] = useState([])
-  const [csvFileName, setCsvFileName] = useState('')
-  const [importMode, setImportMode] = useState('normal')
-  const [csvImportPolicy, setCsvImportPolicy] = useState('partial')
-  const [importingCsv, setImportingCsv] = useState(false)
-  const [importSummary, setImportSummary] = useState(null)
   const [bulkCsvFile, setBulkCsvFile] = useState(null)
   const [bulkPreviewRows, setBulkPreviewRows] = useState([])
   const [bulkCsvFormat, setBulkCsvFormat] = useState('')
@@ -640,14 +558,13 @@ export default function StudentScoresPage() {
   }, [])
 
   useEffect(() => {
-    if (importMode !== 'bulk_admin') return
     if (!bulkImportSummary && bulkImportErrors.length === 0) return
 
     bulkImportResultRef.current?.scrollIntoView({
       behavior: 'smooth',
       block: 'start',
     })
-  }, [bulkImportSummary, bulkImportErrors, importMode])
+  }, [bulkImportSummary, bulkImportErrors])
 
   const getGradeLabelFromClassName = (className = '') => {
     const text = className.toLowerCase()
@@ -694,6 +611,19 @@ export default function StudentScoresPage() {
         })
       ),
     [subjects, schoolInfo, selectedExam]
+  )
+
+  const bulkInputExamSubjects = useMemo(
+    () =>
+      subjects.filter((subject) =>
+        canInputExamMark({
+          schoolInfo,
+          tingkatan: subject?.tingkatan,
+          subjectName: getSubjectRuleName(subject),
+          examKey: bulkSelectedExam,
+        })
+      ),
+    [subjects, schoolInfo, bulkSelectedExam]
   )
 
   const loadActiveExamOptions = async (
@@ -780,48 +710,11 @@ export default function StudentScoresPage() {
     })
   }, [displayedStudents, showIncompleteOnly, scores, editingStudentId])
 
-  const displayedStudentIdSet = useMemo(() => {
-    return new Set(displayedStudents.map((student) => String(student.student_id)))
-  }, [displayedStudents])
-
   const displayedEnrollmentIdSet = useMemo(() => {
     return new Set(
       displayedStudents.map((student) => String(student.enrollment_id))
     )
   }, [displayedStudents])
-
-  const displayedStudentLookupByIc = useMemo(() => {
-    const map = new Map()
-
-    ;(displayedStudents || []).forEach((student) => {
-      const normalizedIc = normalizeIC(student.ic_number)
-      if (!normalizedIc) return
-
-      map.set(normalizedIc, {
-        ...student,
-        student_profile_id: student.student_id,
-      })
-    })
-
-    return map
-  }, [displayedStudents])
-
-  const subjectLookupByGrade = useMemo(() => {
-    return buildSubjectLookupMaps(subjects).byHeaderAndGrade
-  }, [subjects])
-
-  const resolveSubjectFromCsvRow = (csvSubjectName) => {
-    const gradeLabel = selectedClassData?.tingkatan || ''
-    const lookupKey = buildSubjectHeaderLookupKey(csvSubjectName, gradeLabel)
-
-    return subjectLookupByGrade.get(lookupKey) || null
-  }
-
-  const allowedExamKeysForSelectedGrade = useMemo(() => {
-    return new Set(
-      (activeExamOptions || []).map((exam) => String(exam?.key || '').trim().toUpperCase())
-    )
-  }, [activeExamOptions])
 
   useEffect(() => {
     if (!prefillClassId || !classes.length) return
@@ -846,9 +739,7 @@ export default function StudentScoresPage() {
 
   useEffect(() => {
     const run = async () => {
-      const includeAllGrades = importMode === 'bulk_admin'
-
-      if (!profile?.school_id || (!includeAllGrades && !selectedGradeLabel)) {
+      if (!profile?.school_id || !selectedGradeLabel) {
         setActiveExamOptions([])
         setSelectedExam('')
         return
@@ -859,7 +750,6 @@ export default function StudentScoresPage() {
           profile.school_id,
           selectedGradeLabel,
           setupConfig?.current_academic_year || new Date().getFullYear(),
-          { includeAllGrades }
         )
 
         setActiveExamOptions(rows)
@@ -879,7 +769,42 @@ export default function StudentScoresPage() {
     }
 
     run()
-  }, [profile?.school_id, selectedGradeLabel, setupConfig?.current_academic_year, selectedExam, importMode])
+  }, [profile?.school_id, selectedGradeLabel, setupConfig?.current_academic_year, selectedExam])
+
+  useEffect(() => {
+    const run = async () => {
+      if (!isSchoolAdmin || !profile?.school_id) {
+        setBulkExamOptions([])
+        setBulkSelectedExam('')
+        return
+      }
+
+      try {
+        const rows = await loadActiveExamOptions(
+          profile.school_id,
+          '',
+          setupConfig?.current_academic_year || new Date().getFullYear(),
+          { includeAllGrades: true }
+        )
+
+        setBulkExamOptions(rows)
+
+        const currentSelectedStillValid = rows.some(
+          (item) => item.key === normalizeExamKey(bulkSelectedExam)
+        )
+
+        if (!currentSelectedStillValid) {
+          setBulkSelectedExam(rows[0]?.key || '')
+        }
+      } catch (err) {
+        console.error('loadBulkExamOptions error:', err)
+        setBulkExamOptions([])
+        setBulkSelectedExam('')
+      }
+    }
+
+    run()
+  }, [isSchoolAdmin, profile?.school_id, setupConfig?.current_academic_year, bulkSelectedExam])
 
   useEffect(() => {
     if (!prefillExamKey) return
@@ -1316,44 +1241,6 @@ export default function StudentScoresPage() {
     }))
   }
 
-  const downloadTemplateCsv = () => {
-    const isBulkAdmin = importMode === 'bulk_admin'
-
-    const headers = isBulkAdmin ? BULK_TEMPLATE_HEADERS : REQUIRED_HEADERS
-
-    const sampleRows = isBulkAdmin
-      ? [
-          ['Tingkatan 3', 'BANGSAWAN', '030101010101', 'ALI BIN ABU', 'Sains', 'TOV', '45'],
-          ['Tingkatan 2', 'INANG', '040202020202', 'SITI AISYAH', 'Bahasa Melayu', 'ETR', '80'],
-        ]
-      : [
-          ['ALI BIN ABU', '030101010101', 'Sains', 'TOV', '45'],
-          ['SITI AISYAH', '040202020202', 'Bahasa Melayu', 'ETR', '80'],
-        ]
-
-    const csvLines = [
-      headers.join(','),
-      ...sampleRows.map((row) =>
-        row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')
-      ),
-    ]
-
-    const csvContent = '\uFEFF' + csvLines.join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-
-    const link = document.createElement('a')
-    link.href = url
-    link.download = isBulkAdmin
-      ? 'template_import_pukal_admin.csv'
-      : 'template_import_biasa.csv'
-
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-  }
-
   const downloadDynamicBulkTemplateCsv = async () => {
     if (!isSchoolAdmin) {
       alert('Hanya school admin dibenarkan menggunakan import pukal admin.')
@@ -1365,7 +1252,7 @@ export default function StudentScoresPage() {
       return
     }
 
-    const examKey = normalizeExamKey(selectedExam)
+    const examKey = normalizeExamKey(bulkSelectedExam)
 
     if (!examKey) {
       alert('Sila pilih peperiksaan dahulu.')
@@ -1503,7 +1390,7 @@ export default function StudentScoresPage() {
           )
         })
         .map((row) => [
-          row.ic_number,
+          formatIcForCsvTemplate(row.ic_number),
           row.full_name,
           row.class_name,
           row.tingkatan,
@@ -1521,28 +1408,6 @@ export default function StudentScoresPage() {
     } finally {
       setDynamicTemplateLoading(false)
     }
-  }
-
-  const handleCsvUpload = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    setCsvFileName(file.name)
-
-    const text = await file.text()
-    const { headers: parsedHeaders, rows } = parseCsvText(text)
-    const expectedHeaders =
-      importMode === 'bulk_admin' ? BULK_REQUIRED_HEADERS : REQUIRED_HEADERS
-
-    const normalizedHeaders = parsedHeaders.map((header) =>
-      String(header || '').trim().toLowerCase()
-    )
-
-    const errors = validateCsvData(normalizedHeaders, rows, expectedHeaders)
-
-    setCsvRows(rows)
-    setCsvErrors(errors)
-    setImportSummary(null)
   }
 
   const handleBulkCsvFileChange = async (event) => {
@@ -1569,7 +1434,14 @@ export default function StudentScoresPage() {
     }
 
     if (detectedFormat.format === 'dynamic') {
-      const subjectLookup = buildSubjectLookupMaps(inputExamSubjects)
+      if (!normalizeExamKey(bulkSelectedExam)) {
+        setBulkImportErrors([
+          'Pilih peperiksaan import dahulu sebelum upload format dinamik.',
+        ])
+        return
+      }
+
+      const subjectLookup = buildSubjectLookupMaps(bulkInputExamSubjects)
       const unknownSubjectHeaders = detectedFormat.subjectHeaders.filter(
         (header) => !subjectLookup.byHeader.has(normalizeSubjectLookupText(header.label))
       )
@@ -1588,433 +1460,6 @@ export default function StudentScoresPage() {
     setBulkPreviewRows(rows)
   }
 
-  const importCsvToSupabase = async () => {
-    if (!profile?.school_id) {
-      alert('Maklumat sekolah tidak ditemui.')
-      return
-    }
-
-    if (!selectedClassData?.id || !selectedClassData?.tingkatan) {
-      alert('Sila pilih kelas dahulu sebelum import CSV.')
-      return
-    }
-
-    if (!csvRows.length) {
-      alert('Tiada data CSV untuk diimport.')
-      return
-    }
-
-    if (csvImportPolicy === 'strict' && csvErrors.length > 0) {
-      alert('Sila betulkan ralat CSV dahulu sebelum import.')
-      return
-    }
-
-    setImportingCsv(true)
-    setImportSummary(null)
-
-    try {
-      const currentYear =
-        setupConfig?.current_academic_year || new Date().getFullYear()
-      const schoolId = profile.school_id
-
-      const [
-        { data: setupConfigRows, error: setupConfigError },
-        { data: examConfigData, error: examConfigError },
-        { data: gradeScalesData, error: gradeScalesError },
-      ] = await Promise.all([
-        supabase
-          .from('school_setup_configs')
-          .select('*')
-          .eq('school_id', schoolId)
-          .order('updated_at', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1),
-
-        supabase
-          .from('exam_configs')
-          .select('grade_label, exam_key, exam_name, exam_order, is_active')
-          .eq('school_id', schoolId)
-          .eq('academic_year', currentYear),
-
-        supabase
-          .from('grade_scales')
-          .select('*')
-          .eq('school_id', schoolId),
-      ])
-
-      if (setupConfigError) throw setupConfigError
-      if (examConfigError) throw examConfigError
-      if (gradeScalesError) throw gradeScalesError
-
-      const normalizedSetupConfig = normalizeSetupConfigWithExamConfigs(
-        setupConfigRows?.[0] || null,
-        examConfigData || []
-      )
-
-      const targetRows = []
-      const scoreRows = []
-      const importErrors = []
-      const skippedRows = []
-      const successRows = []
-
-      const resolvedRows = []
-
-      csvRows.forEach((row) => {
-        const csvSubject = normalizeText(row.subjek)
-        const examKey = normalizeExamKey(row.jenis_peperiksaan)
-        const matchedSubject = resolveSubjectFromCsvRow(csvSubject)
-        const matchedStudent = displayedStudentLookupByIc.get(normalizeIC(row.no_ic))
-
-        if (!matchedSubject) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: subjek '${csvSubject}' tidak sepadan dengan ${selectedClassData.tingkatan}`
-          )
-          return
-        }
-
-        if (
-          !canInputExamMark({
-            schoolInfo,
-            tingkatan: selectedClassData.tingkatan,
-            subjectName: getSubjectRuleName(matchedSubject),
-            examKey,
-          })
-        ) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: subjek '${csvSubject}' tidak dibenarkan untuk ${examKey} bagi ${selectedClassData.tingkatan}`
-          )
-          return
-        }
-
-        if (!allowedExamKeysForSelectedGrade.has(examKey)) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: peperiksaan '${examKey}' tidak dibenarkan untuk ${selectedClassData.tingkatan}`
-          )
-          return
-        }
-
-        if (
-          selectedSubjectData &&
-          String(matchedSubject.id) !== String(selectedSubjectData.id)
-        ) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: subjek CSV '${csvSubject}' tidak sama dengan subjek dipilih '${selectedSubjectData.subject_name}'`
-          )
-          return
-        }
-
-        if (!matchedStudent) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: murid dengan IC '${row.no_ic}' tidak dijumpai dalam paparan subjek ini`
-          )
-          return
-        }
-
-        if (!displayedStudentIdSet.has(String(matchedStudent.student_id))) {
-          importErrors.push(
-            `Baris ${row.__rowNumber}: murid dengan IC '${row.no_ic}' tidak dijumpai dalam paparan subjek ini`
-          )
-          return
-        }
-
-        resolvedRows.push({
-          ...row,
-          __matchedStudent: matchedStudent,
-          __resolvedSubject: matchedSubject,
-          __resolvedExamKey: examKey,
-        })
-      })
-
-      if (importErrors.length > 0) {
-        setCsvErrors(importErrors)
-        setImportSummary({
-          success: false,
-          importedTargets: 0,
-          importedScores: 0,
-          generatedOtrs: 0,
-          successCount: 0,
-          skippedCount: 0,
-          failedCount: importErrors.length,
-          errors: importErrors,
-        })
-        alert('Import dihentikan kerana ada subjek, peperiksaan, atau murid yang tidak sepadan dengan kelas dipilih.')
-        return
-      }
-
-      const distinctResolvedSubjectIds = Array.from(
-        new Set(resolvedRows.map((row) => row.__resolvedSubject?.id).filter(Boolean))
-      )
-
-      if (distinctResolvedSubjectIds.length > 1) {
-        const subjectErrors = [
-          'CSV ini mengandungi lebih daripada satu subjek. Sila import satu subjek bagi satu masa.',
-        ]
-
-        setCsvErrors(subjectErrors)
-        setImportSummary({
-          success: false,
-          importedTargets: 0,
-          importedScores: 0,
-          generatedOtrs: 0,
-          successCount: 0,
-          skippedCount: 0,
-          failedCount: 1,
-          errors: subjectErrors,
-        })
-        alert(subjectErrors[0])
-        return
-      }
-
-      const targetPairs = new Map()
-
-      for (const row of resolvedRows) {
-        const rowNumber = row.__rowNumber
-        const ic = normalizeIC(row.no_ic)
-        const examKey = row.__resolvedExamKey
-        const mark = Number(row.markah)
-        const subject = row.__resolvedSubject
-        const matchedStudent = row.__matchedStudent
-
-        if (!row.nama_murid || !ic || !examKey || row.markah === '') {
-          const message = `Baris ${rowNumber}: data asas CSV tidak lengkap.`
-          if (csvImportPolicy === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        if (Number.isNaN(mark) || mark < 0 || mark > 100) {
-          const message = `Baris ${rowNumber}: markah tidak sah.`
-          if (csvImportPolicy === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        if (!isAllowedExamKey(examKey)) {
-          const message = `Baris ${rowNumber}: jenis peperiksaan '${examKey}' tidak sah.`
-          if (csvImportPolicy === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        const classId = selectedClassData.id
-        const tingkatan = selectedClassData.tingkatan || ''
-        const matchedExamConfig = getMatchedExamConfig(examConfigData || [], tingkatan, examKey)
-
-        if (isScoreExamKey(examKey) && !matchedExamConfig?.id) {
-          const message = `Baris ${rowNumber}: konfigurasi peperiksaan '${examKey}' tidak ditemui untuk ${tingkatan}`
-          if (csvImportPolicy === 'strict') {
-            importErrors.push(message)
-          } else {
-            skippedRows.push(message)
-          }
-          continue
-        }
-
-        if (examKey === 'ETR') {
-          targetRows.push({
-            school_id: schoolId,
-            academic_year: currentYear,
-            student_enrollment_id: matchedStudent.enrollment_id,
-            class_id: classId,
-            subject_id: subject.id,
-            target_key: examKey,
-            target_mark: mark,
-            grade_name: null,
-            grade_point: null,
-            generated_by_system: false,
-            manually_adjusted: false,
-            remarks: null,
-            entered_by: profile.id,
-            student_profile_id: matchedStudent.student_profile_id,
-            updated_at: new Date().toISOString(),
-          })
-
-          const pairKey = `${matchedStudent.enrollment_id}__${subject.id}`
-          const existing = targetPairs.get(pairKey) || {
-            school_id: schoolId,
-            academic_year: currentYear,
-            student_enrollment_id: matchedStudent.enrollment_id,
-            student_profile_id: matchedStudent.student_profile_id,
-            class_id: classId,
-            subject_id: subject.id,
-            tingkatan,
-            tov_mark: null,
-            etr_mark: null,
-          }
-
-          existing.etr_mark = mark
-          targetPairs.set(pairKey, existing)
-        } else if (isScoreExamKey(examKey)) {
-          const gradeScalesForTingkatan = (gradeScalesData || []).filter((grade) => {
-            const label =
-              grade.tingkatan ??
-              grade.grade_label ??
-              grade.form_level ??
-              grade.level ??
-              ''
-
-            return String(label).trim().toLowerCase() === String(tingkatan).trim().toLowerCase()
-          })
-
-          const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
-
-          scoreRows.push({
-            school_id: schoolId,
-            academic_year: currentYear,
-            student_enrollment_id: matchedStudent.enrollment_id,
-            class_id: classId,
-            subject_id: subject.id,
-            exam_config_id: matchedExamConfig.id,
-            exam_key: examKey,
-            mark,
-            grade_name: gradeInfo.grade_name,
-            grade_point: gradeInfo.grade_point,
-            is_absent: false,
-            remarks: null,
-            entered_by: profile.id,
-            verified_by: null,
-            verified_at: null,
-            student_profile_id: matchedStudent.student_profile_id,
-            updated_at: new Date().toISOString(),
-          })
-
-          if (examKey === 'TOV') {
-            const pairKey = `${matchedStudent.enrollment_id}__${subject.id}`
-            const existing = targetPairs.get(pairKey) || {
-              school_id: schoolId,
-              academic_year: currentYear,
-              student_enrollment_id: matchedStudent.enrollment_id,
-              student_profile_id: matchedStudent.student_profile_id,
-              class_id: classId,
-              subject_id: subject.id,
-              tingkatan,
-              tov_mark: null,
-              etr_mark: null,
-            }
-
-            existing.tov_mark = mark
-            targetPairs.set(pairKey, existing)
-          }
-        }
-
-        successRows.push(`Baris ${rowNumber}: berjaya diproses.`)
-      }
-
-      if (csvImportPolicy === 'strict' && importErrors.length > 0) {
-        setImportSummary({
-          success: false,
-          importedTargets: 0,
-          importedScores: 0,
-          generatedOtrs: 0,
-          successCount: 0,
-          skippedCount: 0,
-          failedCount: importErrors.length,
-          errors: importErrors,
-        })
-        setImportingCsv(false)
-        return
-      }
-
-      if (targetRows.length > 0) {
-        const { error: targetError } = await supabase
-          .from('student_targets')
-          .upsert(targetRows, {
-            onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
-          })
-
-        if (targetError) throw targetError
-      }
-
-      if (scoreRows.length > 0) {
-        const { error: scoreError } = await supabase
-          .from('student_scores')
-          .upsert(scoreRows, {
-            onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
-          })
-
-        if (scoreError) throw scoreError
-      }
-
-      const otrRows = []
-
-      for (const [, pair] of targetPairs.entries()) {
-        if (pair.tov_mark !== null && pair.etr_mark !== null) {
-          const generated = generateOtrRows({
-            schoolId: pair.school_id,
-            academicYear: pair.academic_year,
-            studentEnrollmentId: pair.student_enrollment_id,
-            studentProfileId: pair.student_profile_id,
-            classId: pair.class_id,
-            subjectId: pair.subject_id,
-            enteredBy: profile.id,
-            tingkatan: pair.tingkatan,
-            tovMark: pair.tov_mark,
-            etrMark: pair.etr_mark,
-            setupConfig: normalizedSetupConfig,
-          })
-
-          otrRows.push(...generated)
-        }
-      }
-
-      if (otrRows.length > 0) {
-        const { error: otrError } = await supabase
-          .from('student_targets')
-          .upsert(otrRows, {
-            onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
-          })
-
-        if (otrError) throw otrError
-      }
-
-      setImportSummary({
-        success: true,
-        importedTargets: targetRows.length,
-        importedScores: scoreRows.length,
-        generatedOtrs: otrRows.length,
-        successCount: successRows.length,
-        skippedCount: skippedRows.length,
-        failedCount: csvImportPolicy === 'strict' ? importErrors.length : skippedRows.length,
-        errors: csvImportPolicy === 'strict' ? importErrors : skippedRows,
-      })
-
-      if (selectedClass && selectedSubject && selectedExam) {
-        await loadStudentsAndScores()
-      }
-
-      if (csvImportPolicy === 'partial') {
-        alert(
-          `Import selesai. ${successRows.length} baris berjaya diproses, ${skippedRows.length} baris diabaikan.`
-        )
-      } else {
-        alert('Import CSV berjaya disimpan.')
-      }
-    } catch (error) {
-      console.error(error)
-      setImportSummary({
-        success: false,
-        importedTargets: 0,
-        importedScores: 0,
-        generatedOtrs: 0,
-        successCount: 0,
-        skippedCount: 0,
-        failedCount: 1,
-        errors: [error.message || 'Import gagal.'],
-      })
-    } finally {
-      setImportingCsv(false)
-    }
-  }
-
   const handleBulkAdminImport = async () => {
     if (!isSchoolAdmin) {
       alert('Hanya school admin dibenarkan menggunakan import pukal admin.')
@@ -2031,7 +1476,7 @@ export default function StudentScoresPage() {
       return
     }
 
-    if (bulkCsvFormat === 'dynamic' && !normalizeExamKey(selectedExam)) {
+    if (bulkCsvFormat === 'dynamic' && !normalizeExamKey(bulkSelectedExam)) {
       alert('Sila pilih peperiksaan dahulu sebelum import format dinamik.')
       return
     }
@@ -2044,7 +1489,7 @@ export default function StudentScoresPage() {
       const currentAcademicYear =
         setupConfig?.current_academic_year || new Date().getFullYear()
       const schoolId = profile.school_id
-      const selectedDynamicExamKey = normalizeExamKey(selectedExam)
+      const selectedDynamicExamKey = normalizeExamKey(bulkSelectedExam)
 
       const errors = []
       const scoreRowsToUpsert = []
@@ -2912,249 +2357,21 @@ export default function StudentScoresPage() {
           </div>
         </div>
 
+        {isSchoolAdmin && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold text-slate-900">Import Markah CSV</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {importMode === 'bulk_admin'
-                  ? 'Gunakan template dinamik untuk isi banyak subjek dalam satu baris murid.'
-                  : 'Gunakan template import biasa yang mengandungi nama_murid, no_ic, subjek, jenis_peperiksaan dan markah sahaja. Kelas dan tingkatan tidak perlu kerana konteks sudah dipilih pada halaman ini.'}
+                Gunakan template dinamik untuk isi banyak subjek dalam satu baris murid.
               </p>
             </div>
-
-            {importMode === 'normal' && (
-              <button
-                type="button"
-                onClick={downloadTemplateCsv}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Muat Turun Template Import Biasa
-              </button>
-            )}
+            <span className="inline-block rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700">
+              Admin Sahaja
+            </span>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setImportMode('normal')}
-              className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                importMode === 'normal'
-                  ? 'bg-slate-900 text-white'
-                  : 'border border-slate-300 bg-white text-slate-700'
-              }`}
-            >
-              Mode Biasa
-            </button>
-
-            {isSchoolAdmin && (
-              <button
-                type="button"
-                onClick={() => setImportMode('bulk_admin')}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                  importMode === 'bulk_admin'
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-300 bg-white text-slate-700'
-                }`}
-              >
-                Mode Pukal Admin
-              </button>
-            )}
-          </div>
-
-          {importMode === 'normal' && (
-            <>
-          <div className="mt-5">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Upload Fail CSV
-            </label>
-
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleCsvUpload}
-              className="block w-full rounded-xl border border-slate-300 px-3 py-2"
-            />
-
-            {csvFileName && (
-              <p className="mt-2 text-sm text-slate-500">
-                Fail dipilih: <strong>{csvFileName}</strong>
-              </p>
-            )}
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Jumlah Row CSV</div>
-              <div className="mt-1 text-2xl font-bold text-slate-900">{csvRows.length}</div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Row Valid</div>
-              <div className="mt-1 text-2xl font-bold text-emerald-600">
-                {csvErrors.length === 0 ? csvRows.length : 0}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Jumlah Error</div>
-              <div className="mt-1 text-2xl font-bold text-red-600">{csvErrors.length}</div>
-            </div>
-          </div>
-
-          {csvErrors.length > 0 && (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4">
-              <h3 className="text-sm font-semibold text-red-700">Ralat CSV</h3>
-              <ul className="mt-2 list-disc pl-5 text-sm text-red-700 space-y-1">
-                {csvErrors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {csvRows.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-700">Preview CSV</h3>
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Bil
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Nama Murid
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        No IC
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Subjek
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Jenis Peperiksaan
-                      </th>
-                      <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
-                        Markah
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {csvRows.slice(0, 15).map((row, index) => (
-                      <tr key={index} className="border-b border-slate-100">
-                        <td className="px-4 py-3 text-sm">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm">{row.nama_murid}</td>
-                        <td className="px-4 py-3 text-sm">{row.no_ic}</td>
-                        <td className="px-4 py-3 text-sm">{row.subjek}</td>
-                        <td className="px-4 py-3 text-sm">{row.jenis_peperiksaan}</td>
-                        <td className="px-4 py-3 text-sm">{row.markah}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {csvRows.length > 15 && (
-                <p className="mt-2 text-sm text-slate-500">
-                  Preview memaparkan 15 row pertama sahaja.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-800">Mode Import</p>
-            <div className="mt-3 flex flex-col gap-3 md:flex-row">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  name="csvImportPolicy"
-                  value="strict"
-                  checked={csvImportPolicy === 'strict'}
-                  onChange={(e) => setCsvImportPolicy(e.target.value)}
-                />
-                Strict - hentikan import jika ada ralat
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  name="csvImportPolicy"
-                  value="partial"
-                  checked={csvImportPolicy === 'partial'}
-                  onChange={(e) => setCsvImportPolicy(e.target.value)}
-                />
-                Partial - import data yang valid sahaja, abaikan baris ralat
-              </label>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={importCsvToSupabase}
-              disabled={!csvFileName || importingCsv || csvRows.length === 0}
-              className="rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-emerald-200 disabled:opacity-80"
-            >
-              {importingCsv ? 'Sedang Import...' : 'Import Data'}
-            </button>
-          </div>
-
-          {importSummary && (
-            <div
-              className={`mt-4 rounded-2xl border p-4 text-sm ${
-                importSummary.success
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-red-200 bg-red-50 text-red-800'
-              }`}
-            >
-              <p className="font-semibold">
-                {importSummary.success ? 'Import selesai.' : 'Import gagal / ada ralat.'}
-              </p>
-
-              <div className="mt-2 space-y-1">
-                <p>Skor berjaya diimport: {importSummary.importedScores}</p>
-                <p>ETR berjaya diimport: {importSummary.importedTargets}</p>
-                <p>OTR dijana automatik: {importSummary.generatedOtrs}</p>
-                <p>Baris berjaya diproses: {importSummary.successCount || 0}</p>
-                <p>Baris diabaikan / gagal: {importSummary.failedCount || 0}</p>
-              </div>
-
-              {importSummary.errors?.length > 0 && (
-                <div className="mt-3">
-                  <p className="font-medium">Butiran ralat / baris diabaikan:</p>
-                  <ul className="mt-2 list-disc space-y-1 pl-5">
-                    {importSummary.errors.slice(0, 20).map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-
-                  {importSummary.errors.length > 20 && (
-                    <p className="mt-2 text-xs">
-                      Preview memaparkan 20 ralat pertama sahaja.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-            </>
-          )}
-
-          {importMode === 'bulk_admin' && isSchoolAdmin && (
-            <div className="mt-5 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Import Pukal Admin
-                </h2>
-                <span className="inline-block rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold text-red-700">
-                  Admin Sahaja
-                </span>
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-5 text-sm text-slate-600">
                 Template dinamik menggunakan satu baris untuk setiap murid. Column subjek akan
                 mengikut subjek aktif yang didaftarkan oleh admin sekolah.
               </p>
@@ -3165,14 +2382,14 @@ export default function StudentScoresPage() {
                     Peperiksaan Import
                   </label>
                   <select
-                    value={selectedExam}
-                    onChange={(e) => setSelectedExam(e.target.value)}
+                    value={bulkSelectedExam}
+                    onChange={(e) => setBulkSelectedExam(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
                   >
-                    {activeExamOptions.length === 0 ? (
+                    {bulkExamOptions.length === 0 ? (
                       <option value="">Tiada peperiksaan dibuka</option>
                     ) : (
-                      activeExamOptions.map((exam) => (
+                      bulkExamOptions.map((exam) => (
                         <option key={exam.key} value={exam.key}>
                           {getExamDisplayLabel(exam)}
                         </option>
@@ -3184,14 +2401,14 @@ export default function StudentScoresPage() {
                 <button
                   type="button"
                   onClick={downloadDynamicBulkTemplateCsv}
-                  disabled={!selectedExam || dynamicTemplateLoading}
+                  disabled={!bulkSelectedExam || dynamicTemplateLoading}
                   className="rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {dynamicTemplateLoading ? 'Sedang jana...' : 'Muat Turun Template Dinamik'}
                 </button>
               </div>
 
-              {!selectedExam && (
+              {!bulkSelectedExam && (
                 <p className="mt-2 text-sm text-amber-700">
                   Pilih peperiksaan dahulu untuk muat turun template dinamik atau import format dinamik.
                 </p>
@@ -3347,16 +2564,15 @@ export default function StudentScoresPage() {
                   disabled={
                     bulkImportLoading ||
                     !bulkPreviewRows.length ||
-                    (bulkCsvFormat === 'dynamic' && !selectedExam)
+                    (bulkCsvFormat === 'dynamic' && !bulkSelectedExam)
                   }
                   className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {bulkImportLoading ? 'Sedang import...' : 'Simpan Import Pukal Admin'}
                 </button>
               </div>
-            </div>
-          )}
         </div>
+        )}
 
         <div ref={studentListRef} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
