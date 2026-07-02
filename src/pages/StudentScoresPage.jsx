@@ -247,6 +247,9 @@ const formatIcForCsvTemplate = (icNumber) => {
   return normalizedIc ? `="${normalizedIc}"` : ''
 }
 
+const formatIcForErrorCsv = (icNumber) =>
+  normalizeIC(icNumber) ? formatIcForCsvTemplate(icNumber) : normalizeText(icNumber)
+
 const downloadCsv = (filename, headers, rows) => {
   const csvLines = [
     headers.map(escapeCsvValue).join(','),
@@ -266,6 +269,9 @@ const downloadCsv = (filename, headers, rows) => {
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
 }
+
+const getBulkImportErrorMessage = (item) =>
+  typeof item === 'string' ? item : item?.message || 'Ralat import.'
 
 const parseCsvLine = (line) => {
   const result = []
@@ -540,7 +546,9 @@ export default function StudentScoresPage() {
   const [bulkCsvFormat, setBulkCsvFormat] = useState('')
   const [bulkSubjectHeaders, setBulkSubjectHeaders] = useState([])
   const [bulkImportErrors, setBulkImportErrors] = useState([])
+  const [bulkErrorRows, setBulkErrorRows] = useState([])
   const [bulkImportSummary, setBulkImportSummary] = useState(null)
+  const [bulkImportPlan, setBulkImportPlan] = useState(null)
   const [bulkImportLoading, setBulkImportLoading] = useState(false)
   const [dynamicTemplateLoading, setDynamicTemplateLoading] = useState(false)
   const [searchParams] = useSearchParams()
@@ -1417,7 +1425,9 @@ export default function StudentScoresPage() {
     setBulkCsvFormat('')
     setBulkSubjectHeaders([])
     setBulkImportErrors([])
+    setBulkErrorRows([])
     setBulkImportSummary(null)
+    setBulkImportPlan(null)
 
     if (!file) return
 
@@ -1460,549 +1470,742 @@ export default function StudentScoresPage() {
     setBulkPreviewRows(rows)
   }
 
-  const handleBulkAdminImport = async () => {
+  const validateBulkAdminImportBasics = () => {
     if (!isSchoolAdmin) {
       alert('Hanya school admin dibenarkan menggunakan import pukal admin.')
-      return
+      return false
     }
 
     if (!profile?.school_id) {
       alert('Maklumat sekolah tidak ditemui.')
-      return
+      return false
     }
 
     if (!bulkPreviewRows.length) {
       alert('Tiada data CSV untuk diimport.')
-      return
+      return false
     }
 
     if (bulkCsvFormat === 'dynamic' && !normalizeExamKey(bulkSelectedExam)) {
       alert('Sila pilih peperiksaan dahulu sebelum import format dinamik.')
-      return
+      return false
     }
 
-    setBulkImportLoading(true)
-    setBulkImportErrors([])
-    setBulkImportSummary(null)
+    return true
+  }
 
-    try {
-      const currentAcademicYear =
-        setupConfig?.current_academic_year || new Date().getFullYear()
-      const schoolId = profile.school_id
-      const selectedDynamicExamKey = normalizeExamKey(bulkSelectedExam)
+  const buildBulkImportPlan = async () => {
+    const currentAcademicYear =
+      setupConfig?.current_academic_year || new Date().getFullYear()
+    const schoolId = profile.school_id
+    const selectedDynamicExamKey = normalizeExamKey(bulkSelectedExam)
 
-      const errors = []
-      const scoreRowsToUpsert = []
-      const targetRowsToUpsert = []
-      const otrCandidatePairs = new Map()
-      const activeExamConfigCache = new Map()
-      let processedCount = 0
+    const errors = []
+    const errorRowsByNumber = new Map()
+    const scoreRowsToUpsert = []
+    const targetRowsToUpsert = []
+    const otrCandidatePairs = new Map()
+    const activeExamConfigCache = new Map()
+    const validRowNumbers = new Set()
+    let processedCount = 0
 
-      const classById = new Map(
-        (classes || []).map((item) => [String(item.id), item])
-      )
-      const enrollmentByClassAndIc = new Map()
-      const enrollmentByGradeAndIc = new Map()
-      const subjectLookups = buildSubjectLookupMaps(subjects)
-      const studentSubjectEnrollmentSet = new Set(
-        (studentSubjectEnrollments || [])
-          .filter(
-            (row) =>
-              Number(row.academic_year) === Number(currentAcademicYear) &&
-              row.is_active === true
-          )
-          .map(
-            (row) =>
-              `${String(row.student_enrollment_id)}__${String(row.subject_id)}`
-          )
-      )
+    const recordError = (row, message, details = {}) => {
+      const rowNumber = row?.__rowNumber || ''
+      const errorItem = {
+        rowNumber,
+        message,
+        row: row || {},
+        ...details,
+      }
 
-      ;(allEnrollments || []).forEach((enrollment) => {
-        const classRow = classById.get(String(enrollment.class_id))
-        const studentProfile = enrollment.student_profiles
+      errors.push(errorItem)
 
-        if (!classRow || !studentProfile) return
+      const key = rowNumber || `error-${errors.length}`
+      const existing = errorRowsByNumber.get(key) || {
+        rowNumber,
+        row: row || {},
+        reasons: [],
+      }
 
-        const tingkatan = classRow.tingkatan
-        const kelas = classRow.class_name
-        const normalizedIc = normalizeIC(studentProfile.ic_number)
+      existing.reasons.push(message)
+      errorRowsByNumber.set(key, existing)
+    }
 
-        if (!tingkatan || !kelas || !normalizedIc) return
+    const classById = new Map(
+      (classes || []).map((item) => [String(item.id), item])
+    )
+    const enrollmentByClassAndIc = new Map()
+    const enrollmentByGradeAndIc = new Map()
+    const subjectLookups = buildSubjectLookupMaps(subjects)
+    const studentSubjectEnrollmentSet = new Set(
+      (studentSubjectEnrollments || [])
+        .filter(
+          (row) =>
+            Number(row.academic_year) === Number(currentAcademicYear) &&
+            row.is_active === true
+        )
+        .map(
+          (row) =>
+            `${String(row.student_enrollment_id)}__${String(row.subject_id)}`
+        )
+    )
 
-        const bundle = {
-          enrollment,
-          classRow,
-          studentProfile,
-        }
-        const classAliases = [
-          kelas,
-          `${tingkatan} ${kelas}`,
-          getDisplayClassLabel(tingkatan, kelas, levelMappings),
-        ].filter(Boolean)
+    ;(allEnrollments || []).forEach((enrollment) => {
+      const classRow = classById.get(String(enrollment.class_id))
+      const studentProfile = enrollment.student_profiles
 
-        classAliases.forEach((classAlias) => {
-          const classIcKey = `${buildClassLookupKey(tingkatan, classAlias)}__${normalizedIc}`
-          enrollmentByClassAndIc.set(classIcKey, bundle)
-        })
+      if (!classRow || !studentProfile) return
 
-        const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
-        if (!enrollmentByGradeAndIc.has(gradeIcKey)) {
-          enrollmentByGradeAndIc.set(gradeIcKey, [])
-        }
+      const tingkatan = classRow.tingkatan
+      const kelas = classRow.class_name
+      const normalizedIc = normalizeIC(studentProfile.ic_number)
 
-        enrollmentByGradeAndIc.get(gradeIcKey).push(bundle)
+      if (!tingkatan || !kelas || !normalizedIc) return
+
+      const bundle = {
+        enrollment,
+        classRow,
+        studentProfile,
+      }
+      const classAliases = [
+        kelas,
+        `${tingkatan} ${kelas}`,
+        getDisplayClassLabel(tingkatan, kelas, levelMappings),
+      ].filter(Boolean)
+
+      classAliases.forEach((classAlias) => {
+        const classIcKey = `${buildClassLookupKey(tingkatan, classAlias)}__${normalizedIc}`
+        enrollmentByClassAndIc.set(classIcKey, bundle)
       })
 
-      const getActiveExamConfigForGrade = async (tingkatan, examKey) => {
-        const normalizedExamKey = normalizeExamKey(examKey)
-        const cacheKey = `${normalizeGradeLabel(tingkatan)}__${normalizedExamKey}`
-
-        if (activeExamConfigCache.has(cacheKey)) {
-          return activeExamConfigCache.get(cacheKey)
-        }
-
-        const activeExamRows = await loadActiveExamOptions(
-          schoolId,
-          tingkatan,
-          currentAcademicYear
-        )
-        const matchedExamConfig =
-          activeExamRows.find(
-            (item) => normalizeExamKey(item.key) === normalizedExamKey
-          ) || null
-
-        activeExamConfigCache.set(cacheKey, matchedExamConfig)
-        return matchedExamConfig
+      const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
+      if (!enrollmentByGradeAndIc.has(gradeIcKey)) {
+        enrollmentByGradeAndIc.set(gradeIcKey, [])
       }
 
-      const addOtrCandidatePair = ({
-        matchedClass,
-        matchedStudentEnrollment,
-        matchedStudentProfile,
-        matchedSubject,
-        examKey,
-        mark,
-      }) => {
-        if (examKey !== 'TOV' && examKey !== 'ETR') return
+      enrollmentByGradeAndIc.get(gradeIcKey).push(bundle)
+    })
 
-        const pairKey = `${matchedStudentEnrollment.id}__${matchedSubject.id}`
-        const existing = otrCandidatePairs.get(pairKey) || {
-          school_id: schoolId,
-          academic_year: currentAcademicYear,
-          student_enrollment_id: matchedStudentEnrollment.id,
-          student_profile_id:
-            matchedStudentEnrollment.student_profile_id || matchedStudentProfile?.id,
-          class_id: matchedClass.id,
-          subject_id: matchedSubject.id,
-          tingkatan: matchedClass.tingkatan,
-          tov_mark: null,
-          etr_mark: null,
-        }
+    const getActiveExamConfigForGrade = async (tingkatan, examKey) => {
+      const normalizedExamKey = normalizeExamKey(examKey)
+      const cacheKey = `${normalizeGradeLabel(tingkatan)}__${normalizedExamKey}`
 
-        if (examKey === 'TOV') existing.tov_mark = mark
-        if (examKey === 'ETR') existing.etr_mark = mark
-
-        otrCandidatePairs.set(pairKey, existing)
+      if (activeExamConfigCache.has(cacheKey)) {
+        return activeExamConfigCache.get(cacheKey)
       }
 
-      const resolveEnrollmentBundle = (row, requireClass) => {
-        const rowNumber = row.__rowNumber
-        const tingkatan = normalizeText(row.tingkatan)
-        const kelas = normalizeText(row.kelas)
-        const normalizedIc = normalizeIC(row.no_ic)
+      const activeExamRows = await loadActiveExamOptions(
+        schoolId,
+        tingkatan,
+        currentAcademicYear
+      )
+      const matchedExamConfig =
+        activeExamRows.find(
+          (item) => normalizeExamKey(item.key) === normalizedExamKey
+        ) || null
 
-        if (!tingkatan) {
-          errors.push(`Baris ${rowNumber}: tingkatan kosong`)
-          return null
-        }
+      activeExamConfigCache.set(cacheKey, matchedExamConfig)
+      return matchedExamConfig
+    }
 
-        if (requireClass && !kelas) {
-          errors.push(`Baris ${rowNumber}: kelas kosong`)
-          return null
-        }
+    const addOtrCandidatePair = ({
+      matchedClass,
+      matchedStudentEnrollment,
+      matchedStudentProfile,
+      matchedSubject,
+      examKey,
+      mark,
+    }) => {
+      if (examKey !== 'TOV' && examKey !== 'ETR') return
 
-        if (!normalizedIc) {
-          errors.push(`Baris ${rowNumber}: no_ic kosong`)
-          return null
-        }
+      const pairKey = `${matchedStudentEnrollment.id}__${matchedSubject.id}`
+      const existing = otrCandidatePairs.get(pairKey) || {
+        school_id: schoolId,
+        academic_year: currentAcademicYear,
+        student_enrollment_id: matchedStudentEnrollment.id,
+        student_profile_id:
+          matchedStudentEnrollment.student_profile_id || matchedStudentProfile?.id,
+        class_id: matchedClass.id,
+        subject_id: matchedSubject.id,
+        tingkatan: matchedClass.tingkatan,
+        tov_mark: null,
+        etr_mark: null,
+      }
 
-        if (kelas) {
-          const classIcKey = `${buildClassLookupKey(tingkatan, kelas)}__${normalizedIc}`
-          const matchedBundle = enrollmentByClassAndIc.get(classIcKey) || null
+      if (examKey === 'TOV') existing.tov_mark = mark
+      if (examKey === 'ETR') existing.etr_mark = mark
 
-          if (!matchedBundle) {
-            errors.push(
-              `Baris ${rowNumber}: Murid dengan IC '${row.no_ic}' tidak ditemui untuk kelas dan tingkatan tersebut.`
-            )
-            return null
-          }
+      otrCandidatePairs.set(pairKey, existing)
+    }
 
-          return matchedBundle
-        }
+    const resolveEnrollmentBundle = (row, requireClass) => {
+      const rowNumber = row.__rowNumber
+      const tingkatan = normalizeText(row.tingkatan)
+      const kelas = normalizeText(row.kelas)
+      const normalizedIc = normalizeIC(row.no_ic)
 
-        const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
-        const candidates = enrollmentByGradeAndIc.get(gradeIcKey) || []
+      if (!tingkatan) {
+        recordError(row, `Baris ${rowNumber}: tingkatan kosong`)
+        return null
+      }
 
-        if (candidates.length === 0) {
-          errors.push(
+      if (requireClass && !kelas) {
+        recordError(row, `Baris ${rowNumber}: kelas kosong`)
+        return null
+      }
+
+      if (!normalizedIc) {
+        recordError(row, `Baris ${rowNumber}: no_ic kosong`)
+        return null
+      }
+
+      if (kelas) {
+        const classIcKey = `${buildClassLookupKey(tingkatan, kelas)}__${normalizedIc}`
+        const matchedBundle = enrollmentByClassAndIc.get(classIcKey) || null
+
+        if (!matchedBundle) {
+          recordError(
+            row,
             `Baris ${rowNumber}: Murid dengan IC '${row.no_ic}' tidak ditemui untuk kelas dan tingkatan tersebut.`
           )
           return null
         }
 
-        if (candidates.length > 1) {
-          errors.push(`Baris ${rowNumber}: padanan no_ic tidak unik. Sila isi kelas.`)
-          return null
-        }
-
-        return candidates[0]
+        return matchedBundle
       }
 
-      const processMarkCell = async ({
+      const gradeIcKey = buildGradeIcLookupKey(tingkatan, normalizedIc)
+      const candidates = enrollmentByGradeAndIc.get(gradeIcKey) || []
+
+      if (candidates.length === 0) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: Murid dengan IC '${row.no_ic}' tidak ditemui untuk kelas dan tingkatan tersebut.`
+        )
+        return null
+      }
+
+      if (candidates.length > 1) {
+        recordError(row, `Baris ${rowNumber}: padanan no_ic tidak unik. Sila isi kelas.`)
+        return null
+      }
+
+      return candidates[0]
+    }
+
+    const processMarkCell = async ({
+      row,
+      matchedBundle,
+      subjectHeader,
+      markValue,
+      examKey,
+      allowBlankSkip = false,
+    }) => {
+      const rowNumber = row.__rowNumber
+      const normalizedExamKey = normalizeExamKey(examKey)
+      const markRaw = normalizeText(markValue)
+      const matchedStudentEnrollment = matchedBundle.enrollment
+      const matchedClass = matchedBundle.classRow
+      const matchedStudentProfile = matchedBundle.studentProfile
+      const studentName =
+        matchedStudentProfile?.full_name || normalizeText(row.nama_murid) || 'Murid'
+      const subjectLabel = normalizeText(subjectHeader)
+
+      if (!markRaw && allowBlankSkip) return false
+
+      if (!markRaw) {
+        recordError(row, `Baris ${rowNumber}: markah kosong`, {
+          subject: subjectLabel,
+          mark: markValue,
+        })
+        return false
+      }
+
+      if (!normalizedExamKey) {
+        recordError(row, `Baris ${rowNumber}: jenis_peperiksaan kosong`, {
+          subject: subjectLabel,
+          mark: markValue,
+        })
+        return false
+      }
+
+      if (!isAllowedExamKey(normalizedExamKey)) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: peperiksaan '${normalizedExamKey}' tidak sah.`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      const matchedSubject =
+        subjectLookups.byHeaderAndGrade.get(
+          buildSubjectHeaderLookupKey(subjectLabel, matchedClass.tingkatan)
+        ) || null
+
+      if (!matchedSubject) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: Subjek '${subjectLabel}' tidak ditemui dalam senarai subjek aktif.`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      if (
+        !canInputExamMark({
+          schoolInfo,
+          tingkatan: matchedClass.tingkatan,
+          subjectName: getSubjectRuleName(matchedSubject),
+          examKey: normalizedExamKey,
+        })
+      ) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: Subjek '${subjectLabel}' tidak dibenarkan untuk ${normalizedExamKey} bagi ${matchedClass.tingkatan}.`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      const mark = Number(markRaw)
+
+      if (Number.isNaN(mark) || mark < 0 || mark > 100) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: Markah untuk ${studentName} - ${subjectLabel} mesti antara 0 hingga 100.`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      const matchedExamConfig = await getActiveExamConfigForGrade(
+        matchedClass.tingkatan,
+        normalizedExamKey
+      )
+
+      if (!matchedExamConfig?.id) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: Peperiksaan ${normalizedExamKey} belum dibuka oleh admin sekolah.`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      if (
+        isSelectiveSubject(matchedSubject) &&
+        !studentSubjectEnrollmentSet.has(
+          `${String(matchedStudentEnrollment.id)}__${String(matchedSubject.id)}`
+        )
+      ) {
+        recordError(
+          row,
+          `Baris ${rowNumber}: murid IC '${matchedStudentProfile?.ic_number || row.no_ic}' tidak didaftarkan untuk subjek '${matchedSubject.subject_name}'`,
+          { subject: subjectLabel, mark: markValue }
+        )
+        return false
+      }
+
+      const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
+        const label =
+          grade.tingkatan ??
+          grade.grade_label ??
+          grade.form_level ??
+          grade.level ??
+          ''
+
+        return normalizeGradeLabel(label) === normalizeGradeLabel(matchedClass.tingkatan)
+      })
+      const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
+
+      if (normalizedExamKey === 'ETR') {
+        targetRowsToUpsert.push({
+          school_id: schoolId,
+          academic_year: currentAcademicYear,
+          class_id: matchedClass.id,
+          student_enrollment_id: matchedStudentEnrollment.id,
+          student_profile_id: matchedStudentEnrollment.student_profile_id,
+          subject_id: matchedSubject.id,
+          target_key: 'ETR',
+          target_mark: mark,
+          grade_name: null,
+          grade_point: null,
+          generated_by_system: false,
+          manually_adjusted: false,
+          remarks: null,
+          entered_by: profile.id,
+          updated_at: new Date().toISOString(),
+        })
+      } else if (isScoreExamKey(normalizedExamKey)) {
+        scoreRowsToUpsert.push({
+          school_id: schoolId,
+          academic_year: currentAcademicYear,
+          class_id: matchedClass.id,
+          student_enrollment_id: matchedStudentEnrollment.id,
+          student_profile_id: matchedStudentEnrollment.student_profile_id,
+          subject_id: matchedSubject.id,
+          exam_config_id: matchedExamConfig.id,
+          exam_key: normalizedExamKey,
+          mark,
+          grade_name: gradeInfo.grade_name,
+          grade_point: gradeInfo.grade_point,
+          is_absent: false,
+          remarks: null,
+          entered_by: profile.id,
+          verified_by: null,
+          verified_at: null,
+          updated_at: new Date().toISOString(),
+        })
+      }
+
+      addOtrCandidatePair({
+        matchedClass,
+        matchedStudentEnrollment,
+        matchedStudentProfile,
+        matchedSubject,
+        examKey: normalizedExamKey,
+        mark,
+      })
+
+      processedCount += 1
+      validRowNumbers.add(rowNumber)
+      return true
+    }
+
+    for (const row of bulkPreviewRows) {
+      const matchedBundle = resolveEnrollmentBundle(
+        row,
+        bulkCsvFormat === 'dynamic'
+      )
+
+      if (!matchedBundle) continue
+
+      if (bulkCsvFormat === 'dynamic') {
+        for (const subjectHeader of bulkSubjectHeaders) {
+          await processMarkCell({
+            row,
+            matchedBundle,
+            subjectHeader: subjectHeader.label,
+            markValue: row[subjectHeader.rowKey],
+            examKey: selectedDynamicExamKey,
+            allowBlankSkip: true,
+          })
+        }
+
+        continue
+      }
+
+      await processMarkCell({
         row,
         matchedBundle,
-        subjectHeader,
-        markValue,
-        examKey,
-        allowBlankSkip = false,
-      }) => {
-        const rowNumber = row.__rowNumber
-        const normalizedExamKey = normalizeExamKey(examKey)
-        const markRaw = normalizeText(markValue)
-        const matchedStudentEnrollment = matchedBundle.enrollment
-        const matchedClass = matchedBundle.classRow
-        const matchedStudentProfile = matchedBundle.studentProfile
-        const studentName =
-          matchedStudentProfile?.full_name || normalizeText(row.nama_murid) || 'Murid'
-        const subjectLabel = normalizeText(subjectHeader)
+        subjectHeader: row.subjek,
+        markValue: row.markah,
+        examKey: row.jenis_peperiksaan,
+        allowBlankSkip: false,
+      })
+    }
 
-        if (!markRaw && allowBlankSkip) return false
+    const otrRowsToUpsert = []
 
-        if (!markRaw) {
-          errors.push(`Baris ${rowNumber}: markah kosong`)
-          return false
-        }
+    if (otrCandidatePairs.size > 0 && shouldAutoRecalculateOtrs(setupConfig)) {
+      const pairs = Array.from(otrCandidatePairs.values())
+      const enrollmentIds = [
+        ...new Set(pairs.map((pair) => pair.student_enrollment_id).filter(Boolean)),
+      ]
+      const subjectIds = [
+        ...new Set(pairs.map((pair) => pair.subject_id).filter(Boolean)),
+      ]
 
-        if (!normalizedExamKey) {
-          errors.push(`Baris ${rowNumber}: jenis_peperiksaan kosong`)
-          return false
-        }
+      if (pairs.some((pair) => pair.tov_mark === null) && enrollmentIds.length && subjectIds.length) {
+        const { data: tovRows, error: tovError } = await supabase
+          .from('student_scores')
+          .select('student_enrollment_id, subject_id, mark')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentAcademicYear)
+          .eq('exam_key', 'TOV')
+          .in('student_enrollment_id', enrollmentIds)
+          .in('subject_id', subjectIds)
 
-        if (!isAllowedExamKey(normalizedExamKey)) {
-          errors.push(
-            `Baris ${rowNumber}: peperiksaan '${normalizedExamKey}' tidak sah.`
-          )
-          return false
-        }
+        if (tovError) throw tovError
 
-        const matchedSubject =
-          subjectLookups.byHeaderAndGrade.get(
-            buildSubjectHeaderLookupKey(subjectLabel, matchedClass.tingkatan)
-          ) || null
-
-        if (!matchedSubject) {
-          errors.push(
-            `Baris ${rowNumber}: Subjek '${subjectLabel}' tidak ditemui dalam senarai subjek aktif.`
-          )
-          return false
-        }
-
-        if (
-          !canInputExamMark({
-            schoolInfo,
-            tingkatan: matchedClass.tingkatan,
-            subjectName: getSubjectRuleName(matchedSubject),
-            examKey: normalizedExamKey,
-          })
-        ) {
-          errors.push(
-            `Baris ${rowNumber}: Subjek '${subjectLabel}' tidak dibenarkan untuk ${normalizedExamKey} bagi ${matchedClass.tingkatan}.`
-          )
-          return false
-        }
-
-        const mark = Number(markRaw)
-
-        if (Number.isNaN(mark) || mark < 0 || mark > 100) {
-          errors.push(
-            `Baris ${rowNumber}: Markah untuk ${studentName} - ${subjectLabel} mesti antara 0 hingga 100.`
-          )
-          return false
-        }
-
-        const matchedExamConfig = await getActiveExamConfigForGrade(
-          matchedClass.tingkatan,
-          normalizedExamKey
+        const tovMap = new Map(
+          (tovRows || []).map((row) => [
+            `${row.student_enrollment_id}__${row.subject_id}`,
+            row.mark,
+          ])
         )
 
-        if (!matchedExamConfig?.id) {
-          errors.push(
-            `Baris ${rowNumber}: Peperiksaan ${normalizedExamKey} belum dibuka oleh admin sekolah.`
-          )
-          return false
-        }
-
-        if (
-          isSelectiveSubject(matchedSubject) &&
-          !studentSubjectEnrollmentSet.has(
-            `${String(matchedStudentEnrollment.id)}__${String(matchedSubject.id)}`
-          )
-        ) {
-          errors.push(
-            `Baris ${rowNumber}: murid IC '${matchedStudentProfile?.ic_number || row.no_ic}' tidak didaftarkan untuk subjek '${matchedSubject.subject_name}'`
-          )
-          return false
-        }
-
-        const gradeScalesForTingkatan = (gradeScales || []).filter((grade) => {
-          const label =
-            grade.tingkatan ??
-            grade.grade_label ??
-            grade.form_level ??
-            grade.level ??
-            ''
-
-          return normalizeGradeLabel(label) === normalizeGradeLabel(matchedClass.tingkatan)
-        })
-        const gradeInfo = findGradeFromMark(mark, gradeScalesForTingkatan)
-
-        if (normalizedExamKey === 'ETR') {
-          targetRowsToUpsert.push({
-            school_id: schoolId,
-            academic_year: currentAcademicYear,
-            class_id: matchedClass.id,
-            student_enrollment_id: matchedStudentEnrollment.id,
-            student_profile_id: matchedStudentEnrollment.student_profile_id,
-            subject_id: matchedSubject.id,
-            target_key: 'ETR',
-            target_mark: mark,
-            grade_name: null,
-            grade_point: null,
-            generated_by_system: false,
-            manually_adjusted: false,
-            remarks: null,
-            entered_by: profile.id,
-            updated_at: new Date().toISOString(),
-          })
-        } else if (isScoreExamKey(normalizedExamKey)) {
-          scoreRowsToUpsert.push({
-            school_id: schoolId,
-            academic_year: currentAcademicYear,
-            class_id: matchedClass.id,
-            student_enrollment_id: matchedStudentEnrollment.id,
-            student_profile_id: matchedStudentEnrollment.student_profile_id,
-            subject_id: matchedSubject.id,
-            exam_config_id: matchedExamConfig.id,
-            exam_key: normalizedExamKey,
-            mark,
-            grade_name: gradeInfo.grade_name,
-            grade_point: gradeInfo.grade_point,
-            is_absent: false,
-            remarks: null,
-            entered_by: profile.id,
-            verified_by: null,
-            verified_at: null,
-            updated_at: new Date().toISOString(),
-          })
-        }
-
-        addOtrCandidatePair({
-          matchedClass,
-          matchedStudentEnrollment,
-          matchedStudentProfile,
-          matchedSubject,
-          examKey: normalizedExamKey,
-          mark,
-        })
-
-        processedCount += 1
-        return true
-      }
-
-      for (const row of bulkPreviewRows) {
-        const matchedBundle = resolveEnrollmentBundle(
-          row,
-          bulkCsvFormat === 'dynamic'
-        )
-
-        if (!matchedBundle) continue
-
-        if (bulkCsvFormat === 'dynamic') {
-          for (const subjectHeader of bulkSubjectHeaders) {
-            await processMarkCell({
-              row,
-              matchedBundle,
-              subjectHeader: subjectHeader.label,
-              markValue: row[subjectHeader.rowKey],
-              examKey: selectedDynamicExamKey,
-              allowBlankSkip: true,
-            })
+        pairs.forEach((pair) => {
+          if (pair.tov_mark !== null) return
+          const key = `${pair.student_enrollment_id}__${pair.subject_id}`
+          const tovMark = tovMap.get(key)
+          if (tovMark !== undefined && tovMark !== null && tovMark !== '') {
+            pair.tov_mark = tovMark
           }
-
-          continue
-        }
-
-        await processMarkCell({
-          row,
-          matchedBundle,
-          subjectHeader: row.subjek,
-          markValue: row.markah,
-          examKey: row.jenis_peperiksaan,
-          allowBlankSkip: false,
         })
       }
 
+      if (pairs.some((pair) => pair.etr_mark === null) && enrollmentIds.length && subjectIds.length) {
+        const { data: etrRows, error: etrError } = await supabase
+          .from('student_targets')
+          .select('student_enrollment_id, subject_id, target_mark')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentAcademicYear)
+          .eq('target_key', 'ETR')
+          .in('student_enrollment_id', enrollmentIds)
+          .in('subject_id', subjectIds)
+
+        if (etrError) throw etrError
+
+        const etrMap = new Map(
+          (etrRows || []).map((row) => [
+            `${row.student_enrollment_id}__${row.subject_id}`,
+            row.target_mark,
+          ])
+        )
+
+        pairs.forEach((pair) => {
+          if (pair.etr_mark !== null) return
+          const key = `${pair.student_enrollment_id}__${pair.subject_id}`
+          const etrMark = etrMap.get(key)
+          if (etrMark !== undefined && etrMark !== null && etrMark !== '') {
+            pair.etr_mark = etrMark
+          }
+        })
+      }
+
+      pairs.forEach((pair) => {
+        if (pair.tov_mark === null || pair.etr_mark === null) return
+
+        otrRowsToUpsert.push(
+          ...generateOtrRows({
+            schoolId: pair.school_id,
+            academicYear: pair.academic_year,
+            studentEnrollmentId: pair.student_enrollment_id,
+            studentProfileId: pair.student_profile_id,
+            classId: pair.class_id,
+            subjectId: pair.subject_id,
+            enteredBy: profile.id,
+            tingkatan: pair.tingkatan,
+            tovMark: pair.tov_mark,
+            etrMark: pair.etr_mark,
+            setupConfig,
+          })
+        )
+      })
+    }
+
+    return {
+      totalRows: bulkPreviewRows.length,
+      validRows: processedCount,
+      validCsvRows: validRowNumbers.size,
+      errorRows: Array.from(errorRowsByNumber.values()),
+      errors,
+      scoreRowsToUpsert,
+      targetRowsToUpsert,
+      otrRowsToUpsert,
+    }
+  }
+
+  const handleBulkAdminValidate = async () => {
+    if (!validateBulkAdminImportBasics()) return
+
+    setBulkImportLoading(true)
+    setBulkImportErrors([])
+    setBulkErrorRows([])
+    setBulkImportSummary(null)
+    setBulkImportPlan(null)
+
+    try {
+      const plan = await buildBulkImportPlan()
+
+      setBulkImportPlan(plan)
+      setBulkImportErrors(plan.errors)
+      setBulkErrorRows(plan.errorRows)
+      setBulkImportSummary({
+        status: 'validated',
+        totalRows: plan.totalRows,
+        validRows: plan.validRows,
+        savedRows: 0,
+        successCount: plan.validRows,
+        errorRows: plan.errorRows.length,
+        errorCount: plan.errors.length,
+        importedScores: plan.scoreRowsToUpsert.length,
+        importedTargets: plan.targetRowsToUpsert.length,
+        generatedOtrs: plan.otrRowsToUpsert.length,
+      })
+
+      if (plan.validRows === 0) {
+        alert('Semakan selesai. Tiada markah valid untuk disimpan.')
+      } else if (plan.errors.length > 0) {
+        alert(
+          `Semakan selesai. ${plan.validRows} markah valid dan ${plan.errorRows.length} baris ada ralat.`
+        )
+      } else {
+        alert('Semakan selesai. Semua markah valid dan sedia disimpan.')
+      }
+    } catch (error) {
+      console.error(error)
+      alert(`Semakan CSV gagal: ${error.message}`)
+    } finally {
+      setBulkImportLoading(false)
+    }
+  }
+
+  const handleDownloadBulkErrorCsv = () => {
+    if (!bulkErrorRows.length) {
+      alert('Tiada ralat CSV untuk dimuat turun.')
+      return
+    }
+
+    const headers =
+      bulkCsvFormat === 'dynamic'
+        ? [
+            ...DYNAMIC_BULK_TEMPLATE_HEADERS,
+            ...bulkSubjectHeaders.map((header) => header.label),
+            'sebab_ralat',
+          ]
+        : [
+            'tingkatan',
+            'kelas',
+            'no_ic',
+            'nama_murid',
+            'subjek',
+            'jenis_peperiksaan',
+            'markah',
+            'sebab_ralat',
+          ]
+
+    const rows = bulkErrorRows.map((item) => {
+      const row = item.row || {}
+      const reasons = (item.reasons || []).join(' | ')
+
+      if (bulkCsvFormat === 'dynamic') {
+        return [
+          formatIcForErrorCsv(row.no_ic),
+          row.nama_murid || '',
+          row.kelas || '',
+          row.tingkatan || '',
+          ...bulkSubjectHeaders.map((header) => row[header.rowKey] ?? ''),
+          reasons,
+        ]
+      }
+
+      return [
+        row.tingkatan || '',
+        row.kelas || '',
+        formatIcForErrorCsv(row.no_ic),
+        row.nama_murid || '',
+        row.subjek || '',
+        row.jenis_peperiksaan || '',
+        row.markah || '',
+        reasons,
+      ]
+    })
+
+    const currentAcademicYear =
+      setupConfig?.current_academic_year || new Date().getFullYear()
+
+    downloadCsv(
+      `ralat_import_pukal_${currentAcademicYear}.csv`,
+      headers,
+      rows
+    )
+  }
+
+  const handleBulkAdminImport = async () => {
+    if (!validateBulkAdminImportBasics()) return
+
+    if (!bulkImportPlan) {
+      alert('Sila klik Semak CSV dahulu sebelum simpan.')
+      return
+    }
+
+    if (bulkImportPlan.validRows === 0) {
+      alert('Tiada markah valid untuk disimpan.')
+      return
+    }
+
+    if (
+      bulkImportPlan.errors.length > 0 &&
+      !window.confirm(
+        `${bulkImportPlan.errorRows.length} baris ada ralat dan tidak akan disimpan. Teruskan simpan ${bulkImportPlan.validRows} markah valid?`
+      )
+    ) {
+      return
+    }
+
+    setBulkImportLoading(true)
+
+    try {
       let savedCount = 0
 
-      if (targetRowsToUpsert.length > 0) {
+      if (bulkImportPlan.targetRowsToUpsert.length > 0) {
         const { error: targetError } = await supabase
           .from('student_targets')
-          .upsert(targetRowsToUpsert, {
+          .upsert(bulkImportPlan.targetRowsToUpsert, {
             onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
           })
 
         if (targetError) throw targetError
 
-        savedCount += targetRowsToUpsert.length
+        savedCount += bulkImportPlan.targetRowsToUpsert.length
       }
 
-      if (scoreRowsToUpsert.length > 0) {
+      if (bulkImportPlan.scoreRowsToUpsert.length > 0) {
         const { error: upsertError } = await supabase
           .from('student_scores')
-          .upsert(scoreRowsToUpsert, {
+          .upsert(bulkImportPlan.scoreRowsToUpsert, {
             onConflict: 'student_enrollment_id,subject_id,academic_year,exam_key',
           })
 
         if (upsertError) throw upsertError
 
-        savedCount += scoreRowsToUpsert.length
+        savedCount += bulkImportPlan.scoreRowsToUpsert.length
       }
 
-      const otrRowsToUpsert = []
-
-      if (otrCandidatePairs.size > 0 && shouldAutoRecalculateOtrs(setupConfig)) {
-        const pairs = Array.from(otrCandidatePairs.values())
-        const enrollmentIds = [
-          ...new Set(pairs.map((pair) => pair.student_enrollment_id).filter(Boolean)),
-        ]
-        const subjectIds = [
-          ...new Set(pairs.map((pair) => pair.subject_id).filter(Boolean)),
-        ]
-
-        if (pairs.some((pair) => pair.tov_mark === null) && enrollmentIds.length && subjectIds.length) {
-          const { data: tovRows, error: tovError } = await supabase
-            .from('student_scores')
-            .select('student_enrollment_id, subject_id, mark')
-            .eq('school_id', schoolId)
-            .eq('academic_year', currentAcademicYear)
-            .eq('exam_key', 'TOV')
-            .in('student_enrollment_id', enrollmentIds)
-            .in('subject_id', subjectIds)
-
-          if (tovError) throw tovError
-
-          const tovMap = new Map(
-            (tovRows || []).map((row) => [
-              `${row.student_enrollment_id}__${row.subject_id}`,
-              row.mark,
-            ])
-          )
-
-          pairs.forEach((pair) => {
-            if (pair.tov_mark !== null) return
-            const key = `${pair.student_enrollment_id}__${pair.subject_id}`
-            const tovMark = tovMap.get(key)
-            if (tovMark !== undefined && tovMark !== null && tovMark !== '') {
-              pair.tov_mark = tovMark
-            }
-          })
-        }
-
-        if (pairs.some((pair) => pair.etr_mark === null) && enrollmentIds.length && subjectIds.length) {
-          const { data: etrRows, error: etrError } = await supabase
-            .from('student_targets')
-            .select('student_enrollment_id, subject_id, target_mark')
-            .eq('school_id', schoolId)
-            .eq('academic_year', currentAcademicYear)
-            .eq('target_key', 'ETR')
-            .in('student_enrollment_id', enrollmentIds)
-            .in('subject_id', subjectIds)
-
-          if (etrError) throw etrError
-
-          const etrMap = new Map(
-            (etrRows || []).map((row) => [
-              `${row.student_enrollment_id}__${row.subject_id}`,
-              row.target_mark,
-            ])
-          )
-
-          pairs.forEach((pair) => {
-            if (pair.etr_mark !== null) return
-            const key = `${pair.student_enrollment_id}__${pair.subject_id}`
-            const etrMark = etrMap.get(key)
-            if (etrMark !== undefined && etrMark !== null && etrMark !== '') {
-              pair.etr_mark = etrMark
-            }
-          })
-        }
-
-        pairs.forEach((pair) => {
-          if (pair.tov_mark === null || pair.etr_mark === null) return
-
-          otrRowsToUpsert.push(
-            ...generateOtrRows({
-              schoolId: pair.school_id,
-              academicYear: pair.academic_year,
-              studentEnrollmentId: pair.student_enrollment_id,
-              studentProfileId: pair.student_profile_id,
-              classId: pair.class_id,
-              subjectId: pair.subject_id,
-              enteredBy: profile.id,
-              tingkatan: pair.tingkatan,
-              tovMark: pair.tov_mark,
-              etrMark: pair.etr_mark,
-              setupConfig,
-            })
-          )
-        })
-      }
-
-      if (otrRowsToUpsert.length > 0) {
+      if (bulkImportPlan.otrRowsToUpsert.length > 0) {
         const { error: otrError } = await supabase
           .from('student_targets')
-          .upsert(otrRowsToUpsert, {
+          .upsert(bulkImportPlan.otrRowsToUpsert, {
             onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
           })
 
         if (otrError) throw otrError
       }
 
-      setBulkImportErrors(errors)
+      setBulkImportErrors(bulkImportPlan.errors)
+      setBulkErrorRows(bulkImportPlan.errorRows)
       setBulkImportSummary({
-        totalRows: bulkPreviewRows.length,
-        validRows: processedCount,
+        status: 'saved',
+        totalRows: bulkImportPlan.totalRows,
+        validRows: bulkImportPlan.validRows,
         savedRows: savedCount,
         successCount: savedCount,
-        errorRows: errors.length,
-        errorCount: errors.length,
-        importedScores: scoreRowsToUpsert.length,
-        importedTargets: targetRowsToUpsert.length,
-        generatedOtrs: otrRowsToUpsert.length,
+        errorRows: bulkImportPlan.errorRows.length,
+        errorCount: bulkImportPlan.errors.length,
+        importedScores: bulkImportPlan.scoreRowsToUpsert.length,
+        importedTargets: bulkImportPlan.targetRowsToUpsert.length,
+        generatedOtrs: bulkImportPlan.otrRowsToUpsert.length,
       })
+      setBulkImportPlan(null)
 
-      if (savedCount > 0 || otrRowsToUpsert.length > 0) {
+      if (savedCount > 0 || bulkImportPlan.otrRowsToUpsert.length > 0) {
         await refreshCurrentMarksAndAnalysis()
       }
 
-      if (savedCount > 0 && errors.length === 0) {
+      if (savedCount > 0 && bulkImportPlan.errors.length === 0) {
         setBulkPreviewRows([])
         setBulkCsvFile(null)
         setBulkCsvFormat('')
         setBulkSubjectHeaders([])
+        setBulkErrorRows([])
         alert('Import pukal admin berjaya disimpan.')
-      } else if (savedCount > 0 && errors.length > 0) {
-        alert(`Import pukal admin selesai. ${savedCount} markah berjaya disimpan dan ${errors.length} ralat ditemui.`)
+      } else if (savedCount > 0 && bulkImportPlan.errors.length > 0) {
+        alert(
+          `Import pukal admin selesai. ${savedCount} markah berjaya disimpan dan ${bulkImportPlan.errorRows.length} baris ralat tidak disimpan.`
+        )
       } else {
         alert('Import pukal admin gagal. Tiada markah berjaya disimpan.')
       }
@@ -2383,7 +2586,13 @@ export default function StudentScoresPage() {
                   </label>
                   <select
                     value={bulkSelectedExam}
-                    onChange={(e) => setBulkSelectedExam(e.target.value)}
+                    onChange={(e) => {
+                      setBulkSelectedExam(e.target.value)
+                      setBulkImportPlan(null)
+                      setBulkImportSummary(null)
+                      setBulkImportErrors([])
+                      setBulkErrorRows([])
+                    }}
                     className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500"
                   >
                     {bulkExamOptions.length === 0 ? (
@@ -2447,33 +2656,59 @@ export default function StudentScoresPage() {
                       </div>
 
                       <div className="rounded-xl border border-emerald-100 bg-white p-3">
-                        <div className="mb-1.5 text-xs text-slate-500">Baris valid</div>
+                        <div className="mb-1.5 text-xs text-slate-500">Markah valid</div>
                         <div className="text-2xl font-extrabold text-emerald-700">{bulkImportSummary.validRows}</div>
                       </div>
 
                       <div className="rounded-xl border border-emerald-100 bg-white p-3">
-                        <div className="mb-1.5 text-xs text-slate-500">Berjaya disimpan</div>
-                        <div className="text-2xl font-extrabold text-emerald-700">{bulkImportSummary.savedRows ?? bulkImportSummary.successCount}</div>
+                        <div className="mb-1.5 text-xs text-slate-500">
+                          {bulkImportSummary.status === 'saved' ? 'Berjaya disimpan' : 'Sedia disimpan'}
+                        </div>
+                        <div className="text-2xl font-extrabold text-emerald-700">
+                          {bulkImportSummary.status === 'saved'
+                            ? bulkImportSummary.savedRows ?? bulkImportSummary.successCount
+                            : bulkImportSummary.validRows}
+                        </div>
                       </div>
 
                       <div className="rounded-xl border border-emerald-100 bg-white p-3">
-                        <div className="mb-1.5 text-xs text-slate-500">Jumlah ralat</div>
+                        <div className="mb-1.5 text-xs text-slate-500">Baris ralat</div>
                         <div className="text-2xl font-extrabold text-red-700">{bulkImportSummary.errorRows ?? bulkImportSummary.errorCount}</div>
                       </div>
                     </div>
+                    {bulkImportSummary.status === 'validated' && (
+                      <p className="mt-3 text-sm font-semibold text-emerald-900">
+                        Semakan selesai. Klik simpan untuk masukkan markah valid ke sistem.
+                      </p>
+                    )}
                   </div>
                 )}
 
                 {bulkImportErrors.length > 0 && (
                   <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-                    <div className="mb-1 text-base font-extrabold text-red-800">Ralat Import</div>
-                    <div className="mb-3 text-sm text-red-900">
-                      Baris berikut tidak disimpan. Sila semak dan betulkan CSV jika perlu.
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="mb-1 text-base font-extrabold text-red-800">Ralat Import</div>
+                        <div className="mb-3 text-sm text-red-900">
+                          Baris berikut tidak akan disimpan. Betulkan CSV ralat dan import semula jika perlu.
+                        </div>
+                      </div>
+                      {bulkErrorRows.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleDownloadBulkErrorCsv}
+                          className="rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                        >
+                          Muat Turun CSV Ralat
+                        </button>
+                      )}
                     </div>
 
                     <ul className="m-0 list-disc space-y-1.5 pl-5 text-sm text-red-700">
                       {bulkImportErrors.slice(0, 20).map((item, index) => (
-                        <li key={`${item}-${index}`}>{item}</li>
+                        <li key={`${getBulkImportErrorMessage(item)}-${index}`}>
+                          {getBulkImportErrorMessage(item)}
+                        </li>
                       ))}
                     </ul>
 
@@ -2557,18 +2792,32 @@ export default function StudentScoresPage() {
                 </div>
               )}
 
-              <div className="mt-4 flex gap-3">
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleBulkAdminValidate}
+                  disabled={
+                    bulkImportLoading ||
+                    !bulkPreviewRows.length ||
+                    (bulkCsvFormat === 'dynamic' && !bulkSelectedExam)
+                  }
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkImportLoading ? 'Sedang semak...' : 'Semak CSV'}
+                </button>
+
                 <button
                   type="button"
                   onClick={handleBulkAdminImport}
                   disabled={
                     bulkImportLoading ||
                     !bulkPreviewRows.length ||
-                    (bulkCsvFormat === 'dynamic' && !bulkSelectedExam)
+                    !bulkImportPlan ||
+                    bulkImportPlan.validRows === 0
                   }
                   className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {bulkImportLoading ? 'Sedang import...' : 'Simpan Import Pukal Admin'}
+                  {bulkImportLoading ? 'Sedang simpan...' : 'Simpan Row Valid Sahaja'}
                 </button>
               </div>
         </div>
