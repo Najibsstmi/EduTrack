@@ -2211,7 +2211,12 @@ export default function StudentScoresPage() {
       }
     } catch (error) {
       console.error(error)
-      alert(`Import pukal admin gagal: ${error.message}`)
+      const errorMessage = String(error.message || '')
+      const friendlyMessage = errorMessage.includes('student_score_history')
+        ? 'Import gagal kerana policy audit student_score_history belum membenarkan rekod sejarah markah ditulis. Sila jalankan migration RLS student_score_history di Supabase.'
+        : `Import pukal admin gagal: ${error.message}`
+
+      alert(friendlyMessage)
     } finally {
       setBulkImportLoading(false)
     }
