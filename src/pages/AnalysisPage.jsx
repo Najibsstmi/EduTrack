@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Printer } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import ExamAnalysisPrintView from '../components/ExamAnalysisPrintView.jsx'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
   getExamStructureForGrade,
@@ -285,6 +287,7 @@ export default function AnalysisPage() {
   const [selectedClassId, setSelectedClassId] = useState('all')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [selectedClassExamKey, setSelectedClassExamKey] = useState('')
+  const [isPrintingAnalysis, setIsPrintingAnalysis] = useState(false)
 
   const dashboardPath = getDashboardPath(profile)
   const isSubjectPerformancePage = location.pathname === '/analysis/subject'
@@ -401,7 +404,7 @@ export default function AnalysisPage() {
 
       supabase
         .from('schools')
-        .select('id, school_name, school_code, school_type')
+        .select('id, school_name, school_code, school_type, logo_url')
         .eq('id', schoolId)
         .maybeSingle(),
     ])
@@ -1106,6 +1109,138 @@ export default function AnalysisPage() {
     })
   }, [analysisColumns, mergedRows, gradeColumns, gradeScales])
 
+  const academicYear = setupConfig?.current_academic_year || new Date().getFullYear()
+
+  const selectedSubjectName = useMemo(() => {
+    return (
+      availableSubjects.find((subject) => String(subject.id) === String(selectedSubjectId))
+        ?.subject_name || ''
+    )
+  }, [availableSubjects, selectedSubjectId])
+
+  const selectedClassExamLabel =
+    classExamOptions.find((exam) => exam.key === selectedClassExamKey)?.name ||
+    selectedClassExamKey ||
+    '-'
+
+  const canPrintAnalysis = isSubjectPerformancePage
+    ? Boolean(selectedSubjectId && !loading)
+    : Boolean(selectedClassData && selectedClassExamKey && !loading)
+
+  const handlePrintAnalysis = useCallback(() => {
+    if (!canPrintAnalysis) return
+    setIsPrintingAnalysis(true)
+  }, [canPrintAnalysis])
+
+  useEffect(() => {
+    const stopPrintingAnalysis = () => setIsPrintingAnalysis(false)
+    window.addEventListener('afterprint', stopPrintingAnalysis)
+    return () => window.removeEventListener('afterprint', stopPrintingAnalysis)
+  }, [])
+
+  useEffect(() => {
+    if (!isPrintingAnalysis) return undefined
+
+    document.body.classList.add('exam-analysis-print-mode')
+    let cancelled = false
+    let printTimer
+    let printScheduled = false
+
+    const schedulePrint = () => {
+      if (cancelled || printScheduled) return
+      printScheduled = true
+      printTimer = window.setTimeout(() => window.print(), 100)
+    }
+
+    const imageWaitTimer = window.setTimeout(schedulePrint, 1500)
+    const images = [...document.querySelectorAll('.exam-analysis-print-root img')]
+    const imagePromises = images.map((image) => {
+      if (image.complete) return Promise.resolve()
+
+      return new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true })
+        image.addEventListener('error', resolve, { once: true })
+      })
+    })
+
+    Promise.all(imagePromises).then(() => {
+      window.clearTimeout(imageWaitTimer)
+      schedulePrint()
+    })
+
+    return () => {
+      cancelled = true
+      document.body.classList.remove('exam-analysis-print-mode')
+      window.clearTimeout(imageWaitTimer)
+      if (printTimer) window.clearTimeout(printTimer)
+    }
+  }, [isPrintingAnalysis])
+
+  const classPrintReport = useMemo(
+    () => ({
+      selectedClassId: selectedClassData?.id || null,
+      summary: classSummary,
+      subjectRows: classSubjectPerformanceRows,
+      studentRankings: classStudentRankings,
+      gradeDistribution: classGradeDistribution,
+      classRankingRows,
+    }),
+    [
+      selectedClassData,
+      classSummary,
+      classSubjectPerformanceRows,
+      classStudentRankings,
+      classGradeDistribution,
+      classRankingRows,
+    ]
+  )
+
+  const subjectPrintReport = useMemo(
+    () => ({
+      summary: summaryStats,
+      summaryRows: summaryTableRows,
+      gradeColumns,
+      studentRows: mergedRows,
+      analysisColumns,
+    }),
+    [summaryStats, summaryTableRows, gradeColumns, mergedRows, analysisColumns]
+  )
+
+  const printFilterLabels = useMemo(() => {
+    const levelLabel = selectedTingkatan
+      ? getDisplayLevel(selectedTingkatan, levelMappings)
+      : 'Semua Tingkatan'
+
+    if (isSubjectPerformancePage) {
+      const classLabel =
+        selectedClassId === 'all'
+          ? 'Semua Kelas'
+          : availableClasses.find((item) => String(item.id) === String(selectedClassId))
+              ?.class_name || 'Kelas dipilih'
+
+      return {
+        level: levelLabel,
+        className: classLabel,
+        subject: selectedSubjectName || 'Subjek belum dipilih',
+      }
+    }
+
+    return {
+      level: levelLabel,
+      className: selectedClassData?.class_name || 'Kelas belum dipilih',
+      exam: selectedClassExamLabel,
+    }
+  }, [
+    availableClasses,
+    isSubjectPerformancePage,
+    levelMappings,
+    selectedClassData,
+    selectedClassExamLabel,
+    selectedClassId,
+    selectedSubjectName,
+    selectedTingkatan,
+  ])
+
   if (loading) {
     return <div className="p-6">Loading {pageTitle}...</div>
   }
@@ -1129,13 +1264,9 @@ export default function AnalysisPage() {
         meta: `${row.scoredCount} markah`,
       }))
 
-    const selectedClassExamLabel =
-      classExamOptions.find((exam) => exam.key === selectedClassExamKey)?.name ||
-      selectedClassExamKey ||
-      '-'
-
     return (
-      <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+      <>
+        <div className="exam-analysis-screen min-h-screen bg-slate-50 p-4 md:p-6">
         <div className="mx-auto max-w-7xl space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1158,6 +1289,15 @@ export default function AnalysisPage() {
                   className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Prestasi Subjek (GPMP)
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintAnalysis}
+                  disabled={!canPrintAnalysis}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300 md:px-4 md:py-2"
+                >
+                  <Printer className="h-4 w-4" aria-hidden="true" />
+                  <span>{isPrintingAnalysis ? 'Menyediakan...' : 'Cetak Laporan Analisis'}</span>
                 </button>
                 <button
                   onClick={() => navigate(dashboardPath)}
@@ -1355,11 +1495,22 @@ export default function AnalysisPage() {
           )}
         </div>
       </div>
+        {isPrintingAnalysis ? (
+          <ExamAnalysisPrintView
+            mode="class"
+            schoolInfo={schoolInfo}
+            academicYear={academicYear}
+            filterLabels={printFilterLabels}
+            classReport={classPrintReport}
+          />
+        ) : null}
+      </>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <>
+      <div className="exam-analysis-screen min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1382,6 +1533,15 @@ export default function AnalysisPage() {
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:px-4 md:py-2 font-medium text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 {isSubjectPerformancePage ? 'Prestasi Kelas' : 'Prestasi Subjek (GPMP)'}
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintAnalysis}
+                disabled={!canPrintAnalysis}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300 md:px-4 md:py-2"
+              >
+                <Printer className="h-4 w-4" aria-hidden="true" />
+                <span>{isPrintingAnalysis ? 'Menyediakan...' : 'Cetak Laporan Analisis'}</span>
               </button>
               <button
                 onClick={() => navigate(dashboardPath)}
@@ -1560,6 +1720,16 @@ export default function AnalysisPage() {
         </div>
       </div>
     </div>
+      {isPrintingAnalysis ? (
+        <ExamAnalysisPrintView
+          mode="subject"
+          schoolInfo={schoolInfo}
+          academicYear={academicYear}
+          filterLabels={printFilterLabels}
+          subjectReport={subjectPrintReport}
+        />
+      ) : null}
+    </>
   )
 }
 

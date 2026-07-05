@@ -1,0 +1,244 @@
+.exam-analysis-print-root {
+  display: none;
+}
+
+@media print {
+  body.exam-analysis-print-mode {
+    background: #ffffff !important;
+  }
+
+  body.exam-analysis-print-mode .exam-analysis-screen,
+  body.exam-analysis-print-mode .install-edutrack-button,
+  body.exam-analysis-print-mode .print-reports-root,
+  body.exam-analysis-print-mode .pbd-slip-print-root,
+  body.exam-analysis-print-mode .pbd-analysis-print-root {
+    display: none !important;
+  }
+
+  body.exam-analysis-print-mode .exam-analysis-print-root {
+    display: block !important;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    color: #0f172a;
+    background: #ffffff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  .exam-analysis-print-document {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    font-size: 8px;
+    line-height: 1.25;
+  }
+
+  .exam-analysis-print-header {
+    display: grid;
+    grid-template-columns: 17mm minmax(0, 1fr) minmax(55mm, auto) 22mm;
+    gap: 3mm;
+    align-items: center;
+    padding-bottom: 2mm;
+    border-bottom: 1.2pt solid #0f172a;
+  }
+
+  .exam-analysis-school-logo,
+  .exam-analysis-edutrack-mark {
+    display: grid;
+    place-items: center;
+  }
+
+  .exam-analysis-school-logo {
+    width: 15mm;
+    height: 15mm;
+    overflow: hidden;
+    border: 0.6pt solid #cbd5e1;
+    border-radius: 1.5mm;
+    color: #94a3b8;
+    font-size: 5px;
+    text-align: center;
+  }
+
+  .exam-analysis-school-logo img,
+  .exam-analysis-edutrack-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .exam-analysis-school-name {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .exam-analysis-school-code,
+  .exam-analysis-generated-date {
+    margin-top: 0.5mm;
+    color: #64748b;
+    font-size: 7px;
+  }
+
+  .exam-analysis-print-title {
+    margin-top: 1.5mm;
+    color: #1e293b;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .exam-analysis-filter-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 1mm;
+  }
+
+  .exam-analysis-filter-summary span {
+    padding: 1mm 1.5mm;
+    border: 0.5pt solid #cbd5e1;
+    border-radius: 1mm;
+    background: #f8fafc;
+    font-size: 7px;
+    font-weight: 700;
+  }
+
+  .exam-analysis-edutrack-mark {
+    color: #475569;
+    font-size: 5.5px;
+    text-align: center;
+  }
+
+  .exam-analysis-edutrack-mark img {
+    width: 17mm;
+    height: 8mm;
+    margin-bottom: 0.5mm;
+  }
+
+  .exam-analysis-print-section {
+    margin-top: 2.5mm;
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .exam-analysis-print-section h2 {
+    margin: 0 0 1.4mm;
+    color: #0f172a;
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .exam-analysis-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.5mm;
+    margin-top: 2.5mm;
+  }
+
+  .exam-analysis-summary-card {
+    padding: 1.5mm;
+    border: 0.6pt solid #cbd5e1;
+    border-radius: 1.4mm;
+    background: #f8fafc;
+  }
+
+  .exam-analysis-summary-card span {
+    display: block;
+    color: #64748b;
+    font-size: 6.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .exam-analysis-summary-card strong {
+    display: block;
+    margin-top: 0.8mm;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .exam-analysis-two-column {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(45mm, 0.65fr);
+    gap: 2.5mm;
+  }
+
+  .exam-analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .exam-analysis-table th,
+  .exam-analysis-table td {
+    border: 0.55pt solid #475569;
+    padding: 2px 3px;
+    font-size: 7.3px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    text-align: center;
+    vertical-align: middle;
+    word-break: break-word;
+  }
+
+  .exam-analysis-table thead {
+    display: table-header-group;
+  }
+
+  .exam-analysis-table th {
+    background: #e2e8f0;
+    color: #0f172a;
+    font-weight: 800;
+  }
+
+  .exam-analysis-table tbody th {
+    background: #ffffff;
+    text-align: left;
+  }
+
+  .exam-analysis-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+  }
+
+  .exam-analysis-table .is-left {
+    text-align: left;
+  }
+
+  .exam-analysis-table .is-highlight {
+    background: #e0f2fe;
+    font-weight: 800;
+  }
+
+  .exam-analysis-empty {
+    padding: 4mm !important;
+    color: #64748b;
+    font-weight: 600;
+    text-align: center !important;
+  }
+
+  .exam-analysis-student-section {
+    page-break-before: auto;
+    break-before: auto;
+  }
+
+  .exam-analysis-subject-student-table th,
+  .exam-analysis-subject-student-table td {
+    font-size: 6.4px;
+    padding: 1.5px 2px;
+  }
+
+  .exam-analysis-print-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    margin-top: 2.5mm;
+    padding-top: 1.5mm;
+    border-top: 0.5pt solid #cbd5e1;
+    color: #64748b;
+    font-size: 6.5px;
+  }
+}
