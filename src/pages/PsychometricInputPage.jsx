@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, Save, Upload, X } from 'lucide-react'
+import { Download, ExternalLink, Save, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
@@ -205,6 +205,8 @@ export default function PsychometricInputPage() {
           grade_label,
           class_id,
           class_name,
+          student_profile_id,
+          student_enrollment_id,
           assessment_name,
           source_student_name,
           source_ic_number,
@@ -324,6 +326,32 @@ export default function PsychometricInputPage() {
     setSelectedClassId(value)
     setImportSummary(null)
     clearPreview()
+  }
+
+  const getStudentReviewUrl = (row) => {
+    const params = new URLSearchParams()
+    const searchText =
+      row.source_ic_number ||
+      row.student_profiles?.ic_number ||
+      row.source_student_name ||
+      row.student_profiles?.full_name ||
+      ''
+
+    if (row.grade_label || row.source_grade_label) {
+      params.set('tingkatan', row.grade_label || row.source_grade_label)
+    }
+    if (row.class_name || row.source_class_name) {
+      params.set('kelas', row.class_name || row.source_class_name)
+    }
+    if (searchText) params.set('search', searchText)
+    if (row.student_enrollment_id) params.set('editEnrollmentId', row.student_enrollment_id)
+
+    const query = params.toString()
+    return query ? `/students?${query}` : '/students'
+  }
+
+  const openStudentReviewTab = (row) => {
+    window.open(getStudentReviewUrl(row), '_blank', 'noopener,noreferrer')
   }
 
   const downloadTemplate = () => {
@@ -765,13 +793,27 @@ export default function PsychometricInputPage() {
                         {row.dominant_code || '-'}
                       </td>
                       <td className="max-w-sm px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            STATUS_STYLES[row.match_status]
-                          }`}
-                        >
-                          {STATUS_LABELS[row.match_status]}
-                        </span>
+                        {['review', 'unmatched'].includes(row.match_status) ? (
+                          <button
+                            type="button"
+                            onClick={() => openStudentReviewTab(row)}
+                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
+                              STATUS_STYLES[row.match_status]
+                            }`}
+                            title="Buka Urus Murid di tab baru"
+                          >
+                            <span>{STATUS_LABELS[row.match_status]}</span>
+                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              STATUS_STYLES[row.match_status]
+                            }`}
+                          >
+                            {STATUS_LABELS[row.match_status]}
+                          </span>
+                        )}
                         <div className="mt-2 text-xs leading-5 text-slate-500">{row.match_note}</div>
                       </td>
                     </tr>
@@ -858,13 +900,34 @@ export default function PsychometricInputPage() {
                         {row.dominant_code || '-'}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            STATUS_STYLES[row.match_status] || STATUS_STYLES.unmatched
-                          }`}
-                        >
-                          {STATUS_LABELS[row.match_status] || row.match_status}
-                        </span>
+                        {['review', 'unmatched'].includes(row.match_status) ? (
+                          <div className="grid gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openStudentReviewTab(row)}
+                              className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
+                                STATUS_STYLES[row.match_status] || STATUS_STYLES.unmatched
+                              }`}
+                              title="Buka Urus Murid di tab baru"
+                            >
+                              <span>{STATUS_LABELS[row.match_status] || row.match_status}</span>
+                              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                            {row.match_note ? (
+                              <span className="max-w-xs text-xs leading-5 text-slate-500">
+                                {row.match_note}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              STATUS_STYLES[row.match_status] || STATUS_STYLES.unmatched
+                            }`}
+                          >
+                            {STATUS_LABELS[row.match_status] || row.match_status}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   fetchSchoolLevelLabels,
   getDisplayLevel,
@@ -37,6 +37,7 @@ const normalizeCompareText = (value = '') => String(value || '').trim().toUpperC
 
 export default function StudentsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,6 +54,7 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTingkatan, setSelectedTingkatan] = useState('Tingkatan 1')
   const [selectedClassFilter, setSelectedClassFilter] = useState('Semua Kelas')
+  const [hasAppliedQueryParams, setHasAppliedQueryParams] = useState(false)
 
   const [form, setForm] = useState({
     full_name: '',
@@ -277,7 +279,7 @@ export default function StudentsPage() {
     }))
   }
 
-  const openEditModal = (student) => {
+  const openEditModal = useCallback((student) => {
     if (!isSchoolAdmin) {
       alert('Hanya admin sekolah boleh edit maklumat murid.')
       return
@@ -305,12 +307,35 @@ export default function StudentsPage() {
       tingkatan: student.tingkatan || '',
       class_id: matchedClass?.id || '',
     })
-  }
+  }, [classes, isSchoolAdmin, profile?.school_id, setupConfig?.current_academic_year])
 
   const closeEditModal = () => {
     if (savingEdit) return
     setEditingStudent(null)
   }
+
+  useEffect(() => {
+    if (loading || hasAppliedQueryParams || students.length === 0) return
+
+    const params = new URLSearchParams(location.search)
+    const targetTingkatan = params.get('tingkatan') || ''
+    const targetClass = params.get('kelas') || ''
+    const targetSearch = params.get('search') || ''
+    const targetEnrollmentId = params.get('editEnrollmentId') || ''
+
+    if (targetTingkatan) setSelectedTingkatan(targetTingkatan)
+    if (targetClass) setSelectedClassFilter(targetClass)
+    if (targetSearch) setSearchTerm(targetSearch)
+
+    if (targetEnrollmentId) {
+      const targetStudent = students.find(
+        (student) => String(student.enrollment_id) === String(targetEnrollmentId)
+      )
+      if (targetStudent) openEditModal(targetStudent)
+    }
+
+    setHasAppliedQueryParams(true)
+  }, [hasAppliedQueryParams, loading, location.search, openEditModal, students])
 
   const handleSaveEdit = async () => {
     if (!isSchoolAdmin || !editingStudent) {
