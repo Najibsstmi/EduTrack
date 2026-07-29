@@ -9,18 +9,44 @@ export const HOLLAND_DIMENSIONS = [
   { key: 'K', label: 'Konvensional' },
 ]
 
+export const ITP_DIMENSIONS = [
+  { key: 'AUT', label: 'AUT' },
+  { key: 'KTF', label: 'KTF' },
+  { key: 'AGF', label: 'AGF' },
+  { key: 'EKT', label: 'EKT' },
+  { key: 'PCP', label: 'PCP' },
+  { key: 'KPG', label: 'KPG' },
+  { key: 'ITL', label: 'ITL' },
+  { key: 'KPN', label: 'KPN' },
+  { key: 'STR', label: 'STR' },
+  { key: 'RSL', label: 'RSL' },
+  { key: 'MLG', label: 'MLG' },
+  { key: 'ATL', label: 'ATL' },
+  { key: 'KD', label: 'KD' },
+  { key: 'WSN', label: 'WSN' },
+  { key: 'KTN', label: 'KTN' },
+]
+
 export const PSYCHOMETRIC_INSTRUMENTS = [
   {
     assessmentType: 'career_interest',
     assessmentName: 'IMK',
     label: 'Inventori Minat Kerjaya (IMK)',
     recommendedGrades: [1, 3, 5],
+    dimensions: HOLLAND_DIMENSIONS,
+    resultLabel: 'Kod Holland',
+    resultDescription:
+      'Sistem akan menyemak skor, mengira tiga kod Holland tertinggi, dan memaparkan status padanan murid terlebih dahulu.',
   },
   {
     assessmentType: 'personality',
     assessmentName: 'ITP',
     label: 'Inventori Tret Personaliti (ITP)',
     recommendedGrades: [2, 4],
+    dimensions: ITP_DIMENSIONS,
+    resultLabel: 'Tret Utama',
+    resultDescription:
+      'Sistem akan menyemak skor, mengenal pasti tiga tret tertinggi, dan memaparkan status padanan murid terlebih dahulu.',
   },
   {
     assessmentType: 'aptitude',
@@ -39,31 +65,37 @@ const HEADER_ALIASES = {
     'kadpengenalan',
     'icnumber',
     'nric',
+    'idpengenalan',
+    'idpengenalanmurid',
   ]),
   student_name: new Set(['nama', 'namamurid', 'fullname', 'namapelajar']),
   class_name: new Set(['kelas', 'classname', 'namakelas']),
-  grade_label: new Set(['tingkatan', 'tahun', 'grade', 'gradelabel', 'tahap']),
-  R: new Set(['r', 'realistik']),
-  I: new Set(['i', 'investigatif']),
-  A: new Set(['a', 'artistik']),
-  S: new Set(['s', 'sosial']),
-  E: new Set(['e', 'enterprising']),
-  K: new Set(['k', 'konvensional']),
+  grade_label: new Set(['tingkatan', 'tahun', 'grade', 'gradelabel', 'tahap', 'tingkatantahun']),
 }
 
-const REQUIRED_HEADERS = [
-  'student_name',
-  'class_name',
-  'grade_label',
-  ...HOLLAND_DIMENSIONS.map((dimension) => dimension.key),
-]
+const BASE_REQUIRED_HEADERS = ['student_name', 'class_name']
+
+const GRADE_WORDS = {
+  SATU: '1',
+  DUA: '2',
+  TIGA: '3',
+  EMPAT: '4',
+  LIMA: '5',
+  ENAM: '6',
+}
+
+const getInstrument = (assessmentName) =>
+  PSYCHOMETRIC_INSTRUMENTS.find((item) => item.assessmentName === assessmentName)
+
+export const getInstrumentDimensions = (assessmentName) =>
+  getInstrument(assessmentName)?.dimensions || []
 
 const normalizeLoose = (value) =>
   String(value || '')
     .replace(/^\uFEFF/, '')
     .trim()
     .toLocaleLowerCase('ms-MY')
-    .replace(/[_\-\s./]+/g, '')
+    .replace(/[^a-z0-9]+/g, '')
 
 export const normalizeMatchText = (value) =>
   String(value || '')
@@ -93,7 +125,14 @@ export const getGradeNumber = (value) => {
     normalized.match(/^(?:TINGKATAN|TAHUN|FORM|TING|F|T)?\s*(\d+)$/) ||
     normalized.match(/\b(?:TINGKATAN|TAHUN|FORM|TING|F|T)\s*(\d+)\b/)
 
-  return match?.[1] || ''
+  if (match?.[1]) return match[1]
+
+  const gradeWords = Object.keys(GRADE_WORDS).join('|')
+  const wordMatch =
+    normalized.match(new RegExp(`^(?:TINGKATAN|TAHUN|FORM|TING)?\\s*(${gradeWords})$`)) ||
+    normalized.match(new RegExp(`\\b(?:TINGKATAN|TAHUN|FORM|TING)\\s*(${gradeWords})\\b`))
+
+  return wordMatch?.[1] ? GRADE_WORDS[wordMatch[1]] : ''
 }
 
 export const normalizeGradeKey = (value) => {
@@ -131,22 +170,36 @@ export const normalizeClassKey = (value, gradeLabel = '') => {
   return normalized
 }
 
-const normalizeHeader = (value) => {
+const normalizeHeader = (value, instrument) => {
   const normalized = normalizeLoose(value)
 
   for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
     if (aliases.has(normalized)) return key
   }
 
+  const assessmentName = normalizeLoose(instrument?.assessmentName)
+  const assessmentType = normalizeLoose(instrument?.assessmentType)
+
+  for (const dimension of instrument?.dimensions || []) {
+    const key = normalizeLoose(dimension.key)
+    const label = normalizeLoose(dimension.label)
+    const aliases = new Set(
+      [key, label, `${assessmentName}${key}`, `${assessmentName}${label}`, `${assessmentType}${key}`]
+        .filter(Boolean)
+    )
+
+    if (aliases.has(normalized)) return dimension.key
+  }
+
   return ''
 }
 
-const getHeaderIndexes = (headerRow) => {
+const getHeaderIndexes = (headerRow, instrument) => {
   const indexes = {}
   const duplicates = []
 
   headerRow.forEach((header, index) => {
-    const canonical = normalizeHeader(header)
+    const canonical = normalizeHeader(header, instrument)
     if (!canonical) return
     if (indexes[canonical] !== undefined) duplicates.push(canonical)
     indexes[canonical] = index
@@ -161,8 +214,8 @@ const toScore = (value) => {
   return Number.isFinite(number) && number >= 0 ? number : null
 }
 
-export const calculateDominantHolland = (scores) => {
-  const sorted = HOLLAND_DIMENSIONS.map((dimension, index) => ({
+export const calculateDominantDimensions = (scores, dimensions = HOLLAND_DIMENSIONS) => {
+  const sorted = dimensions.map((dimension, index) => ({
     ...dimension,
     index,
     score: Number(scores?.[dimension.key]),
@@ -171,13 +224,18 @@ export const calculateDominantHolland = (scores) => {
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, 3)
 
+  const separator = sorted.every((dimension) => String(dimension.key).length === 1) ? '' : '-'
+
   return {
-    dominantCode: sorted.map((dimension) => dimension.key).join(''),
+    dominantCode: sorted.map((dimension) => dimension.key).join(separator),
     primaryDimension: sorted[0]?.label || null,
     secondaryDimension: sorted[1]?.label || null,
     tertiaryDimension: sorted[2]?.label || null,
   }
 }
+
+export const calculateDominantHolland = (scores) =>
+  calculateDominantDimensions(scores, HOLLAND_DIMENSIONS)
 
 export const getInstrumentGradeWarning = (assessmentName, gradeLabel) => {
   const instrument = PSYCHOMETRIC_INSTRUMENTS.find(
@@ -194,6 +252,52 @@ export const getInstrumentGradeWarning = (assessmentName, gradeLabel) => {
     .join(', ')}. Pilihan ini masih dibenarkan tetapi sila semak keperluan sekolah.`
 }
 
+const decodeHtmlEntities = (value) =>
+  String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([a-f0-9]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+
+const textFromHtmlCell = (html) =>
+  decodeHtmlEntities(
+    String(html || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+  )
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+export const parsePsychometricHtmlTable = (html) => {
+  const rows = []
+  const source = String(html || '')
+  const rowRegex = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi
+  let rowMatch = rowRegex.exec(source)
+
+  while (rowMatch) {
+    const cells = []
+    const cellRegex = /<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi
+    let cellMatch = cellRegex.exec(rowMatch[1])
+
+    while (cellMatch) {
+      cells.push(textFromHtmlCell(cellMatch[1]))
+      cellMatch = cellRegex.exec(rowMatch[1])
+    }
+
+    if (cells.some((cell) => cell)) rows.push(cells)
+    rowMatch = rowRegex.exec(source)
+  }
+
+  return rows
+}
+
+const looksLikeHtmlTable = (text) => /<table\b/i.test(String(text || '')) && /<tr\b/i.test(text)
+
 export const readPsychometricFile = async (file) => {
   const extension = String(file?.name || '').split('.').pop()?.toLocaleLowerCase('en') || ''
 
@@ -206,7 +310,15 @@ export const readPsychometricFile = async (file) => {
     return readSheet(file)
   }
 
-  throw new Error('Format fail tidak disokong. Gunakan fail CSV atau XLSX.')
+  if (extension === 'xls') {
+    const text = await file.text()
+    if (looksLikeHtmlTable(text)) return parsePsychometricHtmlTable(text)
+    throw new Error(
+      'Fail .xls lama hanya disokong jika ia export HTML daripada sistem psikometrik. Jika tidak, simpan semula sebagai CSV atau XLSX.'
+    )
+  }
+
+  throw new Error('Format fail tidak disokong. Gunakan fail CSV, XLSX atau XLS export psikometrik.')
 }
 
 const buildClassLookupKey = (gradeLabel, className) =>
@@ -215,22 +327,81 @@ const buildClassLookupKey = (gradeLabel, className) =>
 const getClassLabel = (classRow) =>
   `${String(classRow?.tingkatan || '').trim()} ${String(classRow?.class_name || '').trim()}`.trim()
 
-export const prepareImkPreview = ({
+const findHeaderContext = (tableRows, instrument, selectedGrade) => {
+  let bestContext = null
+
+  tableRows.forEach((row, rowIndex) => {
+    const { indexes, duplicates } = getHeaderIndexes(row, instrument)
+    const dimensionMatches = (instrument.dimensions || []).filter(
+      (dimension) => indexes[dimension.key] !== undefined
+    ).length
+    const baseMatches = BASE_REQUIRED_HEADERS.filter((header) => indexes[header] !== undefined)
+      .length
+    const score = dimensionMatches * 2 + baseMatches
+
+    if (!bestContext || score > bestContext.score) {
+      bestContext = { rowIndex, indexes, duplicates, score }
+    }
+  })
+
+  const titleRows = tableRows.slice(0, bestContext?.rowIndex || 0)
+  const inferredGradeLabel =
+    titleRows
+      .flat()
+      .map((cell) => {
+        const gradeNumber = getGradeNumber(cell)
+        return gradeNumber ? `Tingkatan ${Number(gradeNumber)}` : ''
+      })
+      .find(Boolean) || selectedGrade
+
+  return {
+    rowIndex: bestContext?.rowIndex ?? 0,
+    indexes: bestContext?.indexes || {},
+    duplicates: bestContext?.duplicates || [],
+    inferredGradeLabel,
+  }
+}
+
+const getMissingHeaderLabels = (headers) =>
+  headers.map((header) => {
+    if (header === 'student_name') return 'nama'
+    if (header === 'class_name') return 'kelas'
+    if (header === 'grade_label') return 'tingkatan'
+    return header
+  })
+
+export const preparePsychometricPreview = ({
   tableRows,
   classes,
   enrollments,
   selectedGrade,
   selectedClassId,
+  assessmentName = 'IMK',
 }) => {
+  const instrument = getInstrument(assessmentName)
+  const dimensions = instrument?.dimensions || []
+
+  if (!instrument || dimensions.length === 0) {
+    throw new Error('Import pukal belum disediakan untuk instrumen ini.')
+  }
+
   if (!Array.isArray(tableRows) || tableRows.length < 2) {
     throw new Error('Fail tidak mempunyai data murid untuk dipratonton.')
   }
 
-  const { indexes, duplicates } = getHeaderIndexes(tableRows[0])
-  const missingHeaders = REQUIRED_HEADERS.filter((header) => indexes[header] === undefined)
+  const { rowIndex: headerRowIndex, indexes, duplicates, inferredGradeLabel } = findHeaderContext(
+    tableRows,
+    instrument,
+    selectedGrade
+  )
+  const missingHeaders = [
+    ...BASE_REQUIRED_HEADERS,
+    ...dimensions.map((dimension) => dimension.key),
+    indexes.grade_label === undefined && !inferredGradeLabel ? 'grade_label' : '',
+  ].filter((header) => header && indexes[header] === undefined)
 
   if (missingHeaders.length > 0) {
-    throw new Error(`Header wajib tiada: ${missingHeaders.join(', ')}.`)
+    throw new Error(`Header wajib tiada: ${getMissingHeaderLabels(missingHeaders).join(', ')}.`)
   }
 
   if (duplicates.length > 0) {
@@ -272,16 +443,17 @@ export const prepareImkPreview = ({
   })
 
   const previewRows = tableRows
-    .slice(1)
+    .slice(headerRowIndex + 1)
     .filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''))
     .map((row, rowIndex) => {
-      const rowNumber = rowIndex + 2
+      const rowNumber = headerRowIndex + rowIndex + 2
       const valueFor = (header) => String(row[indexes[header]] ?? '').trim()
       const sourceIcNumber =
         indexes.ic_number === undefined ? '' : normalizeIcNumber(valueFor('ic_number'))
       const sourceStudentName = valueFor('student_name')
       const sourceClassName = valueFor('class_name')
-      const sourceGradeLabel = valueFor('grade_label')
+      const sourceGradeLabel =
+        indexes.grade_label === undefined ? inferredGradeLabel : valueFor('grade_label')
       const errors = []
       const scores = {}
 
@@ -296,7 +468,7 @@ export const prepareImkPreview = ({
         errors.push(`Tingkatan row tidak sepadan dengan pilihan ${selectedGrade}.`)
       }
 
-      HOLLAND_DIMENSIONS.forEach((dimension) => {
+      dimensions.forEach((dimension) => {
         const score = toScore(valueFor(dimension.key))
         if (score === null) {
           errors.push(`Skor ${dimension.key} mesti nombor sifar atau lebih.`)
@@ -397,7 +569,7 @@ export const prepareImkPreview = ({
         errors.push('Enrollment aktif murid tidak sepadan dengan kelas yang dipilih.')
       }
 
-      const dominant = calculateDominantHolland(scores)
+      const dominant = calculateDominantDimensions(scores, dimensions)
 
       return {
         id: `psychometric-preview-${rowNumber}`,
@@ -442,6 +614,9 @@ export const prepareImkPreview = ({
 
   return previewRows
 }
+
+export const prepareImkPreview = (args) =>
+  preparePsychometricPreview({ ...args, assessmentName: 'IMK' })
 
 export const summarizePreviewRows = (rows = []) => ({
   total: rows.length,

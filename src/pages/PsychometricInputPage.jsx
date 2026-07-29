@@ -12,9 +12,9 @@ import {
 import { downloadCsv } from '../lib/pbdBulkImport.js'
 import {
   getGradeNumber,
+  getInstrumentDimensions,
   getInstrumentGradeWarning,
-  HOLLAND_DIMENSIONS,
-  prepareImkPreview,
+  preparePsychometricPreview,
   PSYCHOMETRIC_INSTRUMENTS,
   readPsychometricFile,
   summarizePreviewRows,
@@ -83,7 +83,12 @@ export default function PsychometricInputPage() {
     profile?.role === 'school_admin' ||
     profile?.role === 'master_admin'
   const dashboardPath = getDashboardPath(profile)
-  const canImportImk = isSchoolAdmin && assessmentName === 'IMK' && Boolean(profile?.school_id)
+  const selectedDimensions = useMemo(
+    () => getInstrumentDimensions(assessmentName),
+    [assessmentName]
+  )
+  const canImportPsychometric =
+    isSchoolAdmin && selectedDimensions.length > 0 && Boolean(profile?.school_id)
 
   const initPage = useCallback(async () => {
     setLoading(true)
@@ -321,14 +326,17 @@ export default function PsychometricInputPage() {
     clearPreview()
   }
 
-  const downloadImkTemplate = () => {
-    const exampleGrade = selectedGrade || availableGrades[0] || 'Tingkatan 1'
+  const downloadTemplate = () => {
+    const recommendedGrade = selectedInstrument.recommendedGrades?.[0]
+    const exampleGrade =
+      selectedGrade || availableGrades[0] || (recommendedGrade ? `Tingkatan ${recommendedGrade}` : 'Tingkatan 1')
     const exampleGradeNumber = getGradeNumber(exampleGrade) || exampleGrade
     const exampleClass = availableClasses[0]?.class_name || 'NAMA_KELAS'
+    const exampleScores = selectedDimensions.map((_, index) => 8 + (index % 5))
 
-    downloadCsv(`template-imk-${academicYear || getCurrentYear()}.csv`, [
-      ['no_kp', 'nama', 'tingkatan', 'kelas', 'R', 'I', 'A', 'S', 'E', 'K'],
-      ['100101011234', 'Ahmad Firdaus bin Ali', exampleGradeNumber, exampleClass, 12, 18, 20, 24, 15, 10],
+    downloadCsv(`template-${assessmentName.toLocaleLowerCase('ms-MY')}-${academicYear || getCurrentYear()}.csv`, [
+      ['no_kp', 'nama', 'tingkatan', 'kelas', ...selectedDimensions.map((dimension) => dimension.key)],
+      ['100101011234', 'Ahmad Firdaus bin Ali', exampleGradeNumber, exampleClass, ...exampleScores],
     ])
   }
 
@@ -336,8 +344,8 @@ export default function PsychometricInputPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (!canImportImk) {
-      setErrorMessage('Import fasa pertama hanya tersedia untuk IMK dan admin sekolah.')
+    if (!canImportPsychometric) {
+      setErrorMessage('Import hanya tersedia untuk IMK/ITP dan admin sekolah.')
       return
     }
 
@@ -347,12 +355,13 @@ export default function PsychometricInputPage() {
 
     try {
       const tableRows = await readPsychometricFile(file)
-      const preparedRows = prepareImkPreview({
+      const preparedRows = preparePsychometricPreview({
         tableRows,
         classes,
         enrollments,
         selectedGrade,
         selectedClassId,
+        assessmentName,
       })
 
       setSourceFile(file)
@@ -367,7 +376,7 @@ export default function PsychometricInputPage() {
   }
 
   const savePreview = async () => {
-    if (!canImportImk || !profile?.school_id || !sourceFile) {
+    if (!canImportPsychometric || !profile?.school_id || !sourceFile) {
       setErrorMessage('Maklumat import psikometrik belum lengkap.')
       return
     }
@@ -499,8 +508,8 @@ export default function PsychometricInputPage() {
             </div>
             <h2 className="mt-2 text-2xl font-bold">Import keputusan murid, bukan bina ujian.</h2>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Import keputusan psikometrik berdasarkan panduan KPM. Fasa pertama menyokong data
-              Inventori Minat Kerjaya dengan konstruk Holland RIASEK.
+              Import keputusan psikometrik berdasarkan panduan KPM. Modul ini menyokong data IMK
+              dengan konstruk Holland RIASEK dan ITP dengan skor tret personaliti.
             </p>
           </div>
         </section>
@@ -598,10 +607,10 @@ export default function PsychometricInputPage() {
             </div>
           ) : null}
 
-          {assessmentName !== 'IMK' ? (
+          {selectedDimensions.length === 0 ? (
             <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
-              Instrumen ini boleh dipilih untuk persediaan aliran kerja, tetapi import fasa pertama
-              hanya diaktifkan untuk IMK.
+              Instrumen ini boleh dipilih untuk persediaan aliran kerja, tetapi import pukal belum
+              disediakan untuknya.
             </div>
           ) : null}
         </section>
@@ -609,16 +618,17 @@ export default function PsychometricInputPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Upload Keputusan IMK</h2>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Upload Keputusan {selectedInstrument.assessmentName}
+              </h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                Fail tidak terus disimpan. Sistem akan menyemak skor, mengira tiga kod Holland
-                tertinggi, dan memaparkan status padanan murid terlebih dahulu.
+                Fail tidak terus disimpan. {selectedInstrument.resultDescription}
               </p>
             </div>
             <button
               type="button"
-              onClick={downloadImkTemplate}
-              disabled={assessmentName !== 'IMK'}
+              onClick={downloadTemplate}
+              disabled={selectedDimensions.length === 0}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
@@ -630,16 +640,17 @@ export default function PsychometricInputPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-900">
-                  Format diterima: CSV atau XLSX
+                  Format diterima: CSV, XLSX atau XLS export psikometrik
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Header: no_kp atau ic, nama, tingkatan, kelas, R, I, A, S, E, K. No KP boleh
+                  Header: no_kp, ic atau ID Pengenalan, nama, tingkatan, kelas,{' '}
+                  {selectedDimensions.map((dimension) => dimension.key).join(', ')}. No KP boleh
                   kosong jika padanan nama dan kelas diperlukan.
                 </p>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Tingkatan boleh ditulis sebagai 1, T1, F1, Form 1 atau Tingkatan 1. Untuk kelas,
-                  tulis nama kelas sahaja seperti BALADA atau BONEKA. Padanan tidak sensitif huruf
-                  besar/kecil dan menggunakan kelas aktif sekolah semasa.
+                  Tingkatan boleh ditulis sebagai 1, T1, F1, Form 1, Tingkatan 1 atau Tingkatan
+                  Satu. Untuk export lama .xls, sistem boleh mengambil tingkatan daripada tajuk fail.
+                  Untuk kelas, tulis nama kelas sahaja seperti BALADA atau BONEKA.
                 </p>
                 <p className="mt-1 text-xs font-semibold leading-5 text-indigo-700">
                   Tidak perlu pilih tingkatan atau kelas sebelum upload. Jika dipilih, sistem akan
@@ -648,7 +659,7 @@ export default function PsychometricInputPage() {
               </div>
               <label
                 className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white ${
-                  canImportImk
+                  canImportPsychometric
                     ? 'cursor-pointer bg-indigo-700 hover:bg-indigo-800'
                     : 'cursor-not-allowed bg-slate-400'
                 }`}
@@ -658,9 +669,9 @@ export default function PsychometricInputPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleFileChange}
-                  disabled={!canImportImk || parsingFile}
+                  disabled={!canImportPsychometric || parsingFile}
                   className="hidden"
                 />
               </label>
@@ -718,16 +729,21 @@ export default function PsychometricInputPage() {
               <table className="min-w-[1180px] border-collapse text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    {['Nama', 'No KP', 'Kelas', 'R', 'I', 'A', 'S', 'E', 'K', 'Kod Holland', 'Status Padanan'].map(
-                      (header) => (
-                        <th
-                          key={header}
-                          className="border-b border-slate-200 px-3 py-3 text-left font-semibold text-slate-700"
-                        >
-                          {header}
-                        </th>
-                      )
-                    )}
+                    {[
+                      'Nama',
+                      'No KP',
+                      'Kelas',
+                      ...selectedDimensions.map((dimension) => dimension.key),
+                      selectedInstrument.resultLabel || 'Kod / Tret Utama',
+                      'Status Padanan',
+                    ].map((header) => (
+                      <th
+                        key={header}
+                        className="border-b border-slate-200 px-3 py-3 text-left font-semibold text-slate-700"
+                      >
+                        {header}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -740,7 +756,7 @@ export default function PsychometricInputPage() {
                       <td className="px-3 py-3 text-slate-600">
                         {`${row.source_grade_label} ${row.source_class_name}`.trim() || '-'}
                       </td>
-                      {HOLLAND_DIMENSIONS.map((dimension) => (
+                      {selectedDimensions.map((dimension) => (
                         <td key={dimension.key} className="px-3 py-3 text-slate-700">
                           {row.raw_data?.[dimension.key] ?? '-'}
                         </td>
@@ -806,7 +822,14 @@ export default function PsychometricInputPage() {
               <table className="min-w-[980px] border-collapse text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    {['Murid', 'No KP', 'Tingkatan / Kelas', 'Instrumen', 'Kod Holland', 'Status'].map(
+                    {[
+                      'Murid',
+                      'No KP',
+                      'Tingkatan / Kelas',
+                      'Instrumen',
+                      selectedInstrument.resultLabel || 'Kod / Tret Utama',
+                      'Status',
+                    ].map(
                       (header) => (
                         <th
                           key={header}
@@ -852,9 +875,11 @@ export default function PsychometricInputPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-          <h2 className="text-lg font-semibold text-slate-900">Panduan Ringkas RIASEK</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {assessmentName === 'IMK' ? 'Panduan Ringkas RIASEK' : `Dimensi ${assessmentName}`}
+          </h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {HOLLAND_DIMENSIONS.map((dimension) => (
+            {selectedDimensions.map((dimension) => (
               <div
                 key={dimension.key}
                 className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
@@ -866,10 +891,11 @@ export default function PsychometricInputPage() {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-xs leading-5 text-slate-500">
-            Jika skor sama, kod dominan menggunakan susunan tetap R, I, A, S, E, K sebagai
-            tie-breaker sementara.
-          </p>
+          {selectedDimensions.length > 0 ? (
+            <p className="mt-4 text-xs leading-5 text-slate-500">
+              Jika skor sama, susunan dimensi instrumen digunakan sebagai tie-breaker sementara.
+            </p>
+          ) : null}
         </section>
       </div>
     </div>
