@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Download, ExternalLink, Save, Upload, X } from 'lucide-react'
+import { CheckCircle, Download, ExternalLink, Save, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
@@ -52,6 +52,7 @@ export default function PsychometricInputPage() {
   const [loadingResults, setLoadingResults] = useState(false)
   const [parsingFile, setParsingFile] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [overridingResultId, setOverridingResultId] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
   const [profile, setProfile] = useState(null)
@@ -352,6 +353,68 @@ export default function PsychometricInputPage() {
 
   const openStudentReviewTab = (row) => {
     window.open(getStudentReviewUrl(row), '_blank', 'noopener,noreferrer')
+  }
+
+  const buildOverrideNote = (note) => {
+    const overrideNote = 'Override admin: padanan diterima walaupun sistem menandakan perlu semakan.'
+    return note ? `${note} ${overrideNote}` : overrideNote
+  }
+
+  const acceptPreviewReviewRow = (rowId) => {
+    setPreviewRows((currentRows) =>
+      currentRows.map((row) =>
+        row.id === rowId && row.match_status === 'review' && row.student_enrollment_id
+          ? {
+              ...row,
+              match_status: 'matched',
+              match_note: buildOverrideNote(row.match_note),
+            }
+          : row
+      )
+    )
+  }
+
+  const acceptAllPreviewReviewRows = () => {
+    setPreviewRows((currentRows) =>
+      currentRows.map((row) =>
+        row.match_status === 'review' && row.student_enrollment_id
+          ? {
+              ...row,
+              match_status: 'matched',
+              match_note: buildOverrideNote(row.match_note),
+            }
+          : row
+      )
+    )
+  }
+
+  const acceptSavedReviewRow = async (row) => {
+    if (!isSchoolAdmin || row.match_status !== 'review' || !row.student_enrollment_id) {
+      setErrorMessage('Override hanya dibenarkan untuk rekod perlu semakan yang mempunyai padanan murid.')
+      return
+    }
+
+    setOverridingResultId(row.id)
+    setErrorMessage('')
+
+    try {
+      const { error } = await supabase
+        .from('psychometric_results')
+        .update({
+          match_status: 'matched',
+          match_note: buildOverrideNote(row.match_note),
+        })
+        .eq('id', row.id)
+        .eq('school_id', profile.school_id)
+
+      if (error) throw error
+      await loadResults()
+    } catch (error) {
+      console.error(error)
+      setErrorMessage(error.message || 'Gagal override status perlu semakan.')
+    } finally {
+      setOverridingResultId('')
+    }
   }
 
   const downloadTemplate = () => {
@@ -684,6 +747,10 @@ export default function PsychometricInputPage() {
                   Tidak perlu pilih tingkatan atau kelas sebelum upload. Jika dipilih, sistem akan
                   menggunakannya sebagai semakan tambahan.
                 </p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">
+                  Flow IMK dan ITP adalah sama: preview dahulu, semak padanan, terima override jika
+                  perlu, kemudian simpan data.
+                </p>
               </div>
               <label
                 className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white ${
@@ -724,6 +791,22 @@ export default function PsychometricInputPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {previewSummary.review > 0 ? (
+                  <button
+                    type="button"
+                    onClick={acceptAllPreviewReviewRows}
+                    disabled={
+                      saving ||
+                      previewRows.every(
+                        (row) => row.match_status !== 'review' || !row.student_enrollment_id
+                      )
+                    }
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                    Terima Semua Semakan
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={clearPreview}
@@ -794,17 +877,30 @@ export default function PsychometricInputPage() {
                       </td>
                       <td className="max-w-sm px-3 py-3">
                         {['review', 'unmatched'].includes(row.match_status) ? (
-                          <button
-                            type="button"
-                            onClick={() => openStudentReviewTab(row)}
-                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
-                              STATUS_STYLES[row.match_status]
-                            }`}
-                            title="Buka Urus Murid di tab baru"
-                          >
-                            <span>{STATUS_LABELS[row.match_status]}</span>
-                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            {row.match_status === 'review' && row.student_enrollment_id ? (
+                              <button
+                                type="button"
+                                onClick={() => acceptPreviewReviewRow(row.id)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-200"
+                                title="Terima padanan dan simpan sebagai padanan dijumpai"
+                              >
+                                <CheckCircle className="h-3 w-3" aria-hidden="true" />
+                                <span>Terima</span>
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => openStudentReviewTab(row)}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
+                                STATUS_STYLES[row.match_status]
+                              }`}
+                              title="Buka Urus Murid di tab baru"
+                            >
+                              <span>{STATUS_LABELS[row.match_status]}</span>
+                              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                          </div>
                         ) : (
                           <span
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
@@ -902,17 +998,31 @@ export default function PsychometricInputPage() {
                       <td className="px-4 py-3">
                         {['review', 'unmatched'].includes(row.match_status) ? (
                           <div className="grid gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openStudentReviewTab(row)}
-                              className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
-                                STATUS_STYLES[row.match_status] || STATUS_STYLES.unmatched
-                              }`}
-                              title="Buka Urus Murid di tab baru"
-                            >
-                              <span>{STATUS_LABELS[row.match_status] || row.match_status}</span>
-                              <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                              {row.match_status === 'review' && row.student_enrollment_id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => acceptSavedReviewRow(row)}
+                                  disabled={overridingResultId === row.id}
+                                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                  title="Terima padanan dan tukar status kepada padanan dijumpai"
+                                >
+                                  <CheckCircle className="h-3 w-3" aria-hidden="true" />
+                                  <span>{overridingResultId === row.id ? 'Menyimpan...' : 'Terima'}</span>
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => openStudentReviewTab(row)}
+                                className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition hover:brightness-95 ${
+                                  STATUS_STYLES[row.match_status] || STATUS_STYLES.unmatched
+                                }`}
+                                title="Buka Urus Murid di tab baru"
+                              >
+                                <span>{STATUS_LABELS[row.match_status] || row.match_status}</span>
+                                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </div>
                             {row.match_note ? (
                               <span className="max-w-xs text-xs leading-5 text-slate-500">
                                 {row.match_note}
