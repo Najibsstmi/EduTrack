@@ -599,8 +599,9 @@ export default function PsychometricInputPage() {
             </div>
             <h2 className="mt-2 text-2xl font-bold">Import keputusan murid, bukan bina ujian.</h2>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Import keputusan psikometrik berdasarkan panduan KPM. Modul ini menyokong data IMK
-              dengan konstruk Holland RIASEK dan ITP dengan skor tret personaliti.
+              Import keputusan psikometrik berdasarkan panduan KPM. Modul ini menyokong data
+              Inventori Minat Kerjaya (IMK) dengan konstruk Holland RIASEK dan Inventori Tret
+              Personaliti (ITP) dengan skor tret personaliti.
             </p>
           </div>
         </section>
@@ -710,7 +711,7 @@ export default function PsychometricInputPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                Upload Keputusan {selectedInstrument.assessmentName}
+                Upload Keputusan {selectedInstrument.label}
               </h2>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
                 Fail tidak terus disimpan. {selectedInstrument.resultDescription}
@@ -991,7 +992,10 @@ export default function PsychometricInputPage() {
                       <td className="px-4 py-3 text-slate-600">
                         {`${row.grade_label || ''} ${row.class_name || ''}`.trim() || '-'}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{row.assessment_name}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="font-semibold text-slate-800">{row.assessment_name}</div>
+                        <div className="text-xs text-slate-500">{selectedInstrument.label}</div>
+                      </td>
                       <td className="px-4 py-3 font-bold tracking-widest text-indigo-700">
                         {row.dominant_code || '-'}
                       </td>

@@ -31,9 +31,9 @@ const buildYearOptions = (year) => {
 
 const ANALYSIS_TABS = [
   { key: 'overview', label: 'Ringkasan', icon: BarChart3 },
-  { key: 'IMK', label: 'IMK', icon: ClipboardList },
-  { key: 'ITP', label: 'ITP', icon: Brain },
-  { key: 'APTITUD_KHUSUS', label: 'Aptitud', icon: AlertTriangle },
+  { key: 'IMK', label: 'IMK', description: 'Inventori Minat Kerjaya', icon: ClipboardList },
+  { key: 'ITP', label: 'ITP', description: 'Inventori Tret Personaliti', icon: Brain },
+  { key: 'APTITUD_KHUSUS', label: 'Aptitud', description: 'Aptitud Khusus', icon: AlertTriangle },
   { key: 'individual', label: 'Individu', icon: UserRound },
 ]
 
@@ -112,6 +112,8 @@ const normalizeSearchText = (value) =>
     .toLocaleUpperCase('ms-MY')
     .replace(/\s+/g, ' ')
 
+const normalizeDimensionToken = (value) => normalizeSearchText(value).replace(/[^A-Z0-9]/g, '')
+
 const toScoreOrNull = (value) => {
   if (value === null || value === undefined || value === '') return null
   const number = Number(value)
@@ -132,22 +134,57 @@ const getMeta = (assessmentName) =>
 const getStudentName = (row) =>
   row?.student_profiles?.full_name || row?.source_student_name || 'Nama murid tidak tersedia'
 
+const findDimension = (value, dimensions = []) => {
+  const token = normalizeDimensionToken(value)
+  if (!token) return null
+
+  return (
+    dimensions.find((dimension) =>
+      [dimension.key, dimension.label, ...(dimension.aliases || [])].some(
+        (term) => normalizeDimensionToken(term) === token
+      )
+    ) || null
+  )
+}
+
+const getCanonicalDimensionKey = (value, dimensions = []) =>
+  findDimension(value, dimensions)?.key || String(value || '').trim().toLocaleUpperCase('ms-MY')
+
 const getDominantKeys = (code, dimensions = []) => {
   const normalizedCode = String(code || '').trim().toLocaleUpperCase('ms-MY')
   if (!normalizedCode) return []
 
   if (normalizedCode.includes('-')) {
-    return normalizedCode.split('-').map((item) => item.trim()).filter(Boolean)
+    return normalizedCode
+      .split('-')
+      .map((item) => getCanonicalDimensionKey(item, dimensions))
+      .filter(Boolean)
   }
 
   if (dimensions.every((dimension) => String(dimension.key).length === 1)) {
-    return [...normalizedCode].filter(Boolean)
+    return [...normalizedCode].map((item) => getCanonicalDimensionKey(item, dimensions)).filter(Boolean)
   }
 
   return dimensions
-    .filter((dimension) => normalizedCode.includes(String(dimension.key).toLocaleUpperCase('ms-MY')))
+    .filter((dimension) =>
+      [dimension.key, ...(dimension.aliases || [])].some((term) =>
+        normalizedCode.includes(String(term).toLocaleUpperCase('ms-MY'))
+      )
+    )
     .map((dimension) => dimension.key)
 }
+
+const formatDimensionName = (value, dimensions = []) => {
+  const dimension = findDimension(value, dimensions)
+  if (dimension) return `${dimension.label} (${dimension.key})`
+  return String(value || '').trim() || '-'
+}
+
+const formatCodeExpansion = (code, dimensions = []) =>
+  getDominantKeys(code, dimensions)
+    .map((key) => formatDimensionName(key, dimensions))
+    .filter((label) => label && label !== '-')
+    .join(' + ')
 
 const getSortedScores = (row, dimensions = []) =>
   dimensions
@@ -629,7 +666,8 @@ export default function PsychometricAnalysisPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Papan Analisis Psikometrik</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Ringkasan IMK, ITP dan Aptitud berdasarkan tahun, tingkatan dan kelas yang dipilih.
+                Ringkasan Inventori Minat Kerjaya, Inventori Tret Personaliti dan Aptitud Khusus
+                berdasarkan tahun, tingkatan dan kelas yang dipilih.
               </p>
             </div>
             <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
@@ -694,7 +732,12 @@ export default function PsychometricAnalysisPage() {
                   }`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
-                  {tab.label}
+                  <span className="grid text-left leading-tight">
+                    <span>{tab.label}</span>
+                    {tab.description ? (
+                      <span className="text-[11px] font-medium opacity-80">{tab.description}</span>
+                    ) : null}
+                  </span>
                 </button>
               )
             })}
@@ -792,7 +835,12 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
                   {reviewRows.map((row) => (
                     <tr key={row.id} className="border-b border-slate-100 align-top">
                       <td className="px-4 py-3 font-medium text-slate-900">{getStudentName(row)}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.assessment_name}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        <div className="font-semibold text-slate-800">
+                          {getMeta(row.assessment_name).shortLabel}
+                        </div>
+                        <div className="text-xs text-slate-500">{getMeta(row.assessment_name).title}</div>
+                      </td>
                       <td className="px-4 py-3 text-slate-600">
                         {`${row.grade_label || ''} ${row.class_name || ''}`.trim() || '-'}
                       </td>
@@ -823,7 +871,10 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
               return (
                 <div key={assessmentName} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-semibold text-slate-800">{meta.shortLabel}</span>
+                    <div>
+                      <div className="font-semibold text-slate-800">{meta.shortLabel}</div>
+                      <div className="text-xs text-slate-500">{meta.title}</div>
+                    </div>
                     <span className="text-sm font-bold tabular-nums text-slate-950">
                       {summary.total}/{availableStudentCount || 0}
                     </span>
@@ -847,7 +898,7 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
 function InstrumentOverviewCard({ assessmentName, summary, availableStudentCount, onClick }) {
   const meta = getMeta(assessmentName)
   const topLabel = summary.topDimension?.count
-    ? `${summary.topDimension.key} - ${summary.topDimension.label}`
+    ? formatDimensionName(summary.topDimension.key, getInstrumentDimensions(assessmentName))
     : '-'
   const coverage = availableStudentCount
     ? Math.min((summary.total / availableStudentCount) * 100, 100)
@@ -895,7 +946,7 @@ function InstrumentTab({ assessmentName, rows, classes, summary, variant }) {
   const meta = getMeta(assessmentName)
   const dimensions = getInstrumentDimensions(assessmentName)
   const topDimensionLabel = summary.topDimension?.count
-    ? `${summary.topDimension.key} - ${summary.topDimension.label}`
+    ? formatDimensionName(summary.topDimension.key, dimensions)
     : '-'
   const matrix = buildClassTraitMatrix({ rows, classes, dimensions })
 
@@ -934,6 +985,8 @@ function InstrumentTab({ assessmentName, rows, classes, summary, variant }) {
 }
 
 function CareerPanels({ rows, summary }) {
+  const dimensions = getInstrumentDimensions('IMK')
+
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
@@ -945,7 +998,12 @@ function CareerPanels({ rows, summary }) {
         </div>
       </div>
 
-      <TopCodePanel title="Kod Holland Popular" rows={rows} emptyText="Belum ada kod Holland." />
+      <TopCodePanel
+        title="Kod Holland Popular"
+        rows={rows}
+        dimensions={dimensions}
+        emptyText="Belum ada kod Holland."
+      />
     </section>
   )
 }
@@ -963,7 +1021,13 @@ function PersonalityPanels({ summary, matrix, dimensions }) {
       </div>
 
       <div className="grid gap-4">
-        <TopCodePanel title="Gabungan Tret Popular" rows={summary.topCodes} emptyText="Belum ada gabungan tret." precomputed />
+        <TopCodePanel
+          title="Gabungan Tret Popular"
+          rows={summary.topCodes}
+          dimensions={dimensions}
+          emptyText="Belum ada gabungan tret."
+          precomputed
+        />
         <ClassTraitMatrix matrix={matrix} dimensions={dimensions} />
       </div>
     </section>
@@ -1115,6 +1179,7 @@ function StudentInstrumentProfile({ assessmentName, result, dimensions }) {
   const maxScore = Math.max(...scores.map((dimension) => dimension.score || 0), 1)
   const primaryKey = getPrimaryKey(result, dimensions)
   const primaryDimension = dimensions.find((dimension) => dimension.key === primaryKey) || null
+  const dominantExpansion = formatCodeExpansion(result?.dominant_code, dimensions)
   const differenceIndex = assessmentName === 'IMK' ? getDifferenceIndex(result?.raw_data) : null
   const artisticNotes = useMemo(() => {
     if (assessmentName !== 'IMK') return []
@@ -1157,11 +1222,16 @@ function StudentInstrumentProfile({ assessmentName, result, dimensions }) {
         <IndividualSummary
           label={meta.metricLabel}
           value={result.dominant_code || '-'}
+          detail={dominantExpansion}
           valueClassName="tracking-widest text-indigo-700"
         />
         <IndividualSummary
           label={meta.primaryLabel}
-          value={primaryDimension?.label || result.primary_dimension || '-'}
+          value={
+            primaryDimension
+              ? formatDimensionName(primaryDimension.key, dimensions)
+              : formatDimensionName(result.primary_dimension, dimensions)
+          }
         />
         {differenceIndex !== null ? (
           <IndividualSummary label="Indeks Perbezaan" value={differenceIndex} />
@@ -1214,10 +1284,13 @@ function StudentInstrumentProfile({ assessmentName, result, dimensions }) {
 
 function ResultTable({ assessmentName, rows }) {
   const meta = getMeta(assessmentName)
+  const dimensions = getInstrumentDimensions(assessmentName)
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-      <h2 className="text-lg font-semibold text-slate-900">Senarai Keputusan {meta.shortLabel}</h2>
+      <h2 className="text-lg font-semibold text-slate-900">
+        Senarai Keputusan {meta.shortLabel} - {meta.title}
+      </h2>
       {rows.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
           Tiada keputusan untuk pilihan semasa.
@@ -1240,23 +1313,41 @@ function ResultTable({ assessmentName, rows }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-b border-slate-100">
-                  <td className="px-4 py-3 font-medium text-slate-900">{getStudentName(row)}</td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {`${row.grade_label || ''} ${row.class_name || ''}`.trim() || '-'}
-                  </td>
-                  <td className="px-4 py-3 font-bold tracking-widest text-indigo-700">
-                    {row.dominant_code || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">{row.primary_dimension || '-'}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.secondary_dimension || '-'}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.tertiary_dimension || '-'}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={row.match_status} />
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const dominantKeys = getDominantKeys(row.dominant_code, dimensions)
+                const dominantExpansion = formatCodeExpansion(row.dominant_code, dimensions)
+
+                return (
+                  <tr key={row.id} className="border-b border-slate-100 align-top">
+                    <td className="px-4 py-3 font-medium text-slate-900">{getStudentName(row)}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {`${row.grade_label || ''} ${row.class_name || ''}`.trim() || '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold tracking-widest text-indigo-700">
+                        {row.dominant_code || '-'}
+                      </div>
+                      {dominantExpansion ? (
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          {dominantExpansion}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {formatDimensionName(row.primary_dimension || dominantKeys[0], dimensions)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {formatDimensionName(row.secondary_dimension || dominantKeys[1], dimensions)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {formatDimensionName(row.tertiary_dimension || dominantKeys[2], dimensions)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={row.match_status} />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -1313,7 +1404,7 @@ function TraitRow({ dimension }) {
   )
 }
 
-function TopCodePanel({ title, rows, emptyText, precomputed = false }) {
+function TopCodePanel({ title, rows, dimensions = [], emptyText, precomputed = false }) {
   const items = precomputed ? rows : getTopCodes(rows)
 
   return (
@@ -1325,18 +1416,29 @@ function TopCodePanel({ title, rows, emptyText, precomputed = false }) {
         </div>
       ) : (
         <div className="mt-4 grid gap-2">
-          {items.map((item, index) => (
-            <div
-              key={item.code}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-400">{index + 1}</span>
-                <span className="font-bold tracking-widest text-indigo-700">{item.code}</span>
+          {items.map((item, index) => {
+            const expansion = formatCodeExpansion(item.code, dimensions)
+
+            return (
+              <div
+                key={item.code}
+                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="mt-0.5 text-xs font-bold text-slate-400">{index + 1}</span>
+                  <div className="min-w-0">
+                    <div className="font-bold tracking-widest text-indigo-700">{item.code}</div>
+                    {expansion ? (
+                      <div className="mt-1 text-xs leading-5 text-slate-500">{expansion}</div>
+                    ) : null}
+                  </div>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-slate-700">
+                  {item.count} murid
+                </span>
               </div>
-              <span className="text-sm font-semibold text-slate-700">{item.count} murid</span>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -1367,7 +1469,12 @@ function ClassTraitMatrix({ matrix, dimensions }) {
                     className="border-b border-slate-200 px-3 py-3 text-center font-semibold text-slate-700"
                     title={dimensionByKey.get(key)?.label || key}
                   >
-                    {key}
+                    <span className="grid gap-0.5">
+                      <span>{key}</span>
+                      <span className="text-[11px] font-medium text-slate-500">
+                        {dimensionByKey.get(key)?.label || key}
+                      </span>
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -1430,11 +1537,12 @@ function MiniMetric({ label, value }) {
   )
 }
 
-function IndividualSummary({ label, value, valueClassName = '' }) {
+function IndividualSummary({ label, value, detail = '', valueClassName = '' }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`mt-1 font-bold text-slate-900 ${valueClassName}`}>{value}</div>
+      {detail ? <div className="mt-1 text-xs leading-5 text-slate-500">{detail}</div> : null}
     </div>
   )
 }

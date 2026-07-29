@@ -10,21 +10,21 @@ export const HOLLAND_DIMENSIONS = [
 ]
 
 export const ITP_DIMENSIONS = [
-  { key: 'AUT', label: 'AUT' },
-  { key: 'KTF', label: 'KTF' },
-  { key: 'AGF', label: 'AGF' },
-  { key: 'EKT', label: 'EKT' },
-  { key: 'PCP', label: 'PCP' },
-  { key: 'KPG', label: 'KPG' },
-  { key: 'ITL', label: 'ITL' },
-  { key: 'KPN', label: 'KPN' },
-  { key: 'STR', label: 'STR' },
-  { key: 'RSL', label: 'RSL' },
-  { key: 'MLG', label: 'MLG' },
-  { key: 'ATL', label: 'ATL' },
-  { key: 'KD', label: 'KD' },
-  { key: 'WSN', label: 'WSN' },
-  { key: 'KTN', label: 'KTN' },
+  { key: 'AUT', label: 'Autonomi' },
+  { key: 'KTF', label: 'Kreatif' },
+  { key: 'AGF', label: 'Agresif', aliases: ['AGR'] },
+  { key: 'EKT', label: 'Ekstrovert' },
+  { key: 'PCP', label: 'Pencapaian' },
+  { key: 'KPG', label: 'Kepelbagaian', aliases: ['KPB'] },
+  { key: 'ITL', label: 'Intelektual', aliases: ['INT'] },
+  { key: 'KPN', label: 'Kepimpinan', aliases: ['KPM'] },
+  { key: 'STR', label: 'Struktur' },
+  { key: 'RSL', label: 'Resilien' },
+  { key: 'MLG', label: 'Menolong', aliases: ['MNL'] },
+  { key: 'ATL', label: 'Analitikal', aliases: ['ANL'] },
+  { key: 'KD', label: 'Kritik Diri' },
+  { key: 'WSN', label: 'Wawasan', aliases: ['WWS'] },
+  { key: 'KTN', label: 'Ketelusan', aliases: ['KTL'] },
 ]
 
 export const PSYCHOMETRIC_INSTRUMENTS = [
@@ -181,11 +181,15 @@ const normalizeHeader = (value, instrument) => {
   const assessmentType = normalizeLoose(instrument?.assessmentType)
 
   for (const dimension of instrument?.dimensions || []) {
-    const key = normalizeLoose(dimension.key)
-    const label = normalizeLoose(dimension.label)
+    const dimensionTerms = [dimension.key, dimension.label, ...(dimension.aliases || [])]
+      .map((term) => normalizeLoose(term))
+      .filter(Boolean)
     const aliases = new Set(
-      [key, label, `${assessmentName}${key}`, `${assessmentName}${label}`, `${assessmentType}${key}`]
-        .filter(Boolean)
+      dimensionTerms.flatMap((term) => [
+        term,
+        `${assessmentName}${term}`,
+        `${assessmentType}${term}`,
+      ])
     )
 
     if (aliases.has(normalized)) return dimension.key

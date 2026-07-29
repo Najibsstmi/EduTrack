@@ -103,6 +103,28 @@ test('preview ITP menerima export HTML .xls lama dengan header prefiks instrumen
   assert.equal(previewRows[0].source_grade_label, 'Tingkatan 2')
   assert.equal(previewRows[0].raw_data.AUT, 8)
   assert.equal(previewRows[0].dominant_code, 'PCP-KPG-ITL')
+  assert.equal(previewRows[0].primary_dimension, 'Pencapaian')
+  assert.equal(previewRows[0].secondary_dimension, 'Kepelbagaian')
+})
+
+test('preview ITP menerima alias kod rasmi untuk tret personaliti', () => {
+  const tableRows = [
+    ['Nama', 'ID Pengenalan', 'Tingkatan', 'Kelas', 'AUT', 'KTF', 'AGR', 'EKT', 'PCP', 'KPB', 'INT', 'KPM', 'STR', 'RSL', 'MNL', 'ANL', 'KD', 'WWS', 'KTL'],
+    ['ABDUL AZIM BIN MESRAN', '121025010135', 'Tingkatan 2', 'INANG', 8, 7, 7, 6, 10, 10, 10, 8, 6, 10, 9, 10, 8, 9, 5],
+  ]
+
+  const previewRows = preparePsychometricPreview({
+    tableRows,
+    classes: baseClasses,
+    enrollments: baseEnrollments,
+    assessmentName: 'ITP',
+  })
+
+  assert.equal(previewRows.length, 1)
+  assert.equal(previewRows[0].raw_data.AGF, 7)
+  assert.equal(previewRows[0].raw_data.KPG, 10)
+  assert.equal(previewRows[0].raw_data.ITL, 10)
+  assert.equal(previewRows[0].dominant_code, 'PCP-KPG-ITL')
 })
 
 test('preview psikometrik memerlukan tingkatan jika fail tidak menyediakannya', () => {
