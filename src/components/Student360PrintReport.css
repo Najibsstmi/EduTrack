@@ -239,7 +239,7 @@
 }
 
 .screen-report-shell .report-main-grid > .report-section,
-.screen-report-shell .report-imk-section {
+.screen-report-shell .report-psychometric-section {
   padding: 9px;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -444,6 +444,102 @@
   letter-spacing: 0.13em;
 }
 
+.screen-report-shell .report-psychometric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.screen-report-shell .report-psychometric-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-left: 3px solid #6366f1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.screen-report-shell .report-psychometric-card-header {
+  display: grid;
+  gap: 2px;
+}
+
+.screen-report-shell .report-psychometric-card-header span,
+.screen-report-shell .report-psychometric-code span {
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.screen-report-shell .report-psychometric-card-header strong {
+  color: #1e1b4b;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.screen-report-shell .report-psychometric-code {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px;
+  border-radius: 7px;
+  background: #eef2ff;
+}
+
+.screen-report-shell .report-psychometric-code strong {
+  color: #312e81;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.screen-report-shell .report-psychometric-code p,
+.screen-report-shell .report-psychometric-comment {
+  margin: 0;
+  color: #475569;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.screen-report-shell .report-psychometric-card .report-radar {
+  height: 108px;
+}
+
+.screen-report-shell .report-psychometric-score-list {
+  display: grid;
+  gap: 4px;
+}
+
+.screen-report-shell .report-psychometric-score-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 5px;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.screen-report-shell .report-psychometric-score-row span {
+  overflow: hidden;
+  color: #334155;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.screen-report-shell .report-psychometric-score-row strong {
+  color: #312e81;
+  font-size: 9px;
+}
+
 .screen-report-shell .report-empty-state {
   padding: 12px;
   border: 1px dashed #cbd5e1;
@@ -631,8 +727,70 @@
     height: 41mm !important;
   }
 
-  .report-imk-grid .report-radar {
-    height: 31mm !important;
+  .report-psychometric-section {
+    padding: 1.5mm;
+    border: 0.6pt solid #e2e8f0;
+    border-radius: 2mm;
+  }
+
+  .report-psychometric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9mm;
+  }
+
+  .report-psychometric-card {
+    gap: 0.7mm;
+    padding: 1.1mm;
+    border: 0.6pt solid #cbd5e1;
+    border-left: 1.2pt solid #6366f1;
+    border-radius: 1.2mm;
+  }
+
+  .report-psychometric-card-header span,
+  .report-psychometric-code span {
+    font-size: 5.2pt;
+  }
+
+  .report-psychometric-card-header strong {
+    font-size: 6.2pt;
+  }
+
+  .report-psychometric-code {
+    gap: 0.3mm;
+    padding: 0.8mm;
+    border-radius: 1mm;
+  }
+
+  .report-psychometric-code strong {
+    font-size: 8pt;
+  }
+
+  .report-psychometric-code p,
+  .report-psychometric-comment {
+    font-size: 5.3pt;
+    line-height: 1.15;
+  }
+
+  .report-psychometric-card .report-radar {
+    height: 23mm !important;
+  }
+
+  .report-psychometric-score-list {
+    gap: 0.45mm;
+  }
+
+  .report-psychometric-score-row {
+    gap: 0.8mm;
+    padding: 0.45mm 0.6mm;
+    border-radius: 0.8mm;
+  }
+
+  .report-psychometric-score-row span {
+    font-size: 5.1pt;
+  }
+
+  .report-psychometric-score-row strong {
+    font-size: 5.5pt;
   }
 
   .report-section {

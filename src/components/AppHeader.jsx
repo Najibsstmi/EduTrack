@@ -34,7 +34,7 @@ export default function AppHeader({ title, actionLeft, actionRight }) {
       </div>
 
       {(actionLeft || actionRight) && (
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:flex md:mt-0 md:shrink-0 md:gap-3 [&>button]:flex [&>button]:min-h-11 [&>button]:w-full [&>button]:items-center [&>button]:justify-center [&>button]:rounded-xl [&>button]:px-3 [&>button]:py-2 [&>button]:text-center [&>button]:text-xs [&>button]:leading-snug sm:[&>button]:w-auto md:[&>button]:text-sm">
+        <div className="mt-4 flex min-w-0 flex-wrap items-center gap-2 md:mt-0 md:flex-1 md:justify-end md:gap-3 lg:flex-none [&_button]:inline-flex [&_button]:min-h-11 [&_button]:max-w-full [&_button]:items-center [&_button]:justify-center [&_button]:rounded-xl [&_button]:px-3 [&_button]:py-2 [&_button]:text-center [&_button]:text-xs [&_button]:leading-snug [&_button]:whitespace-nowrap md:[&_button]:text-sm [&>div]:flex [&>div]:min-w-0 [&>div]:flex-wrap [&>div]:gap-2">
           {actionLeft}
           {actionRight}
         </div>

@@ -92,6 +92,33 @@ body.has-install-prompt {
     display: none !important;
   }
 
+  .dpp-preview-open .dpp-screen-only {
+    display: none !important;
+  }
+
+  .dpp-print-root {
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+  }
+
+  .dpp-print-content {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .dpp-print-toolbar {
+    display: none !important;
+  }
+
   .print-reports-root {
     display: block !important;
     width: 190mm;

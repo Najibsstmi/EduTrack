@@ -31,6 +31,7 @@ import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
 import PsychometricInputPage from './pages/PsychometricInputPage.jsx'
 import PsychometricAnalysisPage from './pages/PsychometricAnalysisPage.jsx'
 import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
+import PerformanceDialogPage from './pages/PerformanceDialogPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
@@ -181,6 +182,7 @@ function App() {
         <Route path="/analysis/pajsk-segak" element={<PajskSegakAnalysisPage />} />
         <Route path="/analysis/psychometric" element={<PsychometricAnalysisPage />} />
         <Route path="/analysis/pbs" element={<PbsAnalysisPage />} />
+        <Route path="/dialog-prestasi" element={<PerformanceDialogPage />} />
         <Route path="/pending" element={<PendingApprovalPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="/profile" element={<UserProfilePage />} />

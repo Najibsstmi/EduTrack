@@ -1425,6 +1425,11 @@ export default function SchoolAdminDashboard() {
     { key: 'students', label: 'Murid', path: '/students', items: studentItems },
     { key: 'analysis', label: 'Analisis', path: '/analysis/class', items: analysisItems },
     {
+      key: 'performance-dialog',
+      label: 'Dialog Prestasi',
+      path: '/dialog-prestasi',
+    },
+    {
       key: 'settings',
       label: 'Tetapan',
       path: '/school-setup',
@@ -2556,6 +2561,7 @@ const styles = {
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     textDecoration: 'none',
+    whiteSpace: 'nowrap',
   },
   navButtonHover: {
     background: 'linear-gradient(135deg, #3b82f6, #2563eb)',

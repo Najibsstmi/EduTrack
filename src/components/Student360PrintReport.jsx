@@ -211,6 +211,60 @@ function PbdSubjectRadar({ data }) {
   )
 }
 
+function PsychometricScoreList({ scores }) {
+  if (!scores?.length) return null
+
+  return (
+    <div className="report-psychometric-score-list">
+      {scores.map((score) => (
+        <div key={score.key} className="report-psychometric-score-row">
+          <span>{score.label}</span>
+          <strong>{formatNumber(score.score, 0)}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PsychometricCard({ instrument }) {
+  return (
+    <div
+      className={`report-psychometric-card ${
+        instrument.assessmentName === 'IMK' ? 'is-imk' : ''
+      }`}
+    >
+      <div className="report-psychometric-card-header">
+        <span>{instrument.shortLabel}</span>
+        <strong>{instrument.title}</strong>
+      </div>
+
+      {!instrument.hasData ? (
+        <div className="report-empty-state">{instrument.emptyLabel}</div>
+      ) : (
+        <>
+          <div className="report-psychometric-code">
+            <span>{instrument.valueLabel}</span>
+            <strong>{instrument.code || '-'}</strong>
+            {instrument.expandedCode ? <p>{instrument.expandedCode}</p> : null}
+          </div>
+
+          {instrument.assessmentName === 'IMK' && instrument.radar?.length ? (
+            <PrintRadar
+              data={instrument.radar}
+              maxValue={instrument.maxScore}
+              ariaLabel={`Radar IMK RIASEK`}
+            />
+          ) : (
+            <PsychometricScoreList scores={instrument.topScores} />
+          )}
+
+          <p className="report-psychometric-comment">{instrument.comment}</p>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Student360PrintReport({ report, schoolInfo, academicYear }) {
   const logoUrl = schoolInfo?.logo_url || '/edutrack-logo.png'
 
@@ -346,27 +400,20 @@ export default function Student360PrintReport({ report, schoolInfo, academicYear
         <PbdSubjectRadar data={report.pbdSubjectRadarData} />
       </section>
 
-      <section className="report-section report-imk-section">
-        <h2>5. Psikometrik / IMK</h2>
+      <section className="report-section report-psychometric-section">
+        <h2>5. Psikometrik</h2>
+        <p className="report-section-subtitle">
+          Inventori Minat Kerjaya (IMK), Inventori Tret Personaliti (ITP) dan Aptitud Khusus.
+        </p>
         {!report.psychometric.hasData ? (
-          <div className="report-empty-state">Data IMK belum tersedia.</div>
+          <div className="report-empty-state">
+            Data psikometrik IMK, ITP dan Aptitud Khusus belum tersedia.
+          </div>
         ) : (
-          <div className="report-imk-grid">
-            <PrintRadar
-              data={report.psychometric.radar}
-              maxValue={report.psychometric.maxScore}
-              ariaLabel={`Radar IMK RIASEK untuk ${report.studentName}`}
-            />
-            <div className="report-imk-copy">
-              <div className="report-code-row">
-                <div>
-                  <span>Kod Holland</span>
-                  <strong>{report.psychometric.code || '-'}</strong>
-                </div>
-                <p>{report.psychometric.expandedCode}</p>
-              </div>
-              <p>{report.psychometric.comment}</p>
-            </div>
+          <div className="report-psychometric-grid">
+            {report.psychometric.instrumentList.map((instrument) => (
+              <PsychometricCard key={instrument.assessmentName} instrument={instrument} />
+            ))}
           </div>
         )}
       </section>

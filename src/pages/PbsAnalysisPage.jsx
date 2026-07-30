@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import Student360PrintReport from '../components/Student360PrintReport.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
@@ -10,7 +10,10 @@ import {
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels.js'
 import { getBmiCategory, getSegakFitnessLevel } from '../lib/pajskSegak.js'
-import { HOLLAND_DIMENSIONS } from '../lib/psychometricImport.js'
+import {
+  getInstrumentDimensions,
+  PSYCHOMETRIC_INSTRUMENTS,
+} from '../lib/psychometricImport.js'
 import { getSubjectRuleName, shouldCountInStudentOverallGp } from '../lib/ssemjSubjectRules.js'
 import { supabase } from '../lib/supabaseClient.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
@@ -40,6 +43,29 @@ const HOLLAND_COMMENTS = {
   S: 'Kecenderungan dominan Sosial menunjukkan minat terhadap aktiviti membantu, membimbing dan berkomunikasi.',
   E: 'Kecenderungan dominan Enterprising menunjukkan minat terhadap kepimpinan, pengurusan dan keusahawanan.',
   K: 'Kecenderungan dominan Konvensional menunjukkan minat terhadap kerja tersusun, data dan ketelitian.',
+}
+
+const PSYCHOMETRIC_REPORT_KEYS = ['IMK', 'ITP', 'APTITUD_KHUSUS']
+
+const PSYCHOMETRIC_REPORT_META = {
+  IMK: {
+    shortLabel: 'IMK',
+    title: 'Inventori Minat Kerjaya',
+    valueLabel: 'Kod Holland',
+    emptyLabel: 'Data Inventori Minat Kerjaya (IMK) belum tersedia.',
+  },
+  ITP: {
+    shortLabel: 'ITP',
+    title: 'Inventori Tret Personaliti',
+    valueLabel: 'Tret Utama',
+    emptyLabel: 'Data Inventori Tret Personaliti (ITP) belum tersedia.',
+  },
+  APTITUD_KHUSUS: {
+    shortLabel: 'Aptitud',
+    title: 'Aptitud Khusus',
+    valueLabel: 'Domain Utama',
+    emptyLabel: 'Data Aptitud Khusus belum tersedia.',
+  },
 }
 
 const getCurrentYear = () => new Date().getFullYear()
@@ -509,36 +535,146 @@ const buildPajskSummary = (kokurikulumRows, ekstraRows) => {
   }
 }
 
-const buildPsychometricSummary = (result) => {
-  const scores = HOLLAND_DIMENSIONS.map((dimension) => ({
-    ...dimension,
-    score: toNumericMark(result?.raw_data?.[dimension.key]),
-  }))
-  const hasData = scores.some((dimension) => dimension.score !== null)
-  const derivedCode = [...scores]
+const getPsychometricMeta = (assessmentName) =>
+  PSYCHOMETRIC_REPORT_META[assessmentName] || {
+    shortLabel: assessmentName,
+    title:
+      PSYCHOMETRIC_INSTRUMENTS.find((instrument) => instrument.assessmentName === assessmentName)
+        ?.label || assessmentName,
+    valueLabel: 'Kod / Domain',
+    emptyLabel: 'Data psikometrik belum tersedia.',
+  }
+
+const getPsychometricDisplayName = (instrument) =>
+  instrument.shortLabel &&
+  !normalizeKey(instrument.title).includes(normalizeKey(instrument.shortLabel))
+    ? `${instrument.title} (${instrument.shortLabel})`
+    : instrument.title
+
+const normalizePsychometricToken = (value) =>
+  normalizeKey(value).replace(/[^A-Z0-9]/g, '')
+
+const findPsychometricDimension = (value, dimensions = []) => {
+  const token = normalizePsychometricToken(value)
+  if (!token) return null
+
+  return (
+    dimensions.find((dimension) =>
+      [dimension.key, dimension.label, ...(dimension.aliases || [])].some(
+        (term) => normalizePsychometricToken(term) === token
+      )
+    ) || null
+  )
+}
+
+const getCanonicalPsychometricKey = (value, dimensions = []) =>
+  findPsychometricDimension(value, dimensions)?.key ||
+  String(value || '').trim().toLocaleUpperCase('ms-MY')
+
+const getPsychometricDominantKeys = (code, dimensions = []) => {
+  const normalizedCode = String(code || '').trim().toLocaleUpperCase('ms-MY')
+  if (!normalizedCode) return []
+
+  if (normalizedCode.includes('-')) {
+    return normalizedCode
+      .split('-')
+      .map((item) => getCanonicalPsychometricKey(item, dimensions))
+      .filter(Boolean)
+  }
+
+  if (dimensions.every((dimension) => String(dimension.key).length === 1)) {
+    return [...normalizedCode]
+      .map((item) => getCanonicalPsychometricKey(item, dimensions))
+      .filter(Boolean)
+  }
+
+  return dimensions
+    .filter((dimension) =>
+      [dimension.key, ...(dimension.aliases || [])].some((term) =>
+        normalizedCode.includes(String(term).toLocaleUpperCase('ms-MY'))
+      )
+    )
+    .map((dimension) => dimension.key)
+}
+
+const formatPsychometricDimension = (value, dimensions = []) => {
+  const dimension = findPsychometricDimension(value, dimensions)
+  if (dimension) return `${dimension.label} (${dimension.key})`
+  return String(value || '').trim()
+}
+
+const buildDerivedPsychometricCode = (scores, dimensions = []) => {
+  const topKeys = [...scores]
     .filter((dimension) => dimension.score !== null)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
     .map((dimension) => dimension.key)
-    .join('')
+
+  return dimensions.every((dimension) => String(dimension.key).length === 1)
+    ? topKeys.join('')
+    : topKeys.join('-')
+}
+
+const getPsychometricInstrumentKey = (row) => {
+  if (row?.assessment_name === 'APTITUD_KHUSUS' || row?.assessment_type === 'aptitude') {
+    return 'APTITUD_KHUSUS'
+  }
+  return row?.assessment_name || ''
+}
+
+const buildInstrumentPsychometricSummary = (result, assessmentName) => {
+  const meta = getPsychometricMeta(assessmentName)
+  const dimensions = getInstrumentDimensions(assessmentName)
+  const scores = dimensions.map((dimension) => ({
+    ...dimension,
+    score: toNumericMark(result?.raw_data?.[dimension.key]),
+  }))
+  const topScores = [...scores]
+    .filter((dimension) => dimension.score !== null)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+  const derivedCode = buildDerivedPsychometricCode(scores, dimensions)
   const code = String(result?.dominant_code || derivedCode || '').toLocaleUpperCase('ms-MY')
-  const dominantKeys = [...code]
-    .filter((key, index, keys) => HOLLAND_COMMENTS[key] && keys.indexOf(key) === index)
-    .slice(0, 3)
+  const dominantKeys = getPsychometricDominantKeys(code, dimensions).slice(0, 3)
   const expandedCode = dominantKeys
-    .map((key) => HOLLAND_DIMENSIONS.find((dimension) => dimension.key === key)?.label)
+    .map((key) => formatPsychometricDimension(key, dimensions))
     .filter(Boolean)
     .join(', ')
-  const comment = dominantKeys
-    .map((key) => HOLLAND_COMMENTS[key])
-    .filter(Boolean)
-    .join(' ')
+  const hasData = Boolean(
+    result &&
+      (code ||
+        result.primary_dimension ||
+        result.secondary_dimension ||
+        result.tertiary_dimension ||
+        topScores.length)
+  )
+  const imkComment =
+    assessmentName === 'IMK'
+      ? dominantKeys
+          .map((key) => HOLLAND_COMMENTS[key])
+          .filter(Boolean)
+          .join(' ')
+      : ''
+  const genericComment =
+    expandedCode && assessmentName === 'ITP'
+      ? `Tret personaliti utama murid ialah ${expandedCode}.`
+      : expandedCode && assessmentName === 'APTITUD_KHUSUS'
+        ? `Domain aptitud utama murid ialah ${expandedCode}.`
+        : ''
 
   return {
+    assessmentName,
+    ...meta,
     hasData,
     code,
-    expandedCode: expandedCode || 'Huraian kod Holland belum tersedia.',
-    comment: comment || 'Kecenderungan dominan belum dapat ditentukan.',
+    expandedCode:
+      expandedCode ||
+      result?.primary_dimension ||
+      (hasData ? 'Huraian domain belum tersedia.' : ''),
+    comment:
+      imkComment ||
+      genericComment ||
+      (hasData ? 'Maklumat psikometrik telah direkodkan.' : meta.emptyLabel),
     maxScore: Math.max(...scores.map((dimension) => dimension.score || 0), 1),
     radar: scores.map((dimension) => ({
       label: dimension.key,
@@ -546,20 +682,67 @@ const buildPsychometricSummary = (result) => {
       available: dimension.score !== null,
       digits: 0,
     })),
+    topScores: topScores.map((dimension) => ({
+      key: dimension.key,
+      label: formatPsychometricDimension(dimension.key, dimensions),
+      score: dimension.score,
+    })),
   }
 }
 
-const findPsychometricResult = (results, student) =>
-  results.find(
-    (row) => String(row.student_enrollment_id || '') === String(student.id)
-  ) ||
-  results.find(
-    (row) =>
+const findPsychometricResults = (results, student) => {
+  const matchingRows = (results || []).filter((row) => {
+    if (String(row.student_enrollment_id || '') === String(student.id)) return true
+    return (
       !row.student_enrollment_id &&
       String(row.student_profile_id || '') === String(student.student_profile_id || '') &&
       String(row.class_id || '') === String(student.class_id || '')
-  ) ||
-  null
+    )
+  })
+
+  return Object.fromEntries(
+    PSYCHOMETRIC_REPORT_KEYS.map((assessmentName) => [
+      assessmentName,
+      matchingRows.find((row) => getPsychometricInstrumentKey(row) === assessmentName) || null,
+    ])
+  )
+}
+
+const buildPsychometricSummary = (resultsByInstrument) => {
+  const instrumentList = PSYCHOMETRIC_REPORT_KEYS.map((assessmentName) =>
+    buildInstrumentPsychometricSummary(resultsByInstrument?.[assessmentName], assessmentName)
+  )
+
+  return {
+    hasData: instrumentList.some((instrument) => instrument.hasData),
+    instrumentList,
+    instruments: Object.fromEntries(
+      instrumentList.map((instrument) => [instrument.assessmentName, instrument])
+    ),
+  }
+}
+
+const buildPsychometricProfileSentence = (psychometric) => {
+  if (!psychometric.hasData) {
+    return 'Data psikometrik Inventori Minat Kerjaya (IMK), Inventori Tret Personaliti (ITP) dan Aptitud Khusus belum tersedia.'
+  }
+
+  const available = psychometric.instrumentList
+    .filter((instrument) => instrument.hasData)
+    .map(
+      (instrument) =>
+        `${getPsychometricDisplayName(instrument)}: ${
+          instrument.code || instrument.expandedCode || 'direkodkan'
+        }${instrument.expandedCode ? ` - ${instrument.expandedCode}` : ''}`
+    )
+    .join('; ')
+  const missing = psychometric.instrumentList
+    .filter((instrument) => !instrument.hasData)
+    .map((instrument) => getPsychometricDisplayName(instrument))
+    .join(', ')
+
+  return `Psikometrik menunjukkan ${available}.${missing ? ` Data ${missing} belum direkodkan.` : ''}`
+}
 
 const buildProfileSummarySentences = ({
   academic,
@@ -593,9 +776,7 @@ const buildProfileSummarySentences = ({
   pajsk.hasData
     ? `Rekod PAJSK menunjukkan ${pajsk.displayValue}.`
     : 'Data PAJSK belum direkodkan.',
-  psychometric.hasData
-    ? `Profil IMK berkod ${psychometric.code || '-'} merujuk kepada ${psychometric.expandedCode}; ${psychometric.comment.charAt(0).toLocaleLowerCase('ms-MY')}${psychometric.comment.slice(1)}`
-    : 'Data IMK belum tersedia.',
+  buildPsychometricProfileSentence(psychometric),
 ]
 
 const buildStudent360Profile = ({
@@ -640,7 +821,7 @@ const buildStudent360Profile = ({
   })
   const segak = buildSegakSummary(segakRows)
   const pajsk = buildPajskSummary(pajskKokurikulumRows, pajskEkstraRows)
-  const psychometric = buildPsychometricSummary(findPsychometricResult(psychometricResults, student))
+  const psychometric = buildPsychometricSummary(findPsychometricResults(psychometricResults, student))
   const pbsRadar = [
     {
       label: 'GP Murid',
@@ -979,12 +1160,10 @@ export default function PbsAnalysisPage() {
       let psychometricQuery = supabase
         .from('psychometric_results')
         .select(
-          'id, class_id, student_profile_id, student_enrollment_id, dominant_code, primary_dimension, raw_data, updated_at'
+          'id, class_id, student_profile_id, student_enrollment_id, assessment_type, assessment_name, dominant_code, primary_dimension, secondary_dimension, tertiary_dimension, raw_data, match_status, updated_at'
         )
         .eq('school_id', profile.school_id)
         .eq('academic_year', Number(academicYear))
-        .eq('assessment_type', 'career_interest')
-        .eq('assessment_name', 'IMK')
 
       if (classIds.length) psychometricQuery = psychometricQuery.in('class_id', classIds)
 
@@ -1062,7 +1241,7 @@ export default function PbsAnalysisPage() {
       const segakRows = rowsFrom(segakResult, 'SEGAK')
       const pajskKokurikulumRows = rowsFrom(pajskKokurikulumResult, 'PAJSK kokurikulum')
       const pajskEkstraRows = rowsFrom(pajskEkstraResult, 'PAJSK ekstrakurikulum')
-      const psychometricRows = rowsFrom(psychometricResultRows, 'IMK')
+      const psychometricRows = rowsFrom(psychometricResultRows, 'psikometrik')
       const scoresByEnrollment = groupRowsByEnrollment(scoreRows)
       const studentSubjectsByEnrollment = groupRowsByEnrollment(studentSubjectRows)
       const pbdCurrentByEnrollment = groupRowsByEnrollment(pbdCurrentRows)
@@ -1271,9 +1450,12 @@ export default function PbsAnalysisPage() {
   }
 
   const dashboardPath = getDashboardPath(profile)
+  const location = useLocation()
+  const isPerformanceDialogPage = location.pathname === '/dialog-prestasi'
+  const pageTitle = isPerformanceDialogPage ? 'Dialog Prestasi' : 'PBS Bersepadu'
 
   if (checkingAuth || loading) {
-    return <div className="p-6 text-slate-600">Loading PBS Bersepadu...</div>
+    return <div className="p-6 text-slate-600">Loading {pageTitle}...</div>
   }
 
   return (
@@ -1281,7 +1463,7 @@ export default function PbsAnalysisPage() {
       <div className="pbs-screen-only min-h-screen bg-slate-50 p-4 md:p-6">
         <div className="mx-auto max-w-7xl space-y-4">
         <AppHeader
-          title="PBS Bersepadu"
+          title={pageTitle}
           actionRight={
             <button
               type="button"
@@ -1421,7 +1603,7 @@ export default function PbsAnalysisPage() {
 
         {!selectedStudent ? (
           <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-            Pilih murid untuk melihat Profil PBS Bersepadu.
+            Pilih murid untuk melihat Profil {pageTitle}.
           </section>
         ) : screenReportLoading ? (
           <section className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 p-10 text-center text-sm text-indigo-700">
