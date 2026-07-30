@@ -12,6 +12,10 @@ const styles = {
     padding: '24px',
     background: '#f8fafc',
     minHeight: '100vh',
+    overflowX: 'hidden',
+  },
+  pageMobile: {
+    padding: '12px',
   },
   container: {
     maxWidth: '1100px',
@@ -19,6 +23,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '20px',
+    minWidth: 0,
   },
   card: {
     background: '#fff',
@@ -26,12 +31,20 @@ const styles = {
     padding: '20px',
     boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
     border: '1px solid #e2e8f0',
+    minWidth: 0,
+  },
+  cardMobile: {
+    padding: '16px',
   },
   title: {
     fontSize: '24px',
     fontWeight: 700,
     color: '#0f172a',
     margin: 0,
+    lineHeight: 1.15,
+  },
+  titleMobile: {
+    fontSize: '22px',
   },
   subtitle: {
     fontSize: '14px',
@@ -45,6 +58,9 @@ const styles = {
     gap: '16px',
     marginTop: '16px',
   },
+  filterGridMobile: {
+    gridTemplateColumns: '1fr',
+  },
   fieldWrap: {
     display: 'flex',
     flexDirection: 'column',
@@ -56,6 +72,8 @@ const styles = {
     color: '#334155',
   },
   select: {
+    width: '100%',
+    minWidth: 0,
     border: '1px solid #cbd5e1',
     borderRadius: '12px',
     padding: '12px 14px',
@@ -102,6 +120,9 @@ const styles = {
     gap: '10px',
     flexWrap: 'wrap',
   },
+  actionRowMobile: {
+    width: '100%',
+  },
   button: {
     border: 'none',
     borderRadius: '12px',
@@ -109,6 +130,10 @@ const styles = {
     fontSize: '14px',
     fontWeight: 700,
     cursor: 'pointer',
+  },
+  actionButtonMobile: {
+    flex: '1 1 100%',
+    minHeight: '42px',
   },
   primaryButton: {
     background: '#0f172a',
@@ -126,6 +151,9 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
     gap: '12px',
+  },
+  studentListMobile: {
+    gridTemplateColumns: '1fr',
   },
   studentCard: {
     border: '1px solid #e2e8f0',
@@ -145,11 +173,13 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+    minWidth: 0,
   },
   studentName: {
     fontSize: '14px',
     fontWeight: 700,
     color: '#0f172a',
+    overflowWrap: 'anywhere',
   },
   studentMeta: {
     fontSize: '12px',
@@ -194,6 +224,9 @@ export default function ManageSubjectStudentsPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 640 : false
+  )
 
   const [profile, setProfile] = useState(null)
   const [currentAcademicYear, setCurrentAcademicYear] = useState(new Date().getFullYear())
@@ -211,6 +244,16 @@ export default function ManageSubjectStudentsPage() {
 
   useEffect(() => {
     loadInitialData()
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 640)
+    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const loadInitialData = async () => {
@@ -455,7 +498,7 @@ export default function ManageSubjectStudentsPage() {
   }
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, ...(isMobileView ? styles.pageMobile : {}) }}>
       <div style={styles.container}>
         <button
           type="button"
@@ -465,15 +508,17 @@ export default function ManageSubjectStudentsPage() {
           ← Kembali
         </button>
 
-        <section style={styles.card}>
-          <h1 style={styles.title}>Urus Murid Subjek</h1>
+        <section style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
+          <h1 style={{ ...styles.title, ...(isMobileView ? styles.titleMobile : {}) }}>
+            Urus Murid Subjek
+          </h1>
           <p style={styles.subtitle}>
             Pilih kelas dan subjek. Untuk subjek selective, tanda murid yang mengambil
             subjek tersebut. Sistem akan menggunakan senarai ini untuk dashboard,
             Input Markah dan analisis.
           </p>
 
-          <div style={styles.filterGrid}>
+          <div style={{ ...styles.filterGrid, ...(isMobileView ? styles.filterGridMobile : {}) }}>
             <div style={styles.fieldWrap}>
               <label style={styles.label}>Kelas</label>
               <select
@@ -521,7 +566,7 @@ export default function ManageSubjectStudentsPage() {
         </section>
 
         {selectedSubjectData && !isSelectiveSubject(selectedSubjectData) && (
-          <section style={styles.card}>
+          <section style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
             <div style={styles.infoBox}>
               Subjek <strong>{formatSubjectName(selectedSubjectData.subject_name)}</strong> ditetapkan sebagai
               <strong> core</strong>. Semua murid dalam kelas ini dianggap mengambil
@@ -531,7 +576,7 @@ export default function ManageSubjectStudentsPage() {
         )}
 
         {selectedClassData && selectedSubjectData && isSelectiveSubject(selectedSubjectData) && (
-          <section style={styles.card}>
+          <section style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
             <div style={styles.studentHeader}>
               <div>
                 <h2 style={styles.studentTitle}>
@@ -548,10 +593,14 @@ export default function ManageSubjectStudentsPage() {
                 </div>
               </div>
 
-              <div style={styles.actionRow}>
+              <div style={{ ...styles.actionRow, ...(isMobileView ? styles.actionRowMobile : {}) }}>
                 <button
                   type="button"
-                  style={{ ...styles.button, ...styles.secondaryButton }}
+                  style={{
+                    ...styles.button,
+                    ...styles.secondaryButton,
+                    ...(isMobileView ? styles.actionButtonMobile : {}),
+                  }}
                   onClick={handleSelectAll}
                 >
                   Pilih Semua
@@ -559,7 +608,11 @@ export default function ManageSubjectStudentsPage() {
 
                 <button
                   type="button"
-                  style={{ ...styles.button, ...styles.secondaryButton }}
+                  style={{
+                    ...styles.button,
+                    ...styles.secondaryButton,
+                    ...(isMobileView ? styles.actionButtonMobile : {}),
+                  }}
                   onClick={handleClearAll}
                 >
                   Kosongkan
@@ -567,7 +620,11 @@ export default function ManageSubjectStudentsPage() {
 
                 <button
                   type="button"
-                  style={{ ...styles.button, ...styles.successButton }}
+                  style={{
+                    ...styles.button,
+                    ...styles.successButton,
+                    ...(isMobileView ? styles.actionButtonMobile : {}),
+                  }}
                   onClick={handleSave}
                   disabled={saving}
                 >
@@ -585,7 +642,7 @@ export default function ManageSubjectStudentsPage() {
               <div style={styles.emptyState}>Tiada murid aktif dalam kelas ini.</div>
             ) : (
               <div style={{ marginTop: '16px' }}>
-                <div style={styles.studentList}>
+                <div style={{ ...styles.studentList, ...(isMobileView ? styles.studentListMobile : {}) }}>
                   {studentsInClass.map((student) => {
                     const checked = selectedEnrollmentIds.has(
                       String(student.enrollment_id)
@@ -619,7 +676,7 @@ export default function ManageSubjectStudentsPage() {
         )}
 
         {loading && (
-          <section style={styles.card}>
+          <section style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
             <div style={styles.emptyState}>Loading data...</div>
           </section>
         )}

@@ -122,10 +122,10 @@ function PendingApprovalPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-100 px-4 py-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-slate-100 px-3 py-6 sm:px-4">
       <div className="pointer-events-none fixed inset-0 bg-black/30" />
 
-      <div className="relative z-10 w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl md:p-8">
+      <div className="relative z-10 w-full min-w-0 max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-xl sm:rounded-3xl sm:p-6 md:p-8">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
           <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
@@ -137,7 +137,7 @@ function PendingApprovalPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             EduTrack
           </p>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">
+          <h1 className="mt-2 text-2xl font-bold leading-tight text-slate-900 md:text-3xl">
             Akaun Menunggu Kelulusan
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600 md:text-base">
@@ -149,7 +149,7 @@ function PendingApprovalPage() {
         <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-amber-500" />
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold text-amber-900">Status semasa: Pending approval</p>
               <p className="mt-1 text-sm text-amber-800">
                 Anda akan boleh log masuk ke modul sekolah selepas akaun diluluskan.
@@ -211,7 +211,7 @@ function PendingApprovalPage() {
           </div>
         </div>
 
-        <div className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        <div className="mt-6 min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
           <p className="font-semibold text-slate-800">Apa yang perlu dibuat sekarang?</p>
           <p>Pastikan anda mendaftar menggunakan sekolah yang betul.</p>
           <p>Hubungi admin sekolah jika kelulusan mengambil masa terlalu lama.</p>

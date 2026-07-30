@@ -398,8 +398,8 @@ export default function SchoolSetupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-6xl">
         {errorMessage ? (
           <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm text-amber-900 shadow-sm">
             {errorMessage}

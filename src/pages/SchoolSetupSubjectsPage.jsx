@@ -382,8 +382,8 @@ export default function SchoolSetupSubjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-6xl">
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -495,7 +495,7 @@ export default function SchoolSetupSubjectsPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full table-fixed border-collapse">
+                    <table className="w-full min-w-[880px] table-fixed border-collapse">
                       <colgroup>
                         <col style={{ width: '40%' }} />
                         <col style={{ width: '14%' }} />

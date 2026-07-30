@@ -654,8 +654,8 @@ export default function StudentIndividualAnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -810,7 +810,7 @@ export default function StudentIndividualAnalysisPage() {
               <BarChart rows={subjectAnalysisRows} height={320} />
 
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="min-w-full border-collapse text-xs md:text-sm">
+                <table className="w-full min-w-[760px] border-collapse text-xs md:text-sm">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">

@@ -1611,7 +1611,7 @@ function MovementTable({ rows }) {
       ))}
     </div>
     <div className="mt-4 hidden overflow-x-auto lg:block">
-      <table className="min-w-full border-collapse text-sm">
+      <table className="w-full min-w-[760px] border-collapse text-sm">
         <thead className="bg-slate-50">
           <tr>
             <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">

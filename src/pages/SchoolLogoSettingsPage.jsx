@@ -7,10 +7,15 @@ const styles = {
     minHeight: '100vh',
     background: '#f8fafc',
     padding: '32px 20px',
+    overflowX: 'hidden',
+  },
+  pageMobile: {
+    padding: '12px',
   },
   container: {
     maxWidth: '1240px',
     margin: '0 auto',
+    minWidth: 0,
   },
   card: {
     background: '#ffffff',
@@ -18,6 +23,11 @@ const styles = {
     borderRadius: '28px',
     padding: '36px',
     boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+    minWidth: 0,
+  },
+  cardMobile: {
+    padding: '16px',
+    borderRadius: '20px',
   },
   title: {
     fontSize: '32px',
@@ -25,6 +35,9 @@ const styles = {
     color: '#0f172a',
     margin: 0,
     lineHeight: 1.1,
+  },
+  titleMobile: {
+    fontSize: '24px',
   },
   subtitle: {
     marginTop: '18px',
@@ -44,6 +57,11 @@ const styles = {
     alignItems: 'center',
     flexWrap: 'wrap',
   },
+  previewCardMobile: {
+    padding: '16px',
+    borderRadius: '18px',
+    alignItems: 'flex-start',
+  },
   previewBox: {
     width: '120px',
     height: '120px',
@@ -55,6 +73,10 @@ const styles = {
     justifyContent: 'center',
     overflow: 'hidden',
     flexShrink: 0,
+  },
+  previewBoxMobile: {
+    width: '92px',
+    height: '92px',
   },
   previewImage: {
     width: '100%',
@@ -70,7 +92,7 @@ const styles = {
   },
   previewTextWrap: {
     flex: 1,
-    minWidth: '260px',
+    minWidth: 0,
   },
   previewTitle: {
     fontSize: '18px',
@@ -90,6 +112,10 @@ const styles = {
     borderRadius: '24px',
     background: '#ffffff',
     padding: '24px',
+  },
+  formCardMobile: {
+    padding: '16px',
+    borderRadius: '18px',
   },
   label: {
     display: 'block',
@@ -128,6 +154,10 @@ const styles = {
     flexWrap: 'wrap',
     marginTop: '28px',
   },
+  buttonRowMobile: {
+    flexDirection: 'column',
+    gap: '10px',
+  },
   primaryButton: {
     border: 'none',
     borderRadius: '16px',
@@ -137,6 +167,9 @@ const styles = {
     fontSize: '15px',
     fontWeight: 800,
     cursor: 'pointer',
+  },
+  buttonMobile: {
+    width: '100%',
   },
   secondaryButton: {
     border: '1px solid #cbd5e1',
@@ -154,6 +187,9 @@ export default function SchoolLogoSettingsPage() {
   const navigate = useNavigate()
 
   const [profile, setProfile] = useState(null)
+  const [isMobileView, setIsMobileView] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 640 : false
+  )
   const [schoolInfo, setSchoolInfo] = useState(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
@@ -174,6 +210,16 @@ export default function SchoolLogoSettingsPage() {
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [selectedFile])
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 640)
+    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -320,19 +366,23 @@ export default function SchoolLogoSettingsPage() {
 
   if (loading) {
     return (
-      <div style={styles.page}>
+      <div style={{ ...styles.page, ...(isMobileView ? styles.pageMobile : {}) }}>
         <div style={styles.container}>
-          <div style={styles.card}>Memuatkan tetapan logo sekolah...</div>
+          <div style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
+            Memuatkan tetapan logo sekolah...
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, ...(isMobileView ? styles.pageMobile : {}) }}>
       <div style={styles.container}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>Tetapan Logo Sekolah</h1>
+        <div style={{ ...styles.card, ...(isMobileView ? styles.cardMobile : {}) }}>
+          <h1 style={{ ...styles.title, ...(isMobileView ? styles.titleMobile : {}) }}>
+            Tetapan Logo Sekolah
+          </h1>
 
           <div style={styles.subtitle}>
             Halaman ini membolehkan admin sekolah memuat naik logo rasmi sekolah
@@ -341,8 +391,8 @@ export default function SchoolLogoSettingsPage() {
             {schoolInfo?.school_code ? ` (${schoolInfo.school_code})` : ''}.
           </div>
 
-          <div style={styles.previewCard}>
-            <div style={styles.previewBox}>
+          <div style={{ ...styles.previewCard, ...(isMobileView ? styles.previewCardMobile : {}) }}>
+            <div style={{ ...styles.previewBox, ...(isMobileView ? styles.previewBoxMobile : {}) }}>
               {previewUrl ? (
                 <img
                   src={previewUrl}
@@ -363,7 +413,7 @@ export default function SchoolLogoSettingsPage() {
             </div>
           </div>
 
-          <div style={styles.formCard}>
+          <div style={{ ...styles.formCard, ...(isMobileView ? styles.formCardMobile : {}) }}>
             <label htmlFor="school-logo-file" style={styles.label}>
               Muat Naik Logo Sekolah
             </label>
@@ -390,10 +440,13 @@ export default function SchoolLogoSettingsPage() {
             ) : null}
           </div>
 
-          <div style={styles.buttonRow}>
+          <div style={{ ...styles.buttonRow, ...(isMobileView ? styles.buttonRowMobile : {}) }}>
             <button
               type="button"
-              style={styles.primaryButton}
+              style={{
+                ...styles.primaryButton,
+                ...(isMobileView ? styles.buttonMobile : {}),
+              }}
               onClick={handleSave}
               disabled={saving}
             >
@@ -402,7 +455,10 @@ export default function SchoolLogoSettingsPage() {
 
             <button
               type="button"
-              style={styles.secondaryButton}
+              style={{
+                ...styles.secondaryButton,
+                ...(isMobileView ? styles.buttonMobile : {}),
+              }}
               onClick={() => navigate('/school-admin')}
             >
               Kembali ke Dashboard

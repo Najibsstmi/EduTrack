@@ -470,8 +470,8 @@ export default function MasterAdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
-        <div className="mx-auto max-w-7xl animate-pulse space-y-6">
+      <div className="min-h-screen overflow-x-hidden bg-slate-100 px-3 py-6 sm:px-4 md:px-6 md:py-8">
+        <div className="mx-auto min-w-0 max-w-7xl animate-pulse space-y-6">
           <div className="h-10 w-72 rounded-xl bg-slate-200" />
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[...Array(4)].map((_, index) => (
@@ -485,8 +485,8 @@ export default function MasterAdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100 px-3 py-6 sm:px-4 md:px-6 md:py-8">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-3">
             <img
@@ -657,7 +657,7 @@ export default function MasterAdminDashboard() {
                     {isOpen ? (
                       <div className="border-t border-slate-200 bg-slate-50/60 px-6 py-5">
                         <div className="overflow-x-auto">
-                          <table className="min-w-full overflow-hidden rounded-2xl bg-white">
+                          <table className="w-full min-w-[760px] overflow-hidden rounded-2xl bg-white">
                             <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                               <tr>
                                 <th className="px-4 py-3">Nama</th>

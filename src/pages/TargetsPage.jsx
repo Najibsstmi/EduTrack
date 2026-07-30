@@ -170,8 +170,8 @@ export default function TargetsPage() {
   const activePreset = TARGET_PROFILES[selectedProfile]
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 md:px-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100 px-3 py-6 sm:px-4 md:px-6">
+      <div className="mx-auto min-w-0 max-w-6xl space-y-6">
         <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>

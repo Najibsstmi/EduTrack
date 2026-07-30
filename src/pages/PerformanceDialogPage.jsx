@@ -1162,8 +1162,8 @@ export default function PerformanceDialogPage() {
   }
 
   return (
-    <div className={`min-h-screen bg-slate-50 p-4 md:p-6 ${previewOpen ? 'dpp-preview-open' : ''}`}>
-      <div className="dpp-screen-only mx-auto max-w-7xl space-y-4">
+    <div className={`min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6 ${previewOpen ? 'dpp-preview-open' : ''}`}>
+      <div className="dpp-screen-only mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Dialog Prestasi"
           actionLeft={
@@ -1473,7 +1473,7 @@ function DppPreviewModal({
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="dpp-print-content mx-auto max-w-6xl rounded-2xl bg-white p-3 shadow-2xl md:p-5">
+      <div className="dpp-print-content mx-auto min-w-0 max-w-6xl rounded-2xl bg-white p-3 shadow-2xl md:p-5">
         <div className="dpp-print-toolbar sticky top-0 z-20 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
           <div>
             <div className="text-sm font-bold text-slate-950">Preview Laporan DPP</div>

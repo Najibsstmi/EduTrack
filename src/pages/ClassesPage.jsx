@@ -432,8 +432,8 @@ export default function ClassesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-6xl">
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -665,7 +665,7 @@ export default function ClassesPage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse">
+                    <table className="w-full min-w-[720px] border-collapse">
                       <thead>
                         <tr className="border-b bg-slate-50 text-left">
                           <th className="px-3 py-3 text-sm font-semibold text-slate-700">Nama Kelas</th>

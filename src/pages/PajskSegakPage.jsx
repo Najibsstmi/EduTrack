@@ -22,8 +22,8 @@ export default function PajskSegakPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="SEGAK / BMI"
           actionLeft={
@@ -40,8 +40,8 @@ export default function PajskSegakPage() {
 
         <SegakTabs active="overview" />
 
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <h2 className="text-lg font-semibold text-slate-900">Kitaran Rekod</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {['Penggal 1', 'Penggal 2'].map((term) => (
@@ -55,10 +55,10 @@ export default function PajskSegakPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
             <h2 className="text-lg font-semibold text-slate-900">Skala SEGAK</h2>
             <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700">

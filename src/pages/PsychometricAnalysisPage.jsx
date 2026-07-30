@@ -631,8 +631,8 @@ export default function PsychometricAnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Analisis Psikometrik"
           actionLeft={
@@ -661,7 +661,7 @@ export default function PsychometricAnalysisPage() {
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Papan Analisis Psikometrik</h2>
@@ -675,11 +675,11 @@ export default function PsychometricAnalysisPage() {
             </span>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-3">
             <select
               value={academicYear}
               onChange={(event) => updateYear(event.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
               {buildYearOptions(academicYear).map((year) => (
                 <option key={year} value={year}>
@@ -691,7 +691,7 @@ export default function PsychometricAnalysisPage() {
             <select
               value={selectedGrade}
               onChange={(event) => updateGrade(event.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
               <option value="">Semua Tingkatan</option>
               {availableGrades.map((grade) => (
@@ -704,7 +704,7 @@ export default function PsychometricAnalysisPage() {
             <select
               value={selectedClassId}
               onChange={(event) => updateClass(event.target.value)}
-              className="rounded-xl border border-slate-300 px-4 py-3 text-sm"
+              className="min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm"
             >
               <option value="">Semua Kelas</option>
               {availableClasses.map((classRow) => (
@@ -715,7 +715,7 @@ export default function PsychometricAnalysisPage() {
             </select>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1">
             {ANALYSIS_TABS.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.key
@@ -725,7 +725,7 @@ export default function PsychometricAnalysisPage() {
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
-                  className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+                  className={`inline-flex min-h-10 max-w-[82vw] shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition sm:max-w-none ${
                     isActive
                       ? 'border-slate-950 bg-slate-950 text-white'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -735,7 +735,9 @@ export default function PsychometricAnalysisPage() {
                   <span className="grid text-left leading-tight">
                     <span>{tab.label}</span>
                     {tab.description ? (
-                      <span className="text-[11px] font-medium opacity-80">{tab.description}</span>
+                      <span className="hidden text-[11px] font-medium opacity-80 sm:inline">
+                        {tab.description}
+                      </span>
                     ) : null}
                   </span>
                 </button>
@@ -796,8 +798,8 @@ export default function PsychometricAnalysisPage() {
 
 function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab }) {
   return (
-    <div className="space-y-4">
-      <section className="grid gap-4 lg:grid-cols-3">
+    <div className="min-w-0 space-y-4">
+      <section className="grid min-w-0 gap-4 lg:grid-cols-3">
         {['IMK', 'ITP', 'APTITUD_KHUSUS'].map((assessmentName) => (
           <InstrumentOverviewCard
             key={assessmentName}
@@ -809,8 +811,8 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
         ))}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Kualiti Padanan</h2>
           {reviewRows.length === 0 ? (
             <div className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-800">
@@ -858,7 +860,7 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Liputan Data</h2>
           <div className="mt-4 grid gap-3">
             {['IMK', 'ITP', 'APTITUD_KHUSUS'].map((assessmentName) => {
@@ -869,9 +871,9 @@ function OverviewTab({ summaries, reviewRows, availableStudentCount, onSelectTab
                 : 0
 
               return (
-                <div key={assessmentName} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div key={assessmentName} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <div className="font-semibold text-slate-800">{meta.shortLabel}</div>
                       <div className="text-xs text-slate-500">{meta.title}</div>
                     </div>
@@ -951,8 +953,8 @@ function InstrumentTab({ assessmentName, rows, classes, summary, variant }) {
   const matrix = buildClassTraitMatrix({ rows, classes, dimensions })
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <div className="min-w-0 space-y-4">
+      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{meta.title}</h2>
@@ -964,7 +966,7 @@ function InstrumentTab({ assessmentName, rows, classes, summary, variant }) {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Jumlah Keputusan" value={summary.total} />
         <SummaryCard title="Padanan Tepat" value={summary.matched} tone="emerald" />
         <SummaryCard title="Perlu Semakan" value={summary.review} tone="amber" />
@@ -988,8 +990,8 @@ function CareerPanels({ rows, summary }) {
   const dimensions = getInstrumentDimensions('IMK')
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
+      <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
         <h2 className="text-lg font-semibold text-slate-900">Taburan Dimensi Dominan</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {summary.dimensionSummary.map((dimension) => (
@@ -1010,8 +1012,8 @@ function CareerPanels({ rows, summary }) {
 
 function PersonalityPanels({ summary, matrix, dimensions }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+      <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
         <h2 className="text-lg font-semibold text-slate-900">Ranking Tret Dominan</h2>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {summary.dimensionSummary.map((dimension) => (
@@ -1020,7 +1022,7 @@ function PersonalityPanels({ summary, matrix, dimensions }) {
         </div>
       </div>
 
-      <div className="grid gap-4">
+      <div className="grid min-w-0 gap-4">
         <TopCodePanel
           title="Gabungan Tret Popular"
           rows={summary.topCodes}
@@ -1036,8 +1038,8 @@ function PersonalityPanels({ summary, matrix, dimensions }) {
 
 function AptitudeTab({ rows, summary }) {
   return (
-    <div className="space-y-4">
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="min-w-0 space-y-4">
+      <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Jumlah Keputusan" value={summary.total} />
         <SummaryCard title="Padanan Tepat" value={summary.matched} tone="emerald" />
         <SummaryCard title="Perlu Semakan" value={summary.review} tone="amber" />
@@ -1084,8 +1086,8 @@ function IndividualTab({
     : null
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <div className="min-w-0 space-y-4">
+      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Profil Psikometrik Individu</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -1093,7 +1095,7 @@ function IndividualTab({
           </p>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium text-slate-700">
             Cari murid
             <div className="relative">
@@ -1150,7 +1152,7 @@ function IndividualTab({
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid min-w-0 gap-4 xl:grid-cols-3">
             <StudentInstrumentProfile
               assessmentName="IMK"
               result={selectedStudentResults.IMK}
@@ -1287,7 +1289,7 @@ function ResultTable({ assessmentName, rows }) {
   const dimensions = getInstrumentDimensions(assessmentName)
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
       <h2 className="text-lg font-semibold text-slate-900">
         Senarai Keputusan {meta.shortLabel} - {meta.title}
       </h2>
@@ -1296,7 +1298,7 @@ function ResultTable({ assessmentName, rows }) {
           Tiada keputusan untuk pilihan semasa.
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+        <div className="-mx-4 mt-4 overflow-x-auto rounded-xl border border-slate-200 md:mx-0">
           <table className="min-w-[980px] border-collapse text-sm">
             <thead className="bg-slate-50">
               <tr>
@@ -1358,7 +1360,7 @@ function ResultTable({ assessmentName, rows }) {
 
 function DimensionCard({ dimension }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-700 text-lg font-bold text-white">
           {dimension.key}
@@ -1368,7 +1370,7 @@ function DimensionCard({ dimension }) {
           <div className="text-xs font-semibold text-slate-500">{dimension.percent.toFixed(1)}%</div>
         </div>
       </div>
-      <div className="mt-3 text-sm font-semibold text-slate-800">{dimension.label}</div>
+      <div className="mt-3 break-words text-sm font-semibold text-slate-800">{dimension.label}</div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
         <div
           className="h-full rounded-full bg-indigo-600"
@@ -1381,7 +1383,7 @@ function DimensionCard({ dimension }) {
 
 function TraitRow({ dimension }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-9 w-12 shrink-0 place-items-center rounded-lg bg-slate-900 text-sm font-bold text-white">
@@ -1408,7 +1410,7 @@ function TopCodePanel({ title, rows, dimensions = [], emptyText, precomputed = f
   const items = precomputed ? rows : getTopCodes(rows)
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
       {items.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
@@ -1449,14 +1451,14 @@ function ClassTraitMatrix({ matrix, dimensions }) {
   const dimensionByKey = new Map(dimensions.map((dimension) => [dimension.key, dimension]))
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
       <h2 className="text-lg font-semibold text-slate-900">Tret Mengikut Kelas</h2>
       {matrix.rows.length === 0 || matrix.topKeys.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
           Belum ada data kelas untuk ITP.
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+        <div className="-mx-4 mt-4 overflow-x-auto rounded-xl border border-slate-200 md:mx-0">
           <table className="min-w-[620px] border-collapse text-sm">
             <thead className="bg-slate-50">
               <tr>

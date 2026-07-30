@@ -8,6 +8,9 @@ function DashboardPage() {
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
+  const [isMobileView, setIsMobileView] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 640 : false
+  )
   const [errorMessage, setErrorMessage] = useState('')
   const [profile, setProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
@@ -54,6 +57,16 @@ function DashboardPage() {
       isMounted = false
     }
   }, [navigate])
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 640)
+    }
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const loadProfile = async () => {
     const {
@@ -236,25 +249,39 @@ function DashboardPage() {
   const schoolLogoUrl = schoolInfo?.logo_url || '/edutrack-logo.png'
 
   return (
-    <div style={styles.page}>
-      <div style={styles.headerCard}>
+    <div style={{ ...styles.page, ...(isMobileView ? styles.pageMobile : {}) }}>
+      <div style={{ ...styles.headerCard, ...(isMobileView ? styles.headerCardMobile : {}) }}>
         <div style={styles.brandRow}>
           <img
             src={schoolLogoUrl}
             alt={schoolName}
-            style={styles.logo}
+            style={{ ...styles.logo, ...(isMobileView ? styles.logoMobile : {}) }}
           />
-          <div>
-            <h1 style={styles.brandTitle}>EduTrack</h1>
+          <div style={styles.brandTextWrap}>
+            <h1 style={{ ...styles.brandTitle, ...(isMobileView ? styles.brandTitleMobile : {}) }}>
+              EduTrack
+            </h1>
             <p style={styles.brandSubtitle}>{schoolName}</p>
           </div>
         </div>
 
-        <div style={styles.headerActions}>
-          <button onClick={() => navigate('/profile')} style={styles.profileButton}>
+        <div style={{ ...styles.headerActions, ...(isMobileView ? styles.headerActionsMobile : {}) }}>
+          <button
+            onClick={() => navigate('/profile')}
+            style={{
+              ...styles.profileButton,
+              ...(isMobileView ? styles.headerActionButtonMobile : {}),
+            }}
+          >
             Profil Saya
           </button>
-          <button onClick={handleLogout} style={styles.logoutButton}>
+          <button
+            onClick={handleLogout}
+            style={{
+              ...styles.logoutButton,
+              ...(isMobileView ? styles.headerActionButtonMobile : {}),
+            }}
+          >
             Logout
           </button>
         </div>
@@ -262,16 +289,18 @@ function DashboardPage() {
 
       <div style={styles.container}>
         {errorMessage ? (
-          <section style={styles.sectionCard}>
+          <section style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
             <h3 style={styles.sectionTitle}>Sesi Tidak Sah</h3>
             <p style={styles.sectionDesc}>{errorMessage}</p>
           </section>
         ) : null}
 
-        <div style={styles.heroCard}>
+        <div style={{ ...styles.heroCard, ...(isMobileView ? styles.heroCardMobile : {}) }}>
           <div style={styles.heroTextWrap}>
             <div style={styles.heroKicker}>Dashboard Guru</div>
-            <h2 style={styles.heroTitle}>Selamat datang, {displayName}</h2>
+            <h2 style={{ ...styles.heroTitle, ...(isMobileView ? styles.heroTitleMobile : {}) }}>
+              Selamat datang, {displayName}
+            </h2>
             <p style={styles.heroDesc}>
               Gunakan dashboard ini untuk masukkan markah murid dan melihat analisis prestasi sekolah anda.
             </p>
@@ -295,13 +324,13 @@ function DashboardPage() {
           </div>
         </div>
 
-        <section style={styles.sectionCard}>
+        <section style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
           <h3 style={styles.sectionTitle}>Akses Pantas</h3>
           <p style={styles.sectionDesc}>
             Modul paling kerap digunakan untuk kerja harian guru.
           </p>
 
-          <div style={styles.quickActionGrid}>
+          <div style={{ ...styles.quickActionGrid, ...(isMobileView ? styles.quickActionGridMobile : {}) }}>
             <button
               type="button"
               onClick={() => navigate('/scores')}
@@ -417,6 +446,10 @@ const styles = {
     color: '#0f172a',
     fontFamily: 'Inter, Arial, sans-serif',
     padding: '24px',
+    overflowX: 'hidden',
+  },
+  pageMobile: {
+    padding: '12px',
   },
   headerCard: {
     display: 'flex',
@@ -431,13 +464,27 @@ const styles = {
     flexWrap: 'wrap',
     maxWidth: '1240px',
     margin: '0 auto 20px auto',
+    minWidth: 0,
+  },
+  headerCardMobile: {
+    padding: '14px',
+    borderRadius: '18px',
+    alignItems: 'stretch',
   },
   brandRow: { display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 },
+  brandTextWrap: { minWidth: 0 },
   headerActions: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
     flexWrap: 'wrap',
+  },
+  headerActionsMobile: {
+    width: '100%',
+  },
+  headerActionButtonMobile: {
+    flex: 1,
+    minHeight: '42px',
   },
   profileButton: {
     border: '1px solid #cbd5e1',
@@ -455,12 +502,19 @@ const styles = {
     borderRadius: '14px',
     flexShrink: 0,
   },
+  logoMobile: {
+    width: '44px',
+    height: '44px',
+  },
   brandTitle: { fontSize: '24px', fontWeight: 800, color: '#0f172a', margin: 0 },
+  brandTitleMobile: { fontSize: '21px' },
   brandSubtitle: {
     margin: '4px 0 0 0',
     color: '#64748b',
     fontSize: '14px',
     lineHeight: 1.4,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   logoutButton: {
     border: '1px solid #cbd5e1',
@@ -472,7 +526,7 @@ const styles = {
     fontWeight: 700,
     cursor: 'pointer',
   },
-  container: { maxWidth: '1240px', margin: '0 auto', display: 'grid', gap: '20px' },
+  container: { maxWidth: '1240px', margin: '0 auto', display: 'grid', gap: '20px', minWidth: 0 },
   heroCard: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1.5fr) minmax(280px, 1fr)',
@@ -482,6 +536,13 @@ const styles = {
     borderRadius: '28px',
     padding: '30px',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+    minWidth: 0,
+  },
+  heroCardMobile: {
+    gridTemplateColumns: '1fr',
+    padding: '18px',
+    borderRadius: '20px',
+    gap: '16px',
   },
   heroTextWrap: {
     display: 'grid',
@@ -496,6 +557,7 @@ const styles = {
     color: '#2563eb',
   },
   heroTitle: { margin: 0, fontSize: '32px', fontWeight: 800, lineHeight: 1.1 },
+  heroTitleMobile: { fontSize: '24px' },
   heroDesc: { margin: 0, color: '#475569', lineHeight: 1.7, maxWidth: '720px' },
   heroStatsWrap: {
     display: 'grid',
@@ -518,7 +580,8 @@ const styles = {
     marginBottom: '6px',
   },
   heroStatValue: { fontSize: '18px', fontWeight: 800, color: '#0f172a' },
-  sectionCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)' },
+  sectionCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)', minWidth: 0 },
+  sectionCardMobile: { padding: '16px', borderRadius: '18px' },
   sectionTitle: { margin: 0, fontSize: '20px', fontWeight: 700 },
   sectionDesc: { color: '#64748b', lineHeight: 1.6, margin: '8px 0 0 0' },
   quickActionGrid: {
@@ -526,6 +589,9 @@ const styles = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
     gap: '14px',
     marginTop: '16px',
+  },
+  quickActionGridMobile: {
+    gridTemplateColumns: '1fr',
   },
   quickActionCard: {
     border: '1px solid transparent',

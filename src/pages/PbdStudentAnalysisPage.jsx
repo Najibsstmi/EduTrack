@@ -148,8 +148,8 @@ export default function PbdStudentAnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PBD Murid"
           actionLeft={
@@ -304,7 +304,7 @@ export default function PbdStudentAnalysisPage() {
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <h2 className="text-lg font-semibold text-slate-900">Senarai TP Mengikut Subjek</h2>
               <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full border-collapse text-sm">
+                <table className="w-full min-w-[760px] border-collapse text-sm">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold text-slate-700">Subjek</th>

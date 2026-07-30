@@ -89,7 +89,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 flex items-center justify-center">
+    <div className="flex min-h-screen overflow-x-hidden bg-slate-50 px-3 py-6 sm:px-4 items-center justify-center">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-col items-center text-center">
           <img

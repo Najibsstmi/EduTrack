@@ -2564,8 +2564,8 @@ export default function StudentScoresPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl">
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -2792,7 +2792,7 @@ export default function StudentScoresPage() {
 
               {bulkPreviewRows.length > 0 && (
                 <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-                  <table className="min-w-full text-sm">
+                  <table className="w-full min-w-[980px] text-sm">
                     {bulkCsvFormat === 'dynamic' ? (
                       <>
                         <thead className="bg-slate-50">
@@ -2934,7 +2934,7 @@ export default function StudentScoresPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-sm">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left text-slate-700">
                     <th className="px-3 py-3 font-semibold">Bil</th>

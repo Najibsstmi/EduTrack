@@ -1796,7 +1796,7 @@ export default function SchoolAdminDashboard() {
           </div>
         )}
 
-        <section style={styles.heroCard}>
+        <section style={{ ...styles.heroCard, ...(isMobileView ? styles.heroCardMobile : {}) }}>
           <div style={styles.heroGlow} />
           <div style={styles.heroGlowSecondary} />
           <div style={styles.heroInner}>
@@ -1826,7 +1826,7 @@ export default function SchoolAdminDashboard() {
           </div>
         </section>
 
-        <section style={styles.statsGrid}>
+        <section style={{ ...styles.statsGrid, ...(isMobileView ? styles.statsGridMobile : {}) }}>
           <StatCard title="Jumlah Pengguna" value={stats.total} isMobileView={isMobileView} />
           <StatCard title="Pending" value={stats.pending} isMobileView={isMobileView} />
           <StatCard title="Approved" value={stats.approved} isMobileView={isMobileView} />
@@ -1835,13 +1835,13 @@ export default function SchoolAdminDashboard() {
           <StatCard title="Jumlah Murid" value={studentCount} isMobileView={isMobileView} />
         </section>
 
-        <section style={styles.sectionCard}>
+        <section style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
           <h2 style={styles.cardTitle}>Akses Pantas</h2>
           <p style={styles.helperText}>
             Modul paling kerap digunakan untuk kerja harian sekolah.
           </p>
 
-          <div style={styles.quickActionGrid}>
+          <div style={{ ...styles.quickActionGrid, ...(isMobileView ? styles.quickActionGridMobile : {}) }}>
             <Link
               to="/scores"
               onMouseEnter={(e) => {
@@ -2099,8 +2099,8 @@ export default function SchoolAdminDashboard() {
           </section>
         )}
 
-        <section style={styles.dualGrid}>
-          <div style={styles.sectionCard}>
+        <section style={{ ...styles.dualGrid, ...(isMobileView ? styles.dualGridMobile : {}) }}>
+          <div style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>Status Setup Sistem</h2>
             </div>
@@ -2118,7 +2118,7 @@ export default function SchoolAdminDashboard() {
             )}
           </div>
 
-          <div style={styles.sectionCard}>
+          <div style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>Status Data Akademik</h2>
             </div>
@@ -2510,7 +2510,7 @@ function StatCard({ title, value, isMobileView }) {
 }
 
 const styles = {
-  page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif' },
+  page: { minHeight: '100vh', background: '#f8fafc', color: '#0f172a', fontFamily: 'Inter, Arial, sans-serif', overflowX: 'hidden' },
   loadingWrap: { minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f8fafc' },
   loadingCard: { background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px 24px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' },
   topBar: {
@@ -2955,6 +2955,10 @@ const styles = {
     padding: '30px',
     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
   },
+  heroCardMobile: {
+    borderRadius: '20px',
+    padding: '18px',
+  },
   heroGlow: {
     position: 'absolute',
     top: '-80px',
@@ -3023,6 +3027,7 @@ const styles = {
     color: '#334155',
   },
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' },
+  statsGridMobile: { gap: '12px' },
   statCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.04)', animation: 'statFadeIn 560ms ease-out' },
   statTitle: { color: '#64748b', fontSize: '13px', marginBottom: '8px' },
   statValue: { fontSize: '28px', fontWeight: 800 },
@@ -3030,7 +3035,9 @@ const styles = {
   summaryValueMobile: { fontSize: '28px', fontWeight: 800 },
   summaryLabelMobile: { fontSize: '14px', fontWeight: 600 },
   dualGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' },
+  dualGridMobile: { gridTemplateColumns: '1fr', gap: '14px' },
   sectionCard: { background: '#ffffff', border: '1px solid #dbe4ee', borderRadius: '24px', padding: '22px', boxShadow: '0 10px 30px rgba(15, 23, 42, 0.05)', overflow: 'hidden' },
+  sectionCardMobile: { borderRadius: '18px', padding: '16px' },
   cardHeader: { marginBottom: '14px' },
   cardHeaderColumn: {
     display: 'flex',
@@ -3107,6 +3114,9 @@ const styles = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
     gap: '14px',
     marginTop: '16px',
+  },
+  quickActionGridMobile: {
+    gridTemplateColumns: '1fr',
   },
   quickActionCard: {
     border: '1px solid transparent',

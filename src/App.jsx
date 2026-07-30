@@ -108,8 +108,8 @@ function DashboardRedirect() {
 function App() {
   if (!hasSupabaseConfig) {
     return (
-      <div className="min-h-screen bg-slate-100 p-6 text-slate-900">
-        <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="min-h-screen overflow-x-hidden bg-slate-100 p-3 text-slate-900 sm:p-4 md:p-6">
+        <div className="mx-auto mt-6 min-w-0 max-w-xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:mt-10 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             EduTrack
           </p>

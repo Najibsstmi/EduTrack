@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
@@ -302,8 +302,8 @@ export default function SchoolSetupExamsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-6xl space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -323,14 +323,14 @@ export default function SchoolSetupExamsPage() {
                 onClick={() => navigate('/school-setup')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                ← Tetapan Akademik Sekolah
+                ? Tetapan Akademik Sekolah
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/school-setup/grades')}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               >
-                Tetapan Grade →
+                Tetapan Grade ?
               </button>
             </div>
           </div>
@@ -376,7 +376,7 @@ export default function SchoolSetupExamsPage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+                <table className="w-full min-w-[720px] border-collapse">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
@@ -423,7 +423,7 @@ export default function SchoolSetupExamsPage() {
                                 className="inline-flex h-9 w-9 cursor-move items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm"
                                 title="Drag untuk ubah susunan"
                               >
-                                ⋮⋮
+                                ??
                               </span>
 
                               <div className="flex flex-col gap-1">
@@ -432,14 +432,14 @@ export default function SchoolSetupExamsPage() {
                                   onClick={() => moveUp(label, i)}
                                   className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
                                 >
-                                  ↑
+                                  ?
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => moveDown(label, i)}
                                   className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
                                 >
-                                  ↓
+                                  ?
                                 </button>
                               </div>
                             </div>
@@ -494,7 +494,7 @@ export default function SchoolSetupExamsPage() {
             onClick={() => navigate('/school-setup')}
             className="rounded-xl border border-slate-300 px-5 py-3 font-medium text-slate-700 hover:bg-slate-100"
           >
-            ← Tetapan Akademik Sekolah
+            ? Tetapan Akademik Sekolah
           </button>
         </div>
       </div>

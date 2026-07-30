@@ -166,8 +166,8 @@ export default function PajskSegakAnalysisPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-4">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PAJSK & SEGAK"
           actionLeft={

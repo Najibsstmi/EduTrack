@@ -475,8 +475,8 @@ export default function StudentImportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-6xl">
         <div className="mb-6 rounded-2xl bg-white p-5 shadow-sm">
           <div className="mb-2 text-sm font-semibold text-slate-500">
             Student Import Module
@@ -559,7 +559,7 @@ export default function StudentImportPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse">
+              <table className="w-full min-w-[720px] border-collapse">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left">
                     <th className="px-3 py-3 text-sm font-semibold text-slate-700">IC</th>
