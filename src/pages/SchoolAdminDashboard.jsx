@@ -36,6 +36,9 @@ const PBD_PERIODS = [
   { key: 'PENGGAL_2', name: 'Penggal 2' },
 ]
 
+const ADMIN_CONTENT_MOBILE_BREAKPOINT = 768
+const ADMIN_COMPACT_NAV_BREAKPOINT = 1100
+
 const DESIGNATION_OPTIONS = [
   'Pengetua',
   'Penolong kanan',
@@ -76,7 +79,12 @@ export default function SchoolAdminDashboard() {
   const [activeDesktopMenu, setActiveDesktopMenu] = useState('')
   const [hoveredNav, setHoveredNav] = useState('')
   const [showMobileMenu, setShowMobileMenu] = useState(false)
-  const [isMobileView, setIsMobileView] = useState(() => window.innerWidth <= 768)
+  const [isMobileView, setIsMobileView] = useState(
+    () => window.innerWidth <= ADMIN_CONTENT_MOBILE_BREAKPOINT
+  )
+  const [isCompactNav, setIsCompactNav] = useState(
+    () => window.innerWidth <= ADMIN_COMPACT_NAV_BREAKPOINT
+  )
   const [actionDrafts, setActionDrafts] = useState({})
   const [completionLoading, setCompletionLoading] = useState(false)
   const [completionRows, setCompletionRows] = useState([])
@@ -141,10 +149,14 @@ export default function SchoolAdminDashboard() {
 
   useEffect(() => {
     const handleResize = () => {
-      const nextIsMobile = window.innerWidth <= 768
+      const nextIsMobile = window.innerWidth <= ADMIN_CONTENT_MOBILE_BREAKPOINT
+      const nextIsCompactNav = window.innerWidth <= ADMIN_COMPACT_NAV_BREAKPOINT
       setIsMobileView(nextIsMobile)
-      if (!nextIsMobile) {
+      setIsCompactNav(nextIsCompactNav)
+
+      if (!nextIsCompactNav) {
         setShowMobileMenu(false)
+      } else {
         setActiveDesktopMenu('')
       }
     }
@@ -1531,8 +1543,8 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div style={styles.page}>
-      <header style={{ ...styles.topBar, ...(isMobileView ? styles.mobileTopBar : {}) }}>
-        {isMobileView ? (
+      <header style={{ ...styles.topBar, ...(isCompactNav ? styles.mobileTopBar : {}) }}>
+        {isCompactNav ? (
           <>
             <button
               type="button"
