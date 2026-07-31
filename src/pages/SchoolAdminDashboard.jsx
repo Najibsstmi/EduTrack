@@ -169,7 +169,7 @@ export default function SchoolAdminDashboard() {
     if (!adminProfile?.school_id || !setupConfig) return
 
     fetchScoreCompletionMatrix(adminProfile.school_id, setupConfig)
-  }, [selectedExamKey])
+  }, [adminProfile?.school_id, selectedExamKey, setupConfig])
 
   useEffect(() => {
     if (!adminProfile?.school_id) return
@@ -357,6 +357,8 @@ export default function SchoolAdminDashboard() {
         .from('classes')
         .select('id, class_name, tingkatan')
         .eq('school_id', schoolId)
+        .eq('academic_year', academicYear)
+        .eq('is_active', true)
         .order('tingkatan', { ascending: true })
         .order('class_name', { ascending: true }),
 
@@ -383,7 +385,7 @@ export default function SchoolAdminDashboard() {
 
       supabase
         .from('student_scores')
-        .select('class_id, subject_id, student_enrollment_id, exam_key')
+        .select('class_id, subject_id, student_enrollment_id, exam_key, exam_config_id')
         .eq('school_id', schoolId)
         .eq('academic_year', academicYear),
 
@@ -396,7 +398,7 @@ export default function SchoolAdminDashboard() {
 
       supabase
         .from('exam_configs')
-        .select('grade_label, exam_key, exam_name, exam_order, is_active')
+        .select('id, grade_label, exam_key, exam_name, exam_order, is_active')
         .eq('school_id', schoolId)
         .eq('academic_year', academicYear),
 
@@ -490,7 +492,14 @@ export default function SchoolAdminDashboard() {
       )
     })
 
-    const studentExamMap = buildStudentExamMap(scoreRows || [])
+    const examConfigKeyById = new Map(
+      (examConfigRows || [])
+        .filter((row) => row?.id)
+        .map((row) => [String(row.id), row.exam_key])
+    )
+    const studentExamMap = buildStudentExamMap(scoreRows || [], {
+      examConfigKeyById,
+    })
     const studentTargetMap = buildStudentExamMap(
       (targetRows || []).map((row) => ({
         student_enrollment_id: row.student_enrollment_id,
