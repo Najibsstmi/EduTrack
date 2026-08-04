@@ -54,6 +54,21 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
+Untuk butang AI Dialog Prestasi, tetapkan secret ini pada Supabase Edge Function:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.6-luna
+```
+
+Deploy fungsi AI selepas secret ditetapkan:
+
+```bash
+supabase secrets set OPENAI_API_KEY=sk-...
+supabase secrets set OPENAI_MODEL=gpt-5.6-luna
+supabase functions deploy suggest-performance-dialog
+```
+
 ## Deployment
 
 Repo ini disediakan untuk deploy ke Vercel. Pastikan environment variables Supabase ditetapkan di dashboard Vercel sebelum deploy production.

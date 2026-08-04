@@ -5,10 +5,12 @@ import {
   ChevronUp,
   Eye,
   FileText,
+  Loader2,
   Menu,
   Plus,
   Printer,
   Save,
+  Sparkles,
   Trash2,
   Users,
   X,
@@ -340,6 +342,84 @@ const splitLines = (value) =>
 
 const joinLines = (items) => (items || []).map((item) => String(item ?? '')).join('\n')
 
+const getFilledTextRows = (rows = []) =>
+  (rows || [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+
+const hasInterventionContent = (item) =>
+  ['title', 'details', 'start_date', 'end_date', 'duration'].some((field) =>
+    String(item?.[field] || '').trim()
+  )
+
+const getFilledInterventions = (rows = []) => (rows || []).filter(hasInterventionContent)
+
+const AI_AREA_LABELS = {
+  issue: 'penyataan masalah',
+  causes: 'punca masalah',
+  student_interventions: 'intervensi murid',
+  teacher_interventions: 'intervensi guru',
+}
+
+const INTERVENTION_STATUS_OPTIONS = ['Dirancang', 'Dalam Pelaksanaan', 'Selesai', 'Ditangguh']
+
+const normalizeAiInterventionRows = (rows = []) =>
+  (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      ...EMPTY_INTERVENTION,
+      title: String(row?.title || '').trim(),
+      details: String(row?.details || '').trim(),
+      duration: String(row?.duration || '').trim(),
+      status: INTERVENTION_STATUS_OPTIONS.includes(row?.status) ? row.status : 'Dirancang',
+      start_date: String(row?.start_date || '').trim(),
+      end_date: String(row?.end_date || '').trim(),
+    }))
+    .filter(hasInterventionContent)
+
+const mergeTextRows = (currentRows = [], suggestionRows = []) => {
+  const merged = []
+  const seen = new Set()
+
+  ;[...getFilledTextRows(currentRows), ...getFilledTextRows(suggestionRows)].forEach((item) => {
+    const key = normalizeText(item)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    merged.push(item)
+  })
+
+  return merged.length ? merged : ['']
+}
+
+const mergeInterventionRows = (currentRows = [], suggestionRows = []) => {
+  const merged = []
+  const seen = new Set()
+
+  ;[
+    ...getFilledInterventions(currentRows),
+    ...normalizeAiInterventionRows(suggestionRows),
+  ].forEach((item) => {
+    const key = normalizeText(`${item.title || ''} ${item.details || ''}`)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    merged.push(item)
+  })
+
+  return merged.length ? merged : [{ ...EMPTY_INTERVENTION }]
+}
+
+const getTrafficAiSummary = (analytics) =>
+  (analytics.bands || DEFAULT_TRAFFIC_BANDS).map((band) => {
+    const rows = analytics.traffic?.[band.key]?.rows || []
+
+    return {
+      key: band.key,
+      label: band.label,
+      count: rows.length,
+      mark_range: `${band.min}-${band.max}`,
+      grades: band.grades || [],
+    }
+  })
+
 const getDefaultDraft = ({ subjectName = '', examName = '', academicYear = getCurrentYear() }) => ({
   report_title: `DIALOG PRESTASI PANITIA ${subjectName || 'SUBJEK'} ${academicYear}`,
   issue_statement: '',
@@ -422,6 +502,7 @@ export default function PerformanceDialogPage() {
   const [loading, setLoading] = useState(true)
   const [contextLoading, setContextLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [aiLoadingArea, setAiLoadingArea] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
@@ -1141,6 +1222,67 @@ export default function PerformanceDialogPage() {
     selectedSubject,
   ])
 
+  const aiContext = useMemo(
+    () => ({
+      academic_year: academicYear,
+      grade_label: selectedGrade,
+      grade_display: getDisplayLevel(selectedGrade, levelMappings),
+      class_label: selectedClassLabelForPreview,
+      subject_name: selectedSubject?.subject_name || '',
+      exam_name: selectedExam?.name || selectedExamKey,
+      generated_issue_statement: generatedIssueStatement,
+      current_issue_statement: draft.issue_statement || '',
+      target_group_note: draft.target_group_note || '',
+      implementation_window: draft.implementation_window || {},
+      metrics: {
+        total_students: reportAnalytics.totalStudents,
+        scored_count: reportAnalytics.scoredCount,
+        average_mark: formatDecimal(reportAnalytics.averageMark, 1),
+        gpmp: formatDecimal(reportAnalytics.gpmp),
+        tov_gpmp: formatDecimal(reportAnalytics.tovGpmp),
+        etr_gpmp: formatDecimal(reportAnalytics.etrGpmp),
+        comparison_target: reportAnalytics.gapTargetLabel || '',
+        comparison_target_gpmp: formatDecimal(reportAnalytics.comparisonTargetGpmp),
+        gpmp_gap: formatDecimal(reportAnalytics.gpmpGap),
+        pass_rate: formatPercent(reportAnalytics.passRate),
+      },
+      grade_distribution: reportAnalytics.gradeDistribution || [],
+      traffic_bands: getTrafficAiSummary(reportAnalytics),
+      existing_draft: {
+        problem_causes: {
+          teacher: getFilledTextRows(draft.problem_causes?.teacher),
+          student: getFilledTextRows(draft.problem_causes?.student),
+        },
+        student_interventions: {
+          green: getFilledInterventions(draft.student_interventions?.green),
+          yellow: getFilledInterventions(draft.student_interventions?.yellow),
+          red: getFilledInterventions(draft.student_interventions?.red),
+        },
+        teacher_interventions: getFilledInterventions(draft.teacher_interventions),
+      },
+    }),
+    [
+      academicYear,
+      draft.implementation_window,
+      draft.issue_statement,
+      draft.problem_causes,
+      draft.student_interventions,
+      draft.target_group_note,
+      draft.teacher_interventions,
+      generatedIssueStatement,
+      levelMappings,
+      reportAnalytics,
+      selectedClassLabelForPreview,
+      selectedExam?.name,
+      selectedExamKey,
+      selectedGrade,
+      selectedSubject?.subject_name,
+    ]
+  )
+
+  const canUseAi = Boolean(selectedGrade && selectedSubject && selectedExam)
+  const aiBusy = Boolean(aiLoadingArea)
+
   const updateDraft = (patch) => setDraft((current) => ({ ...current, ...patch }))
 
   const updateTrafficBand = (bandKey, field, value) => {
@@ -1203,6 +1345,123 @@ export default function PerformanceDialogPage() {
         rowIndex === index ? { ...row, [field]: value } : row
       ),
     })
+  }
+
+  const applyAiSuggestions = (area, suggestions) => {
+    setDraft((current) => {
+      if (area === 'issue') {
+        return {
+          ...current,
+          issue_statement: suggestions.issue_statement || current.issue_statement,
+        }
+      }
+
+      if (area === 'causes') {
+        return {
+          ...current,
+          problem_causes: {
+            teacher: mergeTextRows(
+              current.problem_causes?.teacher,
+              suggestions.problem_causes?.teacher
+            ),
+            student: mergeTextRows(
+              current.problem_causes?.student,
+              suggestions.problem_causes?.student
+            ),
+          },
+        }
+      }
+
+      if (area === 'student_interventions') {
+        return {
+          ...current,
+          student_interventions: {
+            ...current.student_interventions,
+            green: mergeInterventionRows(
+              current.student_interventions?.green,
+              suggestions.student_interventions?.green
+            ),
+            yellow: mergeInterventionRows(
+              current.student_interventions?.yellow,
+              suggestions.student_interventions?.yellow
+            ),
+            red: mergeInterventionRows(
+              current.student_interventions?.red,
+              suggestions.student_interventions?.red
+            ),
+          },
+        }
+      }
+
+      if (area === 'teacher_interventions') {
+        return {
+          ...current,
+          teacher_interventions: mergeInterventionRows(
+            current.teacher_interventions,
+            suggestions.teacher_interventions
+          ),
+        }
+      }
+
+      return current
+    })
+  }
+
+  const hasAiSuggestionForArea = (area, suggestions) => {
+    if (area === 'issue') return Boolean(suggestions.issue_statement)
+    if (area === 'causes') {
+      return Boolean(
+        suggestions.problem_causes?.teacher?.length || suggestions.problem_causes?.student?.length
+      )
+    }
+    if (area === 'student_interventions') {
+      return ['green', 'yellow', 'red'].some(
+        (key) => suggestions.student_interventions?.[key]?.length
+      )
+    }
+    if (area === 'teacher_interventions') return Boolean(suggestions.teacher_interventions?.length)
+    return false
+  }
+
+  const requestAiSuggestion = async (area) => {
+    if (!canUseAi) {
+      setErrorMessage('Sila pilih tingkatan, subjek dan peperiksaan dahulu sebelum guna AI.')
+      return
+    }
+
+    setAiLoadingArea(area)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      const { data, error } = await supabase.functions.invoke('suggest-performance-dialog', {
+        body: {
+          area,
+          context: aiContext,
+        },
+      })
+
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+
+      const suggestions = data?.suggestions
+      if (!suggestions || !hasAiSuggestionForArea(area, suggestions)) {
+        throw new Error('AI tidak memulangkan cadangan yang boleh digunakan.')
+      }
+
+      applyAiSuggestions(area, suggestions)
+      setSuccessMessage(`Cadangan AI untuk ${AI_AREA_LABELS[area]} telah dimasukkan.`)
+    } catch (error) {
+      console.error(error)
+      const message = String(error?.message || '')
+      setErrorMessage(
+        message.includes('Functions')
+          ? 'Gagal menjana cadangan AI. Pastikan Edge Function suggest-performance-dialog sudah deploy dan OPENAI_API_KEY telah ditetapkan.'
+          : message || 'Gagal menjana cadangan AI.'
+      )
+    } finally {
+      setAiLoadingArea('')
+    }
   }
 
   const saveReport = async () => {
@@ -1580,13 +1839,22 @@ export default function PerformanceDialogPage() {
               draft={draft}
               generatedIssueStatement={generatedIssueStatement}
               updateDraft={updateDraft}
+              onAiSuggest={() => requestAiSuggestion('issue')}
+              aiLoading={aiLoadingArea === 'issue'}
+              aiDisabled={!canUseAi || aiBusy}
             />
             <TrafficBandEditor
               bands={draft.traffic_bands}
               analytics={reportAnalytics}
               updateTrafficBand={updateTrafficBand}
             />
-            <CauseEditor draft={draft} updateDraft={updateDraft} />
+            <CauseEditor
+              draft={draft}
+              updateDraft={updateDraft}
+              onAiSuggest={() => requestAiSuggestion('causes')}
+              aiLoading={aiLoadingArea === 'causes'}
+              aiDisabled={!canUseAi || aiBusy}
+            />
           </div>
 
           <div className="min-w-0 space-y-4">
@@ -1596,10 +1864,16 @@ export default function PerformanceDialogPage() {
               updateIntervention={updateIntervention}
               addIntervention={addIntervention}
               removeIntervention={removeIntervention}
+              onAiSuggest={() => requestAiSuggestion('student_interventions')}
+              aiLoading={aiLoadingArea === 'student_interventions'}
+              aiDisabled={!canUseAi || aiBusy}
             />
             <TeacherInterventionEditor
               rows={draft.teacher_interventions}
               updateRow={updateTeacherIntervention}
+              onAiSuggest={() => requestAiSuggestion('teacher_interventions')}
+              aiLoading={aiLoadingArea === 'teacher_interventions'}
+              aiDisabled={!canUseAi || aiBusy}
               addRow={() =>
                 updateDraft({
                   teacher_interventions: [...draft.teacher_interventions, { ...EMPTY_INTERVENTION }],
@@ -1953,7 +2227,33 @@ function Panel({ title, children, icon: Icon, tone = 'default' }) {
   )
 }
 
-function DppContextEditor({ draft, generatedIssueStatement, updateDraft }) {
+function AiSuggestButton({ onClick, loading, disabled, label = 'AI' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm hover:bg-violet-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+      title="Jana cadangan AI"
+    >
+      {loading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      ) : (
+        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      {loading ? 'Menjana...' : label}
+    </button>
+  )
+}
+
+function DppContextEditor({
+  draft,
+  generatedIssueStatement,
+  updateDraft,
+  onAiSuggest,
+  aiLoading,
+  aiDisabled,
+}) {
   return (
     <Panel title="Maklumat DPP" icon={FileText} tone="navy">
       <div className="grid gap-3">
@@ -1965,15 +2265,22 @@ function DppContextEditor({ draft, generatedIssueStatement, updateDraft }) {
             className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
           />
         </label>
-        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-          Penyataan masalah
+        <div className="grid gap-1.5">
+          <div className="flex items-center justify-between gap-2 text-sm font-medium text-slate-700">
+            <span>Penyataan masalah</span>
+            <AiSuggestButton
+              onClick={onAiSuggest}
+              loading={aiLoading}
+              disabled={aiDisabled}
+            />
+          </div>
           <textarea
             value={draft.issue_statement || generatedIssueStatement}
             onChange={(event) => updateDraft({ issue_statement: event.target.value })}
             rows={3}
             className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
           />
-        </label>
+        </div>
         <label className="grid gap-1.5 text-sm font-medium text-slate-700">
           Nama guru subjek terlibat
           <textarea
@@ -2032,9 +2339,12 @@ function DppContextEditor({ draft, generatedIssueStatement, updateDraft }) {
   )
 }
 
-function CauseEditor({ draft, updateDraft }) {
+function CauseEditor({ draft, updateDraft, onAiSuggest, aiLoading, aiDisabled }) {
   return (
     <Panel title="Punca Masalah Guru dan Murid" icon={Users} tone="navy">
+      <div className="mb-3 flex justify-end">
+        <AiSuggestButton onClick={onAiSuggest} loading={aiLoading} disabled={aiDisabled} />
+      </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="grid gap-1.5 text-sm font-medium text-slate-700">
           Punca guru
@@ -2129,10 +2439,16 @@ function StudentInterventionEditor({
   updateIntervention,
   addIntervention,
   removeIntervention,
+  onAiSuggest,
+  aiLoading,
+  aiDisabled,
 }) {
   return (
     <Panel title="Intervensi Murid Mengikut Traffic Light" icon={CalendarDays}>
       <div className="grid gap-4">
+        <div className="flex justify-end">
+          <AiSuggestButton onClick={onAiSuggest} loading={aiLoading} disabled={aiDisabled} />
+        </div>
         {(bands || []).map((band) => {
           const rows = interventions?.[band.key] || []
           const style = getBandStyle(band.key)
@@ -2169,10 +2485,21 @@ function StudentInterventionEditor({
   )
 }
 
-function TeacherInterventionEditor({ rows, updateRow, addRow, removeRow }) {
+function TeacherInterventionEditor({
+  rows,
+  updateRow,
+  addRow,
+  removeRow,
+  onAiSuggest,
+  aiLoading,
+  aiDisabled,
+}) {
   return (
     <Panel title="Intervensi Guru" icon={CalendarDays} tone="navy">
       <div className="grid gap-3">
+        <div className="flex justify-end">
+          <AiSuggestButton onClick={onAiSuggest} loading={aiLoading} disabled={aiDisabled} />
+        </div>
         {(rows || []).map((row, index) => (
           <InterventionFields
             key={index}
@@ -2332,18 +2659,6 @@ function ScoreboardEditor({ rows, updateRow, addRow, removeRow }) {
     </Panel>
   )
 }
-
-const getFilledTextRows = (rows = []) =>
-  (rows || [])
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-
-const hasInterventionContent = (item) =>
-  ['title', 'details', 'start_date', 'end_date', 'duration'].some((field) =>
-    String(item?.[field] || '').trim()
-  )
-
-const getFilledInterventions = (rows = []) => (rows || []).filter(hasInterventionContent)
 
 const formatDateForDisplay = (dateText) => {
   if (!dateText) return ''
