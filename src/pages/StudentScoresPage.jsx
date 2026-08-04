@@ -566,6 +566,8 @@ export default function StudentScoresPage() {
   const [bulkImportLoading, setBulkImportLoading] = useState(false)
   const [dynamicTemplateLoading, setDynamicTemplateLoading] = useState(false)
   const [searchParams] = useSearchParams()
+  const appliedPrefillExamKeyRef = useRef('')
+  const appliedBulkPrefillExamKeyRef = useRef('')
 
   const dashboardPath = getDashboardPath(profile)
   const isSchoolAdmin =
@@ -573,6 +575,7 @@ export default function StudentScoresPage() {
   const prefillClassId = searchParams.get('class_id') || ''
   const prefillSubjectName = searchParams.get('subject_name') || ''
   const prefillExamKey = searchParams.get('exam_key') || ''
+  const normalizedPrefillExamKey = normalizeExamKey(prefillExamKey)
   const showIncompleteOnlyFromUrl = searchParams.get('show') === 'incomplete'
 
   useEffect(() => {
@@ -751,7 +754,7 @@ export default function StudentScoresPage() {
     if (!selectedExam || !activeExamOptions.length) return
 
     const examStillValid = activeExamOptions.some(
-      (exam) => String(exam.key) === String(selectedExam)
+      (exam) => normalizeExamKey(exam.key) === normalizeExamKey(selectedExam)
     )
 
     if (!examStillValid) {
@@ -763,7 +766,9 @@ export default function StudentScoresPage() {
     const run = async () => {
       if (!profile?.school_id || !selectedGradeLabel) {
         setActiveExamOptions([])
-        setSelectedExam('')
+        if (!normalizedPrefillExamKey) {
+          setSelectedExam('')
+        }
         return
       }
 
@@ -776,9 +781,33 @@ export default function StudentScoresPage() {
 
         setActiveExamOptions(rows)
 
-        const currentSelectedStillValid = rows.some(
-          (item) => item.key === normalizeExamKey(selectedExam)
+        const pendingPrefillExamKey =
+          normalizedPrefillExamKey &&
+          appliedPrefillExamKeyRef.current !== normalizedPrefillExamKey
+            ? normalizedPrefillExamKey
+            : ''
+        const prefillExam = rows.find(
+          (item) => normalizeExamKey(item.key) === pendingPrefillExamKey
         )
+
+        if (prefillExam) {
+          appliedPrefillExamKeyRef.current = pendingPrefillExamKey
+          setSelectedExam(prefillExam.key)
+          return
+        }
+
+        const currentSelectedStillValid = rows.some(
+          (item) => normalizeExamKey(item.key) === normalizeExamKey(selectedExam)
+        )
+
+        if (
+          pendingPrefillExamKey &&
+          currentSelectedStillValid &&
+          normalizeExamKey(selectedExam) === pendingPrefillExamKey
+        ) {
+          appliedPrefillExamKeyRef.current = pendingPrefillExamKey
+          return
+        }
 
         if (!currentSelectedStillValid) {
           setSelectedExam(rows[0]?.key || '')
@@ -791,7 +820,13 @@ export default function StudentScoresPage() {
     }
 
     run()
-  }, [profile?.school_id, selectedGradeLabel, setupConfig?.current_academic_year, selectedExam])
+  }, [
+    normalizedPrefillExamKey,
+    profile?.school_id,
+    selectedGradeLabel,
+    setupConfig?.current_academic_year,
+    selectedExam,
+  ])
 
   useEffect(() => {
     const run = async () => {
@@ -811,9 +846,33 @@ export default function StudentScoresPage() {
 
         setBulkExamOptions(rows)
 
-        const currentSelectedStillValid = rows.some(
-          (item) => item.key === normalizeExamKey(bulkSelectedExam)
+        const pendingPrefillExamKey =
+          normalizedPrefillExamKey &&
+          appliedBulkPrefillExamKeyRef.current !== normalizedPrefillExamKey
+            ? normalizedPrefillExamKey
+            : ''
+        const prefillExam = rows.find(
+          (item) => normalizeExamKey(item.key) === pendingPrefillExamKey
         )
+
+        if (prefillExam) {
+          appliedBulkPrefillExamKeyRef.current = pendingPrefillExamKey
+          setBulkSelectedExam(prefillExam.key)
+          return
+        }
+
+        const currentSelectedStillValid = rows.some(
+          (item) => normalizeExamKey(item.key) === normalizeExamKey(bulkSelectedExam)
+        )
+
+        if (
+          pendingPrefillExamKey &&
+          currentSelectedStillValid &&
+          normalizeExamKey(bulkSelectedExam) === pendingPrefillExamKey
+        ) {
+          appliedBulkPrefillExamKeyRef.current = pendingPrefillExamKey
+          return
+        }
 
         if (!currentSelectedStillValid) {
           setBulkSelectedExam(rows[0]?.key || '')
@@ -826,12 +885,23 @@ export default function StudentScoresPage() {
     }
 
     run()
-  }, [isSchoolAdmin, profile?.school_id, setupConfig?.current_academic_year, bulkSelectedExam])
+  }, [
+    bulkSelectedExam,
+    isSchoolAdmin,
+    normalizedPrefillExamKey,
+    profile?.school_id,
+    setupConfig?.current_academic_year,
+  ])
 
   useEffect(() => {
-    if (!prefillExamKey) return
-    setSelectedExam(String(prefillExamKey).trim().toUpperCase())
-  }, [prefillExamKey])
+    appliedPrefillExamKeyRef.current = ''
+    appliedBulkPrefillExamKeyRef.current = ''
+
+    if (!normalizedPrefillExamKey) return
+
+    setSelectedExam(normalizedPrefillExamKey)
+    setBulkSelectedExam(normalizedPrefillExamKey)
+  }, [normalizedPrefillExamKey])
 
   const sortedStudents = useMemo(() => {
     return [...visibleStudents].sort((a, b) => compareStudentsByGenderThenName(a, b))
