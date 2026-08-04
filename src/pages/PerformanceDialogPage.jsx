@@ -322,12 +322,9 @@ const isPassGrade = (grade) => {
 }
 
 const splitLines = (value) =>
-  String(value || '')
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean)
+  String(value ?? '').split('\n')
 
-const joinLines = (items) => (items || []).filter(Boolean).join('\n')
+const joinLines = (items) => (items || []).map((item) => String(item ?? '')).join('\n')
 
 const getDefaultDraft = ({ subjectName = '', examName = '', academicYear = getCurrentYear() }) => ({
   report_title: `DIALOG PRESTASI PANITIA ${subjectName || 'SUBJEK'} ${academicYear}`,
