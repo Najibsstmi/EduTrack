@@ -132,6 +132,208 @@ body.has-install-prompt {
     display: none !important;
   }
 
+  .dpp-preview-open {
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .dpp-report-document {
+    display: block !important;
+    width: 190mm !important;
+    max-width: 190mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    color: #0f172a !important;
+    font-size: 8pt !important;
+    line-height: 1.32 !important;
+  }
+
+  .dpp-report-screen-header {
+    display: none !important;
+  }
+
+  .dpp-report-body {
+    display: block !important;
+    margin-top: 0 !important;
+  }
+
+  .dpp-report-hero,
+  .dpp-report-section {
+    overflow: visible !important;
+    margin: 0 0 4mm !important;
+    padding: 4mm !important;
+    border: 0.7pt solid #dbe3ef !important;
+    border-radius: 2.5mm !important;
+    box-shadow: none !important;
+  }
+
+  .dpp-report-hero {
+    border-color: #312e81 !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .dpp-report-document h3 {
+    margin: 0 !important;
+    font-size: 11pt !important;
+    line-height: 1.22 !important;
+  }
+
+  .dpp-report-hero h3 {
+    margin-top: 2mm !important;
+    font-size: 15pt !important;
+  }
+
+  .dpp-report-document .text-2xl {
+    font-size: 15pt !important;
+  }
+
+  .dpp-report-document .text-lg {
+    font-size: 10pt !important;
+  }
+
+  .dpp-report-document .text-sm {
+    font-size: 8pt !important;
+  }
+
+  .dpp-report-document .text-xs {
+    font-size: 6.8pt !important;
+  }
+
+  .dpp-report-document .leading-6,
+  .dpp-report-document .leading-5 {
+    line-height: 1.32 !important;
+  }
+
+  .dpp-report-document .p-5,
+  .dpp-report-document .p-4,
+  .dpp-report-document .p-3 {
+    padding: 2.5mm !important;
+  }
+
+  .dpp-report-document .px-4,
+  .dpp-report-document .px-3 {
+    padding-right: 1.8mm !important;
+    padding-left: 1.8mm !important;
+  }
+
+  .dpp-report-document .py-3,
+  .dpp-report-document .py-2 {
+    padding-top: 1.4mm !important;
+    padding-bottom: 1.4mm !important;
+  }
+
+  .dpp-report-document .mt-5,
+  .dpp-report-document .mt-4,
+  .dpp-report-document .mt-3,
+  .dpp-report-document .mt-2 {
+    margin-top: 2mm !important;
+  }
+
+  .dpp-report-document p,
+  .dpp-report-document li,
+  .dpp-report-document td,
+  .dpp-report-document th,
+  .dpp-report-document div {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+
+  .dpp-report-document ul {
+    margin-top: 1.5mm !important;
+    padding-left: 4mm !important;
+  }
+
+  .dpp-report-document li {
+    margin: 0 0 0.8mm !important;
+  }
+
+  .dpp-report-document .grid {
+    gap: 2.5mm !important;
+  }
+
+  .dpp-summary-grid {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) !important;
+  }
+
+  .dpp-stat-grid,
+  .dpp-cause-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dpp-traffic-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .dpp-target-list {
+    display: block !important;
+  }
+
+  .dpp-target-list > * {
+    margin-bottom: 3mm !important;
+  }
+
+  .dpp-report-document .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .dpp-report-document table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 7pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .dpp-report-document th,
+  .dpp-report-document td {
+    padding: 1.4mm 1.6mm !important;
+    vertical-align: top !important;
+  }
+
+  .dpp-report-document tr {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .dpp-table-frame,
+  .dpp-what-next-matrix,
+  .dpp-student-target-table {
+    overflow: hidden !important;
+    border-radius: 2mm !important;
+  }
+
+  .dpp-what-next-matrix {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .dpp-student-target-table th:first-child,
+  .dpp-student-target-table td:first-child {
+    width: 7mm !important;
+  }
+
+  .dpp-student-target-table th:nth-child(2),
+  .dpp-student-target-table td:nth-child(2) {
+    width: 50mm !important;
+  }
+
+  .dpp-report-document span.rounded-full {
+    border-radius: 999px !important;
+  }
+
+  .dpp-report-section + .dpp-report-section {
+    break-before: auto;
+    page-break-before: auto;
+  }
+
   .print-reports-root {
     display: block !important;
     width: 190mm;

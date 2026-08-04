@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  BarChart3,
   CalendarDays,
+  ChevronUp,
   Eye,
   FileText,
   Menu,
@@ -195,6 +197,18 @@ const formatPercent = (value) =>
   value === null || value === undefined || Number.isNaN(Number(value))
     ? '-'
     : `${Number(value).toFixed(1)}%`
+
+const formatShortDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+
+  return date.toLocaleDateString('ms-MY', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
 const getGradePointFromScale = (gradeName, gradeLabel, gradeScales) => {
   const gradeKey = normalizeText(gradeName)
@@ -422,7 +436,9 @@ export default function PerformanceDialogPage() {
   const [targets, setTargets] = useState([])
   const [gradeScales, setGradeScales] = useState([])
   const [examConfigs, setExamConfigs] = useState([])
+  const [savedReports, setSavedReports] = useState([])
   const [levelMappings, setLevelMappings] = useState([])
+  const [dialogFormOpen, setDialogFormOpen] = useState(false)
   const [selectedGrade, setSelectedGrade] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('all')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
@@ -494,6 +510,7 @@ export default function PerformanceDialogPage() {
         targetResult,
         gradeScaleResult,
         examConfigResult,
+        reportResult,
         schoolResult,
         loadedLevelMappings,
       ] = await Promise.all([
@@ -547,6 +564,33 @@ export default function PerformanceDialogPage() {
           .eq('school_id', profile.school_id)
           .eq('academic_year', Number(academicYear)),
         supabase
+          .from('performance_dialog_reports')
+          .select(`
+            id,
+            academic_year,
+            grade_label,
+            class_id,
+            subject_id,
+            exam_key,
+            exam_name,
+            report_title,
+            issue_statement,
+            teacher_names,
+            problem_causes,
+            target_group_note,
+            traffic_bands,
+            student_interventions,
+            teacher_interventions,
+            scoreboard_rows,
+            implementation_window,
+            notes,
+            created_at,
+            updated_at
+          `)
+          .eq('school_id', profile.school_id)
+          .eq('academic_year', Number(academicYear))
+          .order('updated_at', { ascending: false }),
+        supabase
           .from('schools')
           .select('id, school_name, school_code')
           .eq('id', profile.school_id)
@@ -564,6 +608,7 @@ export default function PerformanceDialogPage() {
       if (targetResult.error) throw targetResult.error
       if (gradeScaleResult.error) throw gradeScaleResult.error
       if (examConfigResult.error) throw examConfigResult.error
+      if (reportResult.error) throw reportResult.error
       if (schoolResult.error) throw schoolResult.error
 
       const normalizedSubjects = normalizeSubjectRows(subjectResult.data || [])
@@ -576,6 +621,7 @@ export default function PerformanceDialogPage() {
       setTargets(targetResult.data || [])
       setGradeScales(gradeScaleResult.data || [])
       setExamConfigs(examConfigResult.data || [])
+      setSavedReports(reportResult.data || [])
       setSchoolInfo(schoolResult.data || null)
       setLevelMappings(loadedLevelMappings || [])
 
@@ -630,6 +676,96 @@ export default function PerformanceDialogPage() {
         ),
     [selectedGrade, subjects]
   )
+
+  const subjectById = useMemo(
+    () => new Map(subjects.map((subject) => [String(subject.id), subject])),
+    [subjects]
+  )
+
+  const classById = useMemo(
+    () => new Map(classes.map((classRow) => [String(classRow.id), classRow])),
+    [classes]
+  )
+
+  const reportDashboard = useMemo(() => {
+    const reports = [...savedReports]
+      .map((report) => {
+        const subject = subjectById.get(String(report.subject_id))
+        const classRow = report.class_id ? classById.get(String(report.class_id)) : null
+        const updatedAt = report.updated_at || report.created_at
+
+        return {
+          ...report,
+          subjectName: subject?.subject_name || 'Subjek tidak ditemui',
+          gradeLabel: report.grade_label || subject?.tingkatan || '',
+          classLabel: report.class_id
+            ? getDisplayClassLabel(classRow?.tingkatan, classRow?.class_name, levelMappings)
+            : 'Semua Kelas',
+          examLabel: report.exam_name || getDppExamDisplayName(report.exam_key, report.exam_key),
+          updatedAt,
+          updatedTime: updatedAt ? new Date(updatedAt).getTime() : 0,
+        }
+      })
+      .sort((a, b) => b.updatedTime - a.updatedTime)
+
+    const bySubject = new Map()
+
+    reports.forEach((report) => {
+      const subjectKey = String(report.subject_id || report.subjectName)
+      const current =
+        bySubject.get(subjectKey) ||
+        {
+          subjectId: report.subject_id,
+          subjectName: report.subjectName,
+          count: 0,
+          gradeLabels: new Set(),
+          examLabels: new Set(),
+          latestReport: null,
+        }
+
+      current.count += 1
+      if (report.gradeLabel) {
+        current.gradeLabels.add(getDisplayLevel(report.gradeLabel, levelMappings))
+      }
+      if (report.examLabel) current.examLabels.add(report.examLabel)
+      if (!current.latestReport || report.updatedTime > current.latestReport.updatedTime) {
+        current.latestReport = report
+      }
+
+      bySubject.set(subjectKey, current)
+    })
+
+    const subjectRows = [...bySubject.values()]
+      .map((row) => ({
+        ...row,
+        gradeLabels: [...row.gradeLabels],
+        examLabels: [...row.examLabels],
+      }))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          String(a.subjectName || '').localeCompare(String(b.subjectName || ''), 'ms', {
+            sensitivity: 'base',
+          })
+      )
+
+    const totalInterventions = reports.reduce((total, report) => {
+      const studentInterventions = Object.values(report.student_interventions || {}).reduce(
+        (sum, rows) => sum + getFilledInterventions(rows).length,
+        0
+      )
+      return total + studentInterventions + getFilledInterventions(report.teacher_interventions).length
+    }, 0)
+
+    return {
+      reports,
+      subjectRows,
+      totalReports: reports.length,
+      totalSubjects: subjectRows.length,
+      totalInterventions,
+      latestReport: reports[0] || null,
+    }
+  }, [classById, levelMappings, savedReports, subjectById])
 
   const examOptions = useMemo(
     () => {
@@ -1125,6 +1261,14 @@ export default function PerformanceDialogPage() {
 
       setReportRecord(result.data)
       setDraft(normalizeDraft(result.data, reportDefaults))
+      setSavedReports((current) => {
+        const next = [result.data, ...current.filter((report) => report.id !== result.data.id)]
+        return next.sort(
+          (a, b) =>
+            new Date(b.updated_at || b.created_at || 0).getTime() -
+            new Date(a.updated_at || a.created_at || 0).getTime()
+        )
+      })
       setSuccessMessage('Laporan Dialog Prestasi berjaya disimpan.')
     } catch (error) {
       console.error(error)
@@ -1136,6 +1280,45 @@ export default function PerformanceDialogPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const scrollToDialogForm = () => {
+    window.setTimeout(() => {
+      document.getElementById('dpp-form-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 0)
+  }
+
+  const toggleDialogForm = () => {
+    const nextOpen = !dialogFormOpen
+    setDialogFormOpen(nextOpen)
+    setMobileActionsOpen(false)
+    if (nextOpen) scrollToDialogForm()
+  }
+
+  const openReportForEditing = (report) => {
+    if (!report) return
+
+    const subject = subjectById.get(String(report.subject_id))
+    const canonicalExamKey = getCanonicalDppExamKey(report.exam_key)
+    const defaults = getDefaultDraft({
+      subjectName: subject?.subject_name || report.subjectName || '',
+      examName: report.exam_name || getDppExamDisplayName(canonicalExamKey, report.exam_key),
+      academicYear: report.academic_year || academicYear || getCurrentYear(),
+    })
+
+    setDialogFormOpen(true)
+    setMobileActionsOpen(false)
+    setAcademicYear(String(report.academic_year || academicYear))
+    setSelectedGrade(report.grade_label || '')
+    setSelectedClassId(report.class_id || 'all')
+    setSelectedSubjectId(report.subject_id || '')
+    setSelectedExamKey(canonicalExamKey)
+    setReportRecord(report)
+    setDraft(normalizeDraft(report, defaults))
+    scrollToDialogForm()
   }
 
   const printPreview = () => {
@@ -1195,29 +1378,47 @@ export default function PerformanceDialogPage() {
               >
                 <button
                   type="button"
-                  onClick={saveReportFromAction}
-                  disabled={saving}
-                  className="inline-flex w-full shrink-0 items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+                  onClick={toggleDialogForm}
+                  aria-expanded={dialogFormOpen}
+                  aria-controls="dpp-form-panel"
+                  className="inline-flex w-full shrink-0 items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 sm:w-auto"
                 >
-                  <Save className="h-4 w-4" aria-hidden="true" />
-                  {saving ? 'Menyimpan...' : 'Simpan Laporan'}
+                  {dialogFormOpen ? (
+                    <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {dialogFormOpen ? 'Tutup Borang DPP' : 'Tambah Dialog Prestasi'}
                 </button>
-                <button
-                  type="button"
-                  onClick={openPreview}
-                  className="inline-flex w-full shrink-0 items-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 sm:w-auto"
-                >
-                  <Eye className="h-4 w-4" aria-hidden="true" />
-                  Preview
-                </button>
-                <button
-                  type="button"
-                  onClick={printPreview}
-                  className="inline-flex w-full shrink-0 items-center gap-2 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 sm:w-auto"
-                >
-                  <Printer className="h-4 w-4" aria-hidden="true" />
-                  Cetak
-                </button>
+                {dialogFormOpen ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={saveReportFromAction}
+                      disabled={saving}
+                      className="inline-flex w-full shrink-0 items-center gap-2 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 sm:w-auto"
+                    >
+                      <Save className="h-4 w-4" aria-hidden="true" />
+                      {saving ? 'Menyimpan...' : 'Simpan Laporan'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openPreview}
+                      className="inline-flex w-full shrink-0 items-center gap-2 border border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 sm:w-auto"
+                    >
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                      Preview
+                    </button>
+                    <button
+                      type="button"
+                      onClick={printPreview}
+                      className="inline-flex w-full shrink-0 items-center gap-2 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 sm:w-auto"
+                    >
+                      <Printer className="h-4 w-4" aria-hidden="true" />
+                      Cetak
+                    </button>
+                  </>
+                ) : null}
               </div>
             </div>
           }
@@ -1234,103 +1435,112 @@ export default function PerformanceDialogPage() {
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold text-slate-950">Laporan Dialog Prestasi Panitia</h1>
-              <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
-                Jana DPP pasca peperiksaan mengikut subjek: punca masalah, kumpulan sasaran,
-                traffic light, intervensi murid/guru dan scoreboard semasa.
-              </p>
-            </div>
-            <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-              Tahun akademik: {academicYear}
-            </span>
-          </div>
+        <DppSubjectReportAnalysis
+          academicYear={academicYear}
+          contextLoading={contextLoading}
+          dashboard={reportDashboard}
+          onOpenReport={openReportForEditing}
+        />
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-5">
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-              Tahun
-              <input
-                type="number"
-                value={academicYear}
-                onChange={(event) => {
-                  setAcademicYear(event.target.value)
-                  setSelectedGrade('')
-                  setSelectedClassId('all')
-                }}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
-              />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-              Tingkatan
-              <select
-                value={selectedGrade}
-                onChange={(event) => {
-                  setSelectedGrade(event.target.value)
-                  setSelectedClassId('all')
-                }}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
-              >
-                <option value="">Pilih Tingkatan</option>
-                {availableGrades.map((grade) => (
-                  <option key={grade} value={grade}>
-                    {getDisplayLevel(grade, levelMappings)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-              Kelas
-              <select
-                value={selectedClassId}
-                onChange={(event) => setSelectedClassId(event.target.value)}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
-              >
-                <option value="all">Semua Kelas</option>
-                {availableClasses.map((classRow) => (
-                  <option key={classRow.id} value={classRow.id}>
-                    {getDisplayClassLabel(classRow.tingkatan, classRow.class_name, levelMappings)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-              Subjek
-              <select
-                value={selectedSubjectId}
-                onChange={(event) => setSelectedSubjectId(event.target.value)}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
-              >
-                <option value="">Pilih Subjek</option>
-                {availableSubjects.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.subject_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-              Peperiksaan
-              <select
-                value={selectedExamKey}
-                onChange={(event) => setSelectedExamKey(event.target.value)}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
-              >
-                <option value="">Pilih Peperiksaan</option>
-                {examOptions.map((exam) => (
-                  <option key={exam.key} value={exam.key}>
-                    {exam.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+        {dialogFormOpen ? (
+          <div id="dpp-form-panel" className="space-y-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-xl font-bold text-slate-950">Laporan Dialog Prestasi Panitia</h1>
+                  <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
+                    Jana DPP pasca peperiksaan mengikut subjek: punca masalah, kumpulan sasaran,
+                    traffic light, intervensi murid/guru dan scoreboard semasa.
+                  </p>
+                </div>
+                <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                  Tahun akademik: {academicYear}
+                </span>
+              </div>
 
-          {contextLoading ? (
-            <div className="mt-4 text-sm text-slate-500">Memuatkan data tahun akademik...</div>
-          ) : null}
-        </section>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-5">
+                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                  Tahun
+                  <input
+                    type="number"
+                    value={academicYear}
+                    onChange={(event) => {
+                      setAcademicYear(event.target.value)
+                      setSelectedGrade('')
+                      setSelectedClassId('all')
+                    }}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                  Tingkatan
+                  <select
+                    value={selectedGrade}
+                    onChange={(event) => {
+                      setSelectedGrade(event.target.value)
+                      setSelectedClassId('all')
+                    }}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                  >
+                    <option value="">Pilih Tingkatan</option>
+                    {availableGrades.map((grade) => (
+                      <option key={grade} value={grade}>
+                        {getDisplayLevel(grade, levelMappings)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                  Kelas
+                  <select
+                    value={selectedClassId}
+                    onChange={(event) => setSelectedClassId(event.target.value)}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                  >
+                    <option value="all">Semua Kelas</option>
+                    {availableClasses.map((classRow) => (
+                      <option key={classRow.id} value={classRow.id}>
+                        {getDisplayClassLabel(classRow.tingkatan, classRow.class_name, levelMappings)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                  Subjek
+                  <select
+                    value={selectedSubjectId}
+                    onChange={(event) => setSelectedSubjectId(event.target.value)}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                  >
+                    <option value="">Pilih Subjek</option>
+                    {availableSubjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.subject_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+                  Peperiksaan
+                  <select
+                    value={selectedExamKey}
+                    onChange={(event) => setSelectedExamKey(event.target.value)}
+                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                  >
+                    <option value="">Pilih Peperiksaan</option>
+                    {examOptions.map((exam) => (
+                      <option key={exam.key} value={exam.key}>
+                        {exam.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {contextLoading ? (
+                <div className="mt-4 text-sm text-slate-500">Memuatkan data tahun akademik...</div>
+              ) : null}
+            </section>
 
         <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-5">
           <MetricCard title="Bilangan Murid" value={reportAnalytics.totalStudents} detail={`${reportAnalytics.scoredCount} ada markah`} />
@@ -1418,6 +1628,8 @@ export default function PerformanceDialogPage() {
             })
           }
         />
+          </div>
+        ) : null}
       </div>
 
       {previewOpen ? (
@@ -1433,6 +1645,182 @@ export default function PerformanceDialogPage() {
           analytics={reportAnalytics}
         />
       ) : null}
+    </div>
+  )
+}
+
+function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onOpenReport }) {
+  const subjectRows = dashboard.subjectRows || []
+  const reportRows = dashboard.reports || []
+  const maxCount = Math.max(...subjectRows.map((row) => row.count), 1)
+  const latest = dashboard.latestReport
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-indigo-600" aria-hidden="true" />
+            <h1 className="text-xl font-bold text-slate-950">
+              Analisis Dialog Prestasi Mengikut Subjek
+            </h1>
+          </div>
+          <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
+            Ringkasan laporan DPP yang telah disimpan untuk tahun akademik semasa.
+          </p>
+        </div>
+        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+          Tahun akademik: {academicYear}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <DppOverviewStat
+          title="Jumlah Laporan"
+          value={dashboard.totalReports}
+          detail={contextLoading ? 'Memuatkan...' : `Tahun ${academicYear || '-'}`}
+        />
+        <DppOverviewStat
+          title="Subjek Terlibat"
+          value={dashboard.totalSubjects}
+          detail={`${subjectRows.length} subjek ada DPP`}
+          tone="indigo"
+        />
+        <DppOverviewStat
+          title="Jumlah Intervensi"
+          value={dashboard.totalInterventions}
+          detail="Murid dan guru"
+          tone="emerald"
+        />
+        <DppOverviewStat
+          title="Terkini"
+          value={latest?.subjectName || '-'}
+          detail={latest ? `${latest.examLabel} | ${formatShortDate(latest.updatedAt)}` : 'Tiada rekod'}
+          tone="amber"
+        />
+      </div>
+
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <div className="min-w-0 rounded-xl border border-slate-200 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold text-slate-950">Carta Bar Bilangan Laporan</h2>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {subjectRows.length} subjek
+            </span>
+          </div>
+
+          {subjectRows.length ? (
+            <div className="space-y-4">
+              {subjectRows.map((row) => {
+                const width = Math.max(7, (row.count / maxCount) * 100)
+                const meta = [
+                  row.gradeLabels.slice(0, 3).join(', '),
+                  row.examLabels.slice(0, 4).join(', '),
+                ]
+                  .filter(Boolean)
+                  .join(' | ')
+
+                return (
+                  <div key={row.subjectId || row.subjectName} className="space-y-2">
+                    <div className="flex items-start justify-between gap-3 text-sm">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-800">
+                          {row.subjectName}
+                        </div>
+                        <div className="truncate text-xs text-slate-500">{meta || '-'}</div>
+                      </div>
+                      <div className="shrink-0 font-bold tabular-nums text-slate-950">
+                        {row.count}
+                      </div>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-indigo-600"
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
+              Belum ada laporan DPP disimpan untuk tahun akademik ini.
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 rounded-xl border border-slate-200 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold text-slate-950">Laporan Terkini</h2>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {reportRows.length} rekod
+            </span>
+          </div>
+
+          {reportRows.length ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-[620px] w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                    <th className="px-3 py-2 font-semibold">Subjek</th>
+                    <th className="px-3 py-2 font-semibold">Konteks</th>
+                    <th className="px-3 py-2 font-semibold">Peperiksaan</th>
+                    <th className="px-3 py-2 font-semibold">Kemaskini</th>
+                    <th className="px-3 py-2 text-right font-semibold">Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportRows.slice(0, 7).map((report) => (
+                    <tr key={report.id} className="border-b border-slate-100 align-top last:border-b-0">
+                      <td className="px-3 py-3 font-semibold text-slate-900">
+                        {report.subjectName}
+                      </td>
+                      <td className="px-3 py-3 text-slate-600">
+                        {getDisplayLevel(report.gradeLabel)} | {report.classLabel}
+                      </td>
+                      <td className="px-3 py-3 text-slate-600">{report.examLabel}</td>
+                      <td className="px-3 py-3 text-slate-600">
+                        {formatShortDate(report.updatedAt)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onOpenReport(report)}
+                          className="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          Buka
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
+              Tiada laporan terkini untuk dipaparkan.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function DppOverviewStat({ title, value, detail, tone = 'slate' }) {
+  const toneClass = {
+    slate: 'border-slate-200 bg-white text-slate-950',
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-950',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-950',
+    amber: 'border-amber-200 bg-amber-50 text-amber-950',
+  }[tone]
+
+  return (
+    <div className={`rounded-xl border p-4 ${toneClass}`}>
+      <div className="text-xs font-semibold uppercase tracking-wide opacity-70">{title}</div>
+      <div className="mt-2 truncate text-2xl font-bold tabular-nums">{value}</div>
+      <div className="mt-1 truncate text-xs opacity-70">{detail}</div>
     </div>
   )
 }
@@ -1995,8 +2383,8 @@ function DppReportPreview({
   const title = draft.report_title || `DIALOG PRESTASI PANITIA ${subject?.subject_name || ''}`
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="dpp-report-document rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+      <div className="dpp-report-screen-header flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Preview Laporan DPP</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -2009,8 +2397,8 @@ function DppReportPreview({
         </span>
       </div>
 
-      <div className="mt-5 grid gap-4">
-        <article className="rounded-2xl border border-indigo-200 bg-indigo-950 p-5 text-white">
+      <div className="dpp-report-body mt-5 grid gap-4">
+        <article className="dpp-report-hero rounded-2xl border border-indigo-200 bg-indigo-950 p-5 text-white">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-200">
             {schoolInfo?.school_name || 'Nama Sekolah'}
           </div>
@@ -2021,9 +2409,9 @@ function DppReportPreview({
           </p>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 p-4">
+        <article className="dpp-report-section rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold uppercase text-slate-950">Masalah, Punca dan What Next</h3>
-          <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="dpp-summary-grid mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="rounded-xl bg-slate-50 p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Penyataan Masalah
@@ -2031,7 +2419,7 @@ function DppReportPreview({
               <p className="mt-2 text-sm leading-6 text-slate-700">
                 {issueStatement || 'Penyataan masalah belum diisi.'}
               </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <div className="dpp-stat-grid mt-4 grid gap-2 sm:grid-cols-2">
                 <SmallStat label="GPMP" value={formatDecimal(analytics.gpmp)} />
                 <SmallStat
                   label={`Jurang ${analytics.gapTargetLabel || 'Target'}`}
@@ -2043,7 +2431,7 @@ function DppReportPreview({
             </div>
 
             <div className="rounded-xl bg-slate-50 p-4">
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="dpp-cause-grid grid gap-3 md:grid-cols-2">
                 <CauseList title="Punca Guru" rows={draft.problem_causes.teacher} />
                 <CauseList title="Punca Murid" rows={draft.problem_causes.student} />
               </div>
@@ -2060,9 +2448,9 @@ function DppReportPreview({
           />
         </article>
 
-        <article className="rounded-2xl border border-slate-200 p-4">
+        <article className="dpp-report-section rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold uppercase text-slate-950">Traffic Light dan Intervensi</h3>
-          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          <div className="dpp-traffic-grid mt-3 grid gap-3 lg:grid-cols-3">
             {(analytics.bands || []).map((band) => {
               const style = getBandStyle(band.key)
               const rows = analytics.traffic?.[band.key]?.rows || []
@@ -2104,9 +2492,9 @@ function DppReportPreview({
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 p-4">
+        <article className="dpp-report-section rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold uppercase text-slate-950">Scoreboard Semasa</h3>
-          <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+          <div className="dpp-table-frame mt-3 overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-[980px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -2134,9 +2522,9 @@ function DppReportPreview({
           </div>
         </article>
 
-        <article className="rounded-2xl border border-slate-200 p-4">
+        <article className="dpp-report-section rounded-2xl border border-slate-200 p-4">
           <h3 className="font-bold uppercase text-slate-950">Senarai Murid Mengikut Traffic Light</h3>
-          <div className="mt-3 grid gap-4">
+          <div className="dpp-target-list mt-3 grid gap-4">
             {(analytics.bands || []).map((band) => (
                 <StudentTargetTable
                 key={band.key}
@@ -2176,7 +2564,7 @@ function DppWhatNextMatrix({ draft, analytics, issueStatement }) {
   ]
 
   return (
-    <div className="mt-4 overflow-hidden rounded-xl border border-slate-300">
+    <div className="dpp-what-next-matrix mt-4 overflow-hidden rounded-xl border border-slate-300">
       <div className="bg-slate-900 px-4 py-2 text-center text-xs font-black uppercase tracking-[0.12em] text-white">
         Penyataan Masalah
       </div>
@@ -2399,7 +2787,7 @@ function StudentTargetTable({ band, rows, examName, targetKey, targetName }) {
   ]
 
   return (
-    <div className={`rounded-xl border ${style.border}`}>
+    <div className={`dpp-student-target-table rounded-xl border ${style.border}`}>
       <div className={`flex items-center justify-between gap-3 rounded-t-xl ${style.bg} px-4 py-3`}>
         <h4 className={`font-bold ${style.text}`}>{band.label}</h4>
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${style.badge}`}>
