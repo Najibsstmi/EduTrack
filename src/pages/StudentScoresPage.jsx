@@ -401,13 +401,15 @@ const findGradeFromMark = (mark, gradeScales = []) => {
   const numericMark = Number(mark)
   if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
 
+  const gradeLookupMark = Math.round(numericMark)
+
   const matched = gradeScales.find((grade) => {
     const gradeName = String(grade.grade_name ?? grade.grade ?? '').trim().toUpperCase()
     if (gradeName === ABSENT_MARK_TEXT) return false
 
     const min = Number(grade.min_mark ?? grade.min_score ?? 0)
     const max = Number(grade.max_mark ?? grade.max_score ?? 100)
-    return numericMark >= min && numericMark <= max
+    return gradeLookupMark >= min && gradeLookupMark <= max
   })
 
   if (!matched) {

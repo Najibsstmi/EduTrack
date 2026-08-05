@@ -232,6 +232,8 @@ const findGradeFromMark = (mark, gradeLabel, gradeScales) => {
   const numericMark = toNumberOrNull(mark)
   if (numericMark === null) return { grade_name: null, grade_point: null }
 
+  const gradeLookupMark = Math.round(numericMark)
+
   const levelKey = normalizeText(gradeLabel)
   const matched = (gradeScales || []).find((scale) => {
     const scaleGrade = normalizeText(scale.grade_name ?? scale.grade ?? '')
@@ -242,7 +244,7 @@ const findGradeFromMark = (mark, gradeLabel, gradeScales) => {
     )
     const min = Number(scale.min_mark ?? scale.min_score ?? 0)
     const max = Number(scale.max_mark ?? scale.max_score ?? 100)
-    return scaleLevel === levelKey && numericMark >= min && numericMark <= max
+    return scaleLevel === levelKey && gradeLookupMark >= min && gradeLookupMark <= max
   })
 
   if (!matched) return { grade_name: null, grade_point: null }

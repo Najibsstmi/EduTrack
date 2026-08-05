@@ -120,6 +120,8 @@ const findGradeFromMark = (mark, tingkatan, gradeScales) => {
   const numericMark = Number(mark)
   if (Number.isNaN(numericMark)) return { grade_name: null, grade_point: null }
 
+  const gradeLookupMark = Math.round(numericMark)
+
   const form = String(tingkatan || '').trim().toLowerCase()
   const matched = (gradeScales || []).find((item) => {
     const gradeName = String(item.grade_name ?? item.grade ?? '').trim().toUpperCase()
@@ -133,7 +135,7 @@ const findGradeFromMark = (mark, tingkatan, gradeScales) => {
     const min = Number(item.min_mark ?? item.min_score ?? 0)
     const max = Number(item.max_mark ?? item.max_score ?? 100)
 
-    return itemForm === form && numericMark >= min && numericMark <= max
+    return itemForm === form && gradeLookupMark >= min && gradeLookupMark <= max
   })
 
   if (!matched) return { grade_name: null, grade_point: null }
