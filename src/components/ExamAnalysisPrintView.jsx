@@ -264,7 +264,7 @@ function SubjectAnalysisReport({ report }) {
   const summaryRows = report?.summaryRows || []
   const studentRows = report?.studentRows || []
   const analysisColumns = report?.analysisColumns || []
-  const summaryColSpan = 4 + gradeColumns.length + 5
+  const summaryColSpan = 5 + gradeColumns.length + 5
   const studentColSpan = 4 + analysisColumns.length * 2
 
   return (
@@ -286,6 +286,7 @@ function SubjectAnalysisReport({ report }) {
               <th>Jumlah Murid</th>
               <th>Hadir</th>
               <th>Tak Hadir</th>
+              <th>Belum Isi</th>
               {gradeColumns.map((grade) => (
                 <th key={grade}>{grade}</th>
               ))}
@@ -304,6 +305,7 @@ function SubjectAnalysisReport({ report }) {
                   <td>{row.jumlahMurid}</td>
                   <td>{row.hadir}</td>
                   <td>{row.tidakHadir}</td>
+                  <td>{row.belumIsi || 0}</td>
                   {gradeColumns.map((grade) => (
                     <td key={`${row.examKey}-${grade}`}>{row[grade] ?? 0}</td>
                   ))}

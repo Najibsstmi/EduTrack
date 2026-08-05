@@ -2605,6 +2605,25 @@ export default function StudentScoresPage() {
         }
       }
 
+      if (!error && normalizedSelectedExam === 'TOV' && deletedEnrollmentIds.length > 0) {
+        const otrKeys = getOtrKeysForTingkatan(selectedGradeLabel, setupConfig)
+
+        if (otrKeys.length > 0) {
+          const deleteOtrResult = await supabase
+            .from('student_targets')
+            .delete()
+            .eq('school_id', schoolId)
+            .eq('academic_year', currentYear)
+            .eq('class_id', selectedClass)
+            .eq('subject_id', selectedSubject)
+            .eq('generated_by_system', true)
+            .in('student_enrollment_id', deletedEnrollmentIds)
+            .in('target_key', otrKeys)
+
+          error = deleteOtrResult.error
+        }
+      }
+
       if (!error && payload.length > 0) {
         const result = await supabase
           .from('student_scores')
@@ -2613,6 +2632,68 @@ export default function StudentScoresPage() {
           })
 
         error = result.error
+      }
+
+      if (
+        !error &&
+        normalizedSelectedExam === 'TOV' &&
+        payload.length > 0 &&
+        shouldAutoRecalculateOtrs(setupConfig)
+      ) {
+        const enrollmentIds = payload
+          .map((row) => row.student_enrollment_id)
+          .filter(Boolean)
+        const { data: etrRows, error: etrError } = await supabase
+          .from('student_targets')
+          .select('student_enrollment_id, target_mark')
+          .eq('school_id', schoolId)
+          .eq('academic_year', currentYear)
+          .eq('class_id', selectedClass)
+          .eq('subject_id', selectedSubject)
+          .eq('target_key', 'ETR')
+          .in('student_enrollment_id', enrollmentIds)
+
+        if (etrError) {
+          error = etrError
+        } else {
+          const etrByEnrollmentId = new Map(
+            (etrRows || []).map((row) => [row.student_enrollment_id, row.target_mark])
+          )
+          const generatedOtrRows = []
+
+          payload.forEach((scoreRow) => {
+            if (scoreRow.is_absent === true || scoreRow.mark === null || scoreRow.mark === undefined) return
+
+            const etrMark = etrByEnrollmentId.get(scoreRow.student_enrollment_id)
+            if (etrMark === null || etrMark === undefined || etrMark === '') return
+
+            generatedOtrRows.push(
+              ...generateOtrRows({
+                schoolId,
+                academicYear: currentYear,
+                studentEnrollmentId: scoreRow.student_enrollment_id,
+                studentProfileId: scoreRow.student_profile_id,
+                classId: scoreRow.class_id,
+                subjectId: scoreRow.subject_id,
+                enteredBy: profile.id,
+                tingkatan: selectedGradeLabel,
+                tovMark: scoreRow.mark,
+                etrMark,
+                setupConfig,
+              })
+            )
+          })
+
+          if (generatedOtrRows.length > 0) {
+            const otrResult = await supabase
+              .from('student_targets')
+              .upsert(generatedOtrRows, {
+                onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+              })
+
+            error = otrResult.error
+          }
+        }
       }
     }
 

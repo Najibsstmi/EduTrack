@@ -9,6 +9,11 @@ import {
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
 import {
+  generateOtrMarks,
+  getOtrKeysForTingkatan,
+  shouldAutoRecalculateOtrs,
+} from '../lib/otrGeneration.js'
+import {
   fetchSchoolLevelLabels,
   getDisplayLevel,
   sortLevelsByDisplayOrder,
@@ -88,6 +93,11 @@ const formatMetricMark = (metric) =>
 
 const formatMetricGrade = (metric) =>
   metric?.is_absent === true ? 'TH' : metric?.grade_name ?? '-'
+
+const hasMetricValue = (metric) =>
+  metric?.is_absent === true ||
+  (metric?.mark !== null && metric?.mark !== undefined && metric?.mark !== '') ||
+  (metric?.grade_name !== null && metric?.grade_name !== undefined && metric?.grade_name !== '')
 
 const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
   const grade = String(gradeName || '').trim().toUpperCase()
@@ -288,6 +298,7 @@ export default function AnalysisPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [selectedClassExamKey, setSelectedClassExamKey] = useState('')
   const [isPrintingAnalysis, setIsPrintingAnalysis] = useState(false)
+  const [repairingOtr, setRepairingOtr] = useState(false)
 
   const dashboardPath = getDashboardPath(profile)
   const isSubjectPerformancePage = location.pathname === '/analysis/subject'
@@ -375,7 +386,8 @@ export default function AnalysisPage() {
           )
         `)
         .eq('school_id', schoolId)
-        .eq('academic_year', currentYear),
+        .eq('academic_year', currentYear)
+        .eq('is_active', true),
 
       supabase
         .from('student_scores')
@@ -900,8 +912,8 @@ export default function AnalysisPage() {
     ;(examScores || [])
       .filter(
         (score) =>
-          (!selectedSubjectId || score.subject_id === selectedSubjectId) &&
-          selectedEnrollmentIds.has(score.student_enrollment_id)
+          (!selectedSubjectId || String(score.subject_id) === String(selectedSubjectId)) &&
+          selectedEnrollmentIds.has(String(score.student_enrollment_id))
       )
       .forEach((score) => {
         addExam({ key: score.exam_key, name: score.exam_key })
@@ -910,8 +922,8 @@ export default function AnalysisPage() {
     ;(examTargets || [])
       .filter(
         (target) =>
-          (!selectedSubjectId || target.subject_id === selectedSubjectId) &&
-          selectedEnrollmentIds.has(target.student_enrollment_id)
+          (!selectedSubjectId || String(target.subject_id) === String(selectedSubjectId)) &&
+          selectedEnrollmentIds.has(String(target.student_enrollment_id))
       )
       .forEach((target) => {
         addExam({ key: target.target_key, name: target.target_key })
@@ -954,14 +966,14 @@ export default function AnalysisPage() {
     return filteredStudents.map((student) => {
       const studentScores = examScores.filter(
         (s) =>
-          s.student_enrollment_id === student.enrollment_id &&
-          s.subject_id === selectedSubjectId
+          String(s.student_enrollment_id) === String(student.enrollment_id) &&
+          String(s.subject_id) === String(selectedSubjectId)
       )
 
       const studentTargets = examTargets.filter(
         (t) =>
-          t.student_enrollment_id === student.enrollment_id &&
-          t.subject_id === selectedSubjectId
+          String(t.student_enrollment_id) === String(student.enrollment_id) &&
+          String(t.subject_id) === String(selectedSubjectId)
       )
 
       const analysis = {}
@@ -1058,6 +1070,7 @@ export default function AnalysisPage() {
       const examData = mergedRows.map((row) => getExamMetric(row.analysis, examKey))
 
       const grades = examData.map((item) => item.grade_name || null)
+      const belumIsi = examData.filter((item) => !hasMetricValue(item)).length
 
       const gradeCounts = {}
       gradeColumns.forEach((grade) => {
@@ -1099,6 +1112,7 @@ export default function AnalysisPage() {
         jumlahMurid,
         hadir,
         tidakHadir,
+        belumIsi,
         ...gradeCounts,
         lulus,
         peratusLulus: hadir ? Number(((lulus / hadir) * 100).toFixed(2)) : 0,
@@ -1122,6 +1136,162 @@ export default function AnalysisPage() {
     classExamOptions.find((exam) => exam.key === selectedClassExamKey)?.name ||
     selectedClassExamKey ||
     '-'
+
+  const missingSummaryRows = useMemo(
+    () => summaryTableRows.filter((row) => Number(row.belumIsi || 0) > 0),
+    [summaryTableRows]
+  )
+  const missingOtrKeys = useMemo(
+    () => missingSummaryRows
+      .map((row) => String(row.examKey || '').trim().toUpperCase())
+      .filter((key) => key.startsWith('OTR')),
+    [missingSummaryRows]
+  )
+  const canRegenerateMissingOtr = Boolean(
+    profile?.id &&
+    profile?.school_id &&
+    selectedSubjectId &&
+    missingOtrKeys.length > 0 &&
+    shouldAutoRecalculateOtrs(setupConfig)
+  )
+
+  const handleRegenerateMissingOtr = useCallback(async () => {
+    if (!canRegenerateMissingOtr || repairingOtr) return
+
+    setRepairingOtr(true)
+
+    try {
+      const academicYearForTargets = setupConfig?.current_academic_year || new Date().getFullYear()
+      const missingOtrKeySet = new Set(missingOtrKeys)
+      const enrollmentIds = new Set(filteredStudents.map((student) => String(student.enrollment_id)))
+      const tovByEnrollmentId = new Map(
+        scores
+          .filter(
+            (score) =>
+              String(score.subject_id) === String(selectedSubjectId) &&
+              enrollmentIds.has(String(score.student_enrollment_id)) &&
+              normalizeAnalysisExamKey(score.exam_key) === 'TOV' &&
+              score.is_absent !== true &&
+              score.mark !== null &&
+              score.mark !== undefined &&
+              score.mark !== ''
+          )
+          .map((score) => [String(score.student_enrollment_id), score.mark])
+      )
+      const etrByEnrollmentId = new Map(
+        targets
+          .filter(
+            (target) =>
+              String(target.subject_id) === String(selectedSubjectId) &&
+              enrollmentIds.has(String(target.student_enrollment_id)) &&
+              normalizeAnalysisExamKey(target.target_key) === 'ETR' &&
+              target.target_mark !== null &&
+              target.target_mark !== undefined &&
+              target.target_mark !== ''
+          )
+          .map((target) => [String(target.student_enrollment_id), target.target_mark])
+      )
+      const existingFilledOtrKeys = new Set(
+        targets
+          .filter(
+            (target) =>
+              String(target.subject_id) === String(selectedSubjectId) &&
+              enrollmentIds.has(String(target.student_enrollment_id)) &&
+              missingOtrKeySet.has(normalizeAnalysisExamKey(target.target_key)) &&
+              hasMetricValue({ mark: target.target_mark, grade_name: target.grade_name })
+          )
+          .map(
+            (target) =>
+              `${target.student_enrollment_id}__${target.subject_id}__${normalizeAnalysisExamKey(target.target_key)}`
+          )
+      )
+      const generatedRows = []
+      const updatedAt = new Date().toISOString()
+
+      filteredStudents.forEach((student) => {
+        const tovMark = tovByEnrollmentId.get(String(student.enrollment_id))
+        const etrMark = etrByEnrollmentId.get(String(student.enrollment_id))
+        if (tovMark === undefined || etrMark === undefined) return
+
+        const generatedMarks = generateOtrMarks({
+          tingkatan: student.tingkatan,
+          tovMark,
+          etrMark,
+          setupConfig,
+          otrKeys: getOtrKeysForTingkatan(student.tingkatan, setupConfig),
+        })
+
+        Object.entries(generatedMarks).forEach(([targetKey, targetMark]) => {
+          const normalizedTargetKey = normalizeAnalysisExamKey(targetKey)
+          const rowKey = `${student.enrollment_id}__${selectedSubjectId}__${normalizedTargetKey}`
+          if (!missingOtrKeySet.has(normalizedTargetKey) || existingFilledOtrKeys.has(rowKey)) return
+
+          generatedRows.push({
+            school_id: profile.school_id,
+            academic_year: academicYearForTargets,
+            student_enrollment_id: student.enrollment_id,
+            student_profile_id: student.student_profile_id,
+            class_id: student.class_id,
+            subject_id: selectedSubjectId,
+            target_key: normalizedTargetKey,
+            target_mark: targetMark,
+            grade_name: null,
+            grade_point: null,
+            generated_by_system: true,
+            manually_adjusted: false,
+            remarks: 'Dijana semula daripada TOV dan ETR',
+            entered_by: profile.id,
+            updated_at: updatedAt,
+          })
+        })
+      })
+
+      if (!generatedRows.length) {
+        alert('Tiada OTR boleh dijana. Pastikan TOV dan ETR murid lengkap dahulu.')
+        return
+      }
+
+      const { data: savedRows, error } = await supabase
+        .from('student_targets')
+        .upsert(generatedRows, {
+          onConflict: 'student_enrollment_id,subject_id,academic_year,target_key',
+        })
+        .select('*')
+
+      if (error) throw error
+
+      const savedKeySet = new Set(
+        (savedRows || generatedRows).map(
+          (row) => `${row.student_enrollment_id}__${row.subject_id}__${normalizeAnalysisExamKey(row.target_key)}`
+        )
+      )
+      setTargets((current) => [
+        ...(savedRows || generatedRows),
+        ...current.filter(
+          (row) =>
+            !savedKeySet.has(
+              `${row.student_enrollment_id}__${row.subject_id}__${normalizeAnalysisExamKey(row.target_key)}`
+            )
+        ),
+      ])
+      alert(`${savedRows?.length || generatedRows.length} rekod OTR berjaya dijana semula.`)
+    } catch (error) {
+      console.error('regenerate missing OTR error:', error)
+      alert(error.message || 'Gagal jana semula OTR.')
+    } finally {
+      setRepairingOtr(false)
+    }
+  }, [
+    canRegenerateMissingOtr,
+    filteredStudents,
+    missingOtrKeys,
+    profile,
+    repairingOtr,
+    scores,
+    selectedSubjectId,
+    setupConfig,
+    targets,
+  ])
 
   const canPrintAnalysis = isSubjectPerformancePage
     ? Boolean(selectedSubjectId && !loading)
@@ -1610,6 +1780,27 @@ export default function AnalysisPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm lg:col-span-2">
             <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">Ringkasan</h2>
 
+            {missingSummaryRows.length ? (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <div className="font-semibold">Ada rekod belum isi untuk paparan ini.</div>
+                <div className="mt-1">
+                  {missingSummaryRows
+                    .map((row) => `${row.examLabel}: ${row.belumIsi} murid`)
+                    .join(' | ')}
+                </div>
+                {missingOtrKeys.length ? (
+                  <button
+                    type="button"
+                    onClick={handleRegenerateMissingOtr}
+                    disabled={!canRegenerateMissingOtr || repairingOtr}
+                    className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {repairingOtr ? 'Menjana OTR...' : 'Jana Semula OTR'}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
             {summaryTableRows.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 p-4 text-slate-500">
                 Tiada data ringkasan untuk paparan ini.
@@ -1623,6 +1814,7 @@ export default function AnalysisPage() {
                       <th className="border-b px-3 py-3 text-left font-semibold">Jumlah Murid</th>
                       <th className="border-b px-3 py-3 text-left font-semibold">Hadir</th>
                       <th className="border-b px-3 py-3 text-left font-semibold">Tak Hadir</th>
+                      <th className="border-b px-3 py-3 text-left font-semibold">Belum Isi</th>
                       {gradeColumns.map((grade) => (
                         <th key={grade} className="border-b px-3 py-3 text-left font-semibold">
                           {grade}
@@ -1642,6 +1834,9 @@ export default function AnalysisPage() {
                         <td className="px-3 py-3">{row.jumlahMurid}</td>
                         <td className="px-3 py-3">{row.hadir}</td>
                         <td className="px-3 py-3">{row.tidakHadir}</td>
+                        <td className={`px-3 py-3 font-semibold ${row.belumIsi ? 'text-amber-700' : 'text-slate-500'}`}>
+                          {row.belumIsi || 0}
+                        </td>
                         {gradeColumns.map((grade) => (
                           <td key={`${row.examKey}-${grade}`} className="px-3 py-3">
                             {row[grade] ?? 0}
