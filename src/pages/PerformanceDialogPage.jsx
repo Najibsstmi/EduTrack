@@ -780,6 +780,7 @@ export default function PerformanceDialogPage() {
 
         return {
           ...report,
+          subjectKey: normalizeText(subject?.subject_name || report.subjectName || report.subject_id),
           subjectName: subject?.subject_name || 'Subjek tidak ditemui',
           gradeLabel: report.grade_label || subject?.tingkatan || '',
           classLabel: report.class_id
@@ -795,11 +796,11 @@ export default function PerformanceDialogPage() {
     const bySubject = new Map()
 
     reports.forEach((report) => {
-      const subjectKey = String(report.subject_id || report.subjectName)
+      const subjectKey = report.subjectKey || normalizeText(report.subjectName || report.subject_id)
       const current =
         bySubject.get(subjectKey) ||
         {
-          subjectId: report.subject_id,
+          subjectKey,
           subjectName: report.subjectName,
           count: 0,
           gradeLabels: new Set(),
@@ -833,6 +834,39 @@ export default function PerformanceDialogPage() {
           })
       )
 
+    const subjectOptionMap = new Map()
+
+    subjects.forEach((subject) => {
+      const subjectName = subject.subject_name || ''
+      const subjectKey = normalizeText(subjectName)
+      if (!subjectKey || subjectOptionMap.has(subjectKey)) return
+
+      subjectOptionMap.set(subjectKey, {
+        key: subjectKey,
+        name: subjectName,
+        count: 0,
+      })
+    })
+
+    subjectRows.forEach((row) => {
+      const subjectKey = row.subjectKey || normalizeText(row.subjectName)
+      if (!subjectKey) return
+
+      const current = subjectOptionMap.get(subjectKey)
+      subjectOptionMap.set(subjectKey, {
+        key: subjectKey,
+        name: current?.name || row.subjectName,
+        count: row.count,
+      })
+    })
+
+    const subjectOptions = [...subjectOptionMap.values()].sort(
+      (a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'ms', {
+          sensitivity: 'base',
+        })
+    )
+
     const totalInterventions = reports.reduce((total, report) => {
       const studentInterventions = Object.values(report.student_interventions || {}).reduce(
         (sum, rows) => sum + getFilledInterventions(rows).length,
@@ -844,12 +878,13 @@ export default function PerformanceDialogPage() {
     return {
       reports,
       subjectRows,
+      subjectOptions,
       totalReports: reports.length,
       totalSubjects: subjectRows.length,
       totalInterventions,
       latestReport: reports[0] || null,
     }
-  }, [classById, levelMappings, savedReports, subjectById])
+  }, [classById, levelMappings, savedReports, subjectById, subjects])
 
   const examOptions = useMemo(
     () => {
@@ -1928,12 +1963,13 @@ export default function PerformanceDialogPage() {
 
 function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onOpenReport }) {
   const subjectRows = dashboard.subjectRows || EMPTY_DPP_ROWS
+  const subjectOptions = dashboard.subjectOptions || EMPTY_DPP_ROWS
   const allReportRows = dashboard.reports || EMPTY_DPP_ROWS
   const [selectedSubjectKey, setSelectedSubjectKey] = useState('all')
   const selectedSubjectExists =
     selectedSubjectKey === 'all' ||
-    subjectRows.some(
-      (row) => getDppSubjectFilterKey(row.subjectId || row.subjectName) === selectedSubjectKey
+    subjectOptions.some(
+      (option) => getDppSubjectFilterKey(option.key || option.name) === selectedSubjectKey
     )
   const activeSubjectKey = selectedSubjectExists ? selectedSubjectKey : 'all'
 
@@ -1941,14 +1977,14 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
     activeSubjectKey === 'all'
       ? subjectRows
       : subjectRows.filter(
-          (row) => getDppSubjectFilterKey(row.subjectId || row.subjectName) === activeSubjectKey
+          (row) => getDppSubjectFilterKey(row.subjectKey || row.subjectName) === activeSubjectKey
         )
   const reportRows =
     activeSubjectKey === 'all'
       ? allReportRows
       : allReportRows.filter(
           (report) =>
-            getDppSubjectFilterKey(report.subject_id || report.subjectName) === activeSubjectKey
+            getDppSubjectFilterKey(report.subjectKey || report.subjectName) === activeSubjectKey
         )
   const maxCount = Math.max(...filteredSubjectRows.map((row) => row.count), 1)
   const latest = reportRows[0] || null
@@ -1959,11 +1995,19 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
     )
     return total + studentInterventions + getFilledInterventions(report.teacher_interventions).length
   }, 0)
-  const selectedSubjectRow = subjectRows.find(
-    (row) => getDppSubjectFilterKey(row.subjectId || row.subjectName) === activeSubjectKey
+  const selectedSubjectOption = subjectOptions.find(
+    (option) => getDppSubjectFilterKey(option.key || option.name) === activeSubjectKey
   )
   const subjectFilterLabel =
-    activeSubjectKey === 'all' ? 'Semua Subjek' : selectedSubjectRow?.subjectName || 'Subjek'
+    activeSubjectKey === 'all' ? 'Semua Subjek' : selectedSubjectOption?.name || 'Subjek'
+  const emptyChartText =
+    activeSubjectKey === 'all'
+      ? 'Belum ada laporan DPP disimpan untuk tahun akademik ini.'
+      : `Belum ada DPP untuk ${subjectFilterLabel}. Gunakan Tambah Dialog Prestasi untuk mula buat DPP subjek ini.`
+  const emptyReportText =
+    activeSubjectKey === 'all'
+      ? 'Tiada laporan terkini untuk dipaparkan.'
+      : `Tiada rekod DPP untuk ${subjectFilterLabel}.`
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
@@ -1985,51 +2029,25 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
       </div>
 
       <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Cari DPP Mengikut Subjek
-          </div>
-          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,360px)_auto] md:items-end md:justify-between">
+          <label className="grid gap-1.5 text-sm font-semibold text-slate-700">
+            Pilih Subjek DPP
+            <select
+              value={activeSubjectKey}
+              onChange={(event) => setSelectedSubjectKey(event.target.value)}
+              className="min-w-0 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-normal text-slate-900 outline-none focus:border-indigo-500"
+            >
+              <option value="all">Semua Subjek ({dashboard.totalReports})</option>
+              {subjectOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.name} ({option.count || 0})
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
             {subjectFilterLabel}
           </span>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <button
-            type="button"
-            onClick={() => setSelectedSubjectKey('all')}
-            className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${
-              activeSubjectKey === 'all'
-                ? 'border-slate-900 bg-slate-900 text-white'
-                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-            }`}
-          >
-            Semua Subjek
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
-              {dashboard.totalReports}
-            </span>
-          </button>
-          {subjectRows.map((row) => {
-            const key = getDppSubjectFilterKey(row.subjectId || row.subjectName)
-            const isActive = activeSubjectKey === key
-
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSelectedSubjectKey(key)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${
-                  isActive
-                    ? 'border-indigo-700 bg-indigo-700 text-white'
-                    : 'border-indigo-100 bg-white text-indigo-800 hover:bg-indigo-50'
-                }`}
-              >
-                {row.subjectName}
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                  {row.count}
-                </span>
-              </button>
-            )
-          })}
         </div>
       </div>
 
@@ -2040,9 +2058,13 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
           detail={contextLoading ? 'Memuatkan...' : `Tahun ${academicYear || '-'}`}
         />
         <DppOverviewStat
-          title="Subjek Terlibat"
-          value={filteredSubjectRows.length}
-          detail={`${filteredSubjectRows.length} subjek dipaparkan`}
+          title={activeSubjectKey === 'all' ? 'Subjek Terlibat' : 'Subjek Dipilih'}
+          value={activeSubjectKey === 'all' ? filteredSubjectRows.length : 1}
+          detail={
+            activeSubjectKey === 'all'
+              ? `${filteredSubjectRows.length} subjek ada DPP`
+              : subjectFilterLabel
+          }
           tone="indigo"
         />
         <DppOverviewStat
@@ -2080,7 +2102,7 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
                   .join(' | ')
 
                 return (
-                  <div key={row.subjectId || row.subjectName} className="space-y-2">
+                  <div key={row.subjectKey || row.subjectName} className="space-y-2">
                     <div className="flex items-start justify-between gap-3 text-sm">
                       <div className="min-w-0">
                         <div className="truncate font-semibold text-slate-800">
@@ -2104,7 +2126,7 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
-              Belum ada laporan DPP disimpan untuk tahun akademik ini.
+              {emptyChartText}
             </div>
           )}
         </div>
@@ -2158,7 +2180,7 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">
-              Tiada laporan terkini untuk dipaparkan.
+              {emptyReportText}
             </div>
           )}
         </div>

@@ -1,11 +1,126 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { forceCleanLogout, isRefreshTokenError } from '../lib/authSession'
 import { formatSubjectName } from '../lib/subjectLabels.js'
 
+const TEACHER_NAVIGATION = [
+  { key: 'dashboard', label: 'Dashboard', path: '/home' },
+  {
+    key: 'assessment',
+    label: 'Pentaksiran',
+    items: [
+      { key: 'exam', label: 'Peperiksaan', path: '/scores' },
+      { key: 'pbd', label: 'PBD', path: '/input-pbd', activePaths: ['/pbs/pbd', '/pbs/pbd/input'] },
+      { key: 'pajsk', label: 'PAJSK', path: '/pbs/pajsk' },
+      {
+        key: 'psychometric',
+        label: 'Psikometrik',
+        path: '/psikometrik/input',
+        activePaths: ['/pbs/ppsi', '/pbs/ppsi/input', '/psychometric/input'],
+      },
+    ],
+  },
+  {
+    key: 'students',
+    label: 'Murid',
+    items: [
+      { key: 'student-subjects', label: 'Subjek Murid', path: '/manage-subject-students' },
+    ],
+  },
+  {
+    key: 'analysis',
+    label: 'Analisis',
+    items: [
+      {
+        key: 'exam-analysis',
+        label: 'Peperiksaan',
+        items: [
+          { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
+          { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
+          { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/subject' },
+          { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
+        ],
+      },
+      {
+        key: 'non-exam-analysis',
+        label: 'Bukan Peperiksaan',
+        items: [
+          { key: 'pbd-analysis', label: 'Analisis PBD', path: '/analysis/pbd', activePaths: ['/analisis-pbd', '/pbs/pbd/analysis'] },
+          { key: 'pajsk-segak-analysis', label: 'Analisis PAJSK & SEGAK', path: '/analysis/pajsk-segak', activePaths: ['/pbs/pajsk/segak/analysis'] },
+          { key: 'psychometric-analysis', label: 'Analisis Psikometrik', path: '/analysis/psychometric' },
+          { key: 'pbs-integrated', label: 'PBS Bersepadu', path: '/analysis/pbs' },
+        ],
+      },
+    ],
+  },
+  { key: 'performance-dialog', label: 'Dialog Prestasi', path: '/dialog-prestasi' },
+  {
+    key: 'settings',
+    label: 'Tetapan',
+    items: [
+      { key: 'my-profile', label: 'Profil Saya', path: '/profile' },
+    ],
+  },
+]
+
+const ANALYSIS_GROUPS = [
+  {
+    title: 'Peperiksaan',
+    items: [
+      {
+        label: 'Prestasi Murid',
+        description: 'Analisis markah individu mengikut peperiksaan dan subjek.',
+        path: '/analysis/student',
+      },
+      {
+        label: 'Prestasi Kelas',
+        description: 'Ringkasan pencapaian kelas, GPS dan taburan gred.',
+        path: '/analysis/class',
+      },
+      {
+        label: 'Prestasi Subjek (GPMP)',
+        description: 'Bandingkan prestasi subjek dan GPMP mengikut kelas.',
+        path: '/analysis/subject',
+      },
+      {
+        label: 'Prestasi Sekolah (GPS)',
+        description: 'Paparan keseluruhan GPS sekolah.',
+        disabled: true,
+        note: 'Akan datang',
+      },
+    ],
+  },
+  {
+    title: 'Bukan Peperiksaan',
+    items: [
+      {
+        label: 'Analisis PBD',
+        description: 'Lihat TP semasa, snapshot penggal dan perubahan murid.',
+        path: '/analysis/pbd',
+      },
+      {
+        label: 'Analisis PAJSK & SEGAK',
+        description: 'Pantau pencapaian SEGAK dan komponen PAJSK.',
+        path: '/analysis/pajsk-segak',
+      },
+      {
+        label: 'Analisis Psikometrik',
+        description: 'Semak dapatan psikometrik mengikut kelas dan instrumen.',
+        path: '/analysis/psychometric',
+      },
+      {
+        label: 'PBS Bersepadu',
+        description: 'Paparan holistik peperiksaan, PBD, SEGAK dan psikometrik.',
+        path: '/analysis/pbs',
+      },
+    ],
+  },
+]
+
 function DashboardPage() {
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [loading, setLoading] = useState(true)
   const [isMobileView, setIsMobileView] = useState(() =>
@@ -14,6 +129,7 @@ function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [profile, setProfile] = useState(null)
   const [schoolInfo, setSchoolInfo] = useState(null)
+  const [activeNavMenu, setActiveNavMenu] = useState('')
 
   const [setupStatus, setSetupStatus] = useState({
     exams: false,
@@ -67,6 +183,10 @@ function DashboardPage() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  useEffect(() => {
+    setActiveNavMenu('')
+  }, [location.pathname])
 
   const loadProfile = async () => {
     const {
@@ -229,6 +349,60 @@ function DashboardPage() {
     navigate('/login', { replace: true })
   }
 
+  const isPathActive = (item) => {
+    const paths = [item.path, ...(item.activePaths || [])].filter(Boolean)
+    const matchesOwnPath = paths.some(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+    )
+
+    return matchesOwnPath || (item.items || []).some(isPathActive)
+  }
+
+  const handleNavItemClick = (item) => {
+    if (item.disabled) return
+
+    if (item.items?.length) {
+      setActiveNavMenu((current) => (current === item.key ? '' : item.key))
+      return
+    }
+
+    if (item.path) {
+      setActiveNavMenu('')
+      navigate(item.path)
+    }
+  }
+
+  const renderDropdownItem = (item) => {
+    if (item.items?.length) {
+      return (
+        <div key={item.key} style={styles.navDropdownSection}>
+          <div style={styles.navDropdownSectionLabel}>{item.label}</div>
+          <div style={styles.navDropdownSectionItems}>
+            {item.items.map(renderDropdownItem)}
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <button
+        key={item.key}
+        type="button"
+        onClick={() => handleNavItemClick(item)}
+        disabled={item.disabled}
+        title={item.note}
+        style={{
+          ...styles.navDropdownItem,
+          ...(item.disabled ? styles.navDropdownItemDisabled : {}),
+          ...(isPathActive(item) ? styles.navDropdownItemActive : {}),
+        }}
+      >
+        <span>{item.label}</span>
+        {item.note ? <span style={styles.navDropdownTag}>{item.note}</span> : null}
+      </button>
+    )
+  }
+
   const isAcademicSetupComplete =
     setupStatus.exams &&
     setupStatus.grades &&
@@ -250,44 +424,89 @@ function DashboardPage() {
 
   return (
     <div style={{ ...styles.page, ...(isMobileView ? styles.pageMobile : {}) }}>
-      <div style={{ ...styles.headerCard, ...(isMobileView ? styles.headerCardMobile : {}) }}>
-        <div style={styles.brandRow}>
+      <header style={{ ...styles.topBar, ...(isMobileView ? styles.topBarMobile : {}) }}>
+        <div style={styles.navBrandRow}>
           <img
             src={schoolLogoUrl}
             alt={schoolName}
-            style={{ ...styles.logo, ...(isMobileView ? styles.logoMobile : {}) }}
+            style={{ ...styles.navLogo, ...(isMobileView ? styles.navLogoMobile : {}) }}
           />
-          <div style={styles.brandTextWrap}>
-            <h1 style={{ ...styles.brandTitle, ...(isMobileView ? styles.brandTitleMobile : {}) }}>
+          <div style={styles.navBrandTextWrap}>
+            <h1 style={{ ...styles.navBrandTitle, ...(isMobileView ? styles.navBrandTitleMobile : {}) }}>
               EduTrack
             </h1>
-            <p style={styles.brandSubtitle}>{schoolName}</p>
+            <p style={styles.navBrandSubtitle}>{schoolName}</p>
           </div>
         </div>
 
-        <div style={{ ...styles.headerActions, ...(isMobileView ? styles.headerActionsMobile : {}) }}>
+        <nav
+          aria-label="Menu utama guru"
+          style={{ ...styles.navActions, ...(isMobileView ? styles.navActionsMobile : {}) }}
+        >
+          {TEACHER_NAVIGATION.map((item) => {
+            const isActive = isPathActive(item)
+            const isOpen = activeNavMenu === item.key
+            const buttonStyle = {
+              ...styles.navButton,
+              ...(isActive ? styles.navButtonActive : {}),
+              ...(isMobileView ? styles.navButtonMobile : {}),
+            }
+
+            if (!item.items?.length) {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => handleNavItemClick(item)}
+                  style={buttonStyle}
+                >
+                  {item.label}
+                </button>
+              )
+            }
+
+            return (
+              <div
+                key={item.key}
+                style={{
+                  ...styles.navMenuWrap,
+                  ...(isMobileView && isOpen ? styles.navMenuWrapMobileOpen : {}),
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => handleNavItemClick(item)}
+                  style={buttonStyle}
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                >
+                  <span>{item.label}</span>
+                  <span aria-hidden="true" style={styles.navChevron}>
+                    {isOpen ? '^' : 'v'}
+                  </span>
+                </button>
+
+                {isOpen ? (
+                  <div style={{ ...styles.navDropdown, ...(isMobileView ? styles.navDropdownMobile : {}) }}>
+                    {item.items.map(renderDropdownItem)}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+
           <button
-            onClick={() => navigate('/profile')}
-            style={{
-              ...styles.profileButton,
-              ...(isMobileView ? styles.headerActionButtonMobile : {}),
-            }}
-          >
-            Profil Saya
-          </button>
-          <button
+            type="button"
             onClick={handleLogout}
-            style={{
-              ...styles.logoutButton,
-              ...(isMobileView ? styles.headerActionButtonMobile : {}),
-            }}
+            style={{ ...styles.navButton, ...styles.navLogoutButton, ...(isMobileView ? styles.navButtonMobile : {}) }}
           >
             Logout
           </button>
-        </div>
-      </div>
+        </nav>
+      </header>
 
-      <div style={styles.container}>
+      <div style={{ ...styles.contentWrap, ...(isMobileView ? styles.contentWrapMobile : {}) }}>
+        <div style={styles.container}>
         {errorMessage ? (
           <section style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
             <h3 style={styles.sectionTitle}>Sesi Tidak Sah</h3>
@@ -375,10 +594,27 @@ function DashboardPage() {
             >
               <div style={styles.quickActionHeader}>
                 <h4 style={styles.quickActionTitle}>PBS Bersepadu</h4>
-                <span style={styles.quickActionArrow}>›</span>
+                <span style={styles.quickActionArrow}>{'>'}</span>
               </div>
               <p style={styles.quickActionDesc}>
                 Lihat paparan holistik peperiksaan, PBD, SEGAK dan PAJSK.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/dialog-prestasi')}
+              style={{
+                ...styles.quickActionCard,
+                ...styles.quickActionCardIndigo,
+              }}
+            >
+              <div style={styles.quickActionHeader}>
+                <h4 style={styles.quickActionTitle}>Dialog Prestasi</h4>
+                <span style={styles.quickActionArrow}>›</span>
+              </div>
+              <p style={styles.quickActionDesc}>
+                Bina DPP subjek, rekod punca isu dan susun intervensi guru serta murid.
               </p>
             </button>
 
@@ -434,6 +670,49 @@ function DashboardPage() {
             </button>
           </div>
         </section>
+
+        <section style={{ ...styles.sectionCard, ...(isMobileView ? styles.sectionCardMobile : {}) }}>
+          <h3 style={styles.sectionTitle}>Analisis</h3>
+          <p style={styles.sectionDesc}>
+            Pilih paparan analisis yang diperlukan untuk peperiksaan dan pentaksiran bukan peperiksaan.
+          </p>
+
+          <div style={{ ...styles.analysisGrid, ...(isMobileView ? styles.analysisGridMobile : {}) }}>
+            {ANALYSIS_GROUPS.map((group) => (
+              <div key={group.title} style={styles.analysisGroup}>
+                <div style={styles.analysisGroupTitle}>{group.title}</div>
+                <div style={styles.analysisList}>
+                  {group.items.map((item) => {
+                    const buttonStyle = {
+                      ...styles.analysisButton,
+                      ...(item.disabled ? styles.analysisButtonDisabled : {}),
+                    }
+
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        onClick={() => {
+                          if (!item.disabled && item.path) navigate(item.path)
+                        }}
+                        disabled={item.disabled}
+                        style={buttonStyle}
+                      >
+                        <span style={styles.analysisButtonContent}>
+                          <span style={styles.analysisButtonTitle}>{item.label}</span>
+                          <span style={styles.analysisButtonDesc}>{item.description}</span>
+                        </span>
+                        {item.note ? <span style={styles.analysisTag}>{item.note}</span> : null}
+                        {!item.note ? <span style={styles.analysisArrow}>›</span> : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        </div>
       </div>
     </div>
   )
@@ -445,10 +724,200 @@ const styles = {
     background: '#f8fafc',
     color: '#0f172a',
     fontFamily: 'Inter, Arial, sans-serif',
-    padding: '24px',
     overflowX: 'hidden',
   },
   pageMobile: {
+    padding: 0,
+  },
+  topBar: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 30,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '18px',
+    background: '#08142d',
+    borderBottom: '1px solid rgba(148, 163, 184, 0.28)',
+    boxShadow: '0 10px 28px rgba(15, 23, 42, 0.2)',
+    padding: '14px 24px',
+  },
+  topBarMobile: {
+    position: 'relative',
+    alignItems: 'stretch',
+    flexDirection: 'column',
+    padding: '12px',
+  },
+  navBrandRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    minWidth: 0,
+  },
+  navLogo: {
+    width: '42px',
+    height: '42px',
+    objectFit: 'contain',
+    borderRadius: '12px',
+    flexShrink: 0,
+  },
+  navLogoMobile: {
+    width: '38px',
+    height: '38px',
+  },
+  navBrandTextWrap: {
+    minWidth: 0,
+  },
+  navBrandTitle: {
+    margin: 0,
+    color: '#ffffff',
+    fontSize: '18px',
+    fontWeight: 900,
+    lineHeight: 1.1,
+  },
+  navBrandTitleMobile: {
+    fontSize: '17px',
+  },
+  navBrandSubtitle: {
+    margin: '4px 0 0 0',
+    maxWidth: '360px',
+    color: '#cbd5e1',
+    fontSize: '11px',
+    fontWeight: 700,
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  navActions: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    flexWrap: 'wrap',
+    minWidth: 0,
+  },
+  navActionsMobile: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    alignItems: 'stretch',
+  },
+  navMenuWrap: {
+    position: 'relative',
+    minWidth: 0,
+  },
+  navMenuWrapMobileOpen: {
+    gridColumn: '1 / -1',
+  },
+  navButton: {
+    minHeight: '42px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    border: '1px solid rgba(148, 163, 184, 0.36)',
+    background: 'rgba(15, 23, 42, 0.22)',
+    color: '#ffffff',
+    padding: '10px 16px',
+    borderRadius: '14px',
+    fontSize: '14px',
+    fontWeight: 800,
+    cursor: 'pointer',
+    appearance: 'none',
+    whiteSpace: 'nowrap',
+  },
+  navButtonMobile: {
+    width: '100%',
+    minHeight: '44px',
+  },
+  navButtonActive: {
+    background: '#2563eb',
+    borderColor: '#60a5fa',
+    boxShadow: '0 10px 24px rgba(37, 99, 235, 0.34)',
+  },
+  navLogoutButton: {
+    background: 'rgba(15, 23, 42, 0.22)',
+  },
+  navChevron: {
+    fontSize: '11px',
+    lineHeight: 1,
+  },
+  navDropdown: {
+    position: 'absolute',
+    top: 'calc(100% + 8px)',
+    right: 0,
+    zIndex: 40,
+    width: '300px',
+    display: 'grid',
+    gap: '6px',
+    border: '1px solid #dbe4ee',
+    borderRadius: '14px',
+    background: '#ffffff',
+    padding: '10px',
+    boxShadow: '0 22px 48px rgba(15, 23, 42, 0.2)',
+  },
+  navDropdownMobile: {
+    position: 'static',
+    width: '100%',
+    marginTop: '8px',
+    boxShadow: 'none',
+  },
+  navDropdownSection: {
+    display: 'grid',
+    gap: '6px',
+  },
+  navDropdownSectionLabel: {
+    padding: '8px 10px 3px',
+    color: '#475569',
+    fontSize: '11px',
+    fontWeight: 900,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  },
+  navDropdownSectionItems: {
+    display: 'grid',
+    gap: '5px',
+  },
+  navDropdownItem: {
+    width: '100%',
+    minHeight: '38px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    border: '0',
+    borderRadius: '10px',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '9px 10px',
+    textAlign: 'left',
+    fontSize: '13px',
+    fontWeight: 800,
+    cursor: 'pointer',
+    appearance: 'none',
+  },
+  navDropdownItemActive: {
+    background: '#eff6ff',
+    color: '#1d4ed8',
+  },
+  navDropdownItemDisabled: {
+    color: '#94a3b8',
+    background: '#f8fafc',
+    cursor: 'not-allowed',
+  },
+  navDropdownTag: {
+    flexShrink: 0,
+    borderRadius: '999px',
+    background: '#e2e8f0',
+    color: '#475569',
+    padding: '4px 7px',
+    fontSize: '10px',
+    fontWeight: 900,
+  },
+  contentWrap: {
+    padding: '24px',
+  },
+  contentWrapMobile: {
     padding: '12px',
   },
   headerCard: {
@@ -624,6 +1093,10 @@ const styles = {
     background: 'linear-gradient(180deg, #f5f3ff 0%, #faf8ff 100%)',
     borderColor: '#d8b4fe',
   },
+  quickActionCardIndigo: {
+    background: 'linear-gradient(180deg, #eef2ff 0%, #f8faff 100%)',
+    borderColor: '#c7d2fe',
+  },
   quickActionCardTeal: {
     background: 'linear-gradient(180deg, #f0fdfa 0%, #f8fffd 100%)',
     borderColor: '#99f6e4',
@@ -650,6 +1123,83 @@ const styles = {
     fontSize: '18px',
     fontWeight: 700,
     color: '#334155',
+  },
+  analysisGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '16px',
+    marginTop: '16px',
+  },
+  analysisGridMobile: {
+    gridTemplateColumns: '1fr',
+  },
+  analysisGroup: {
+    minWidth: 0,
+    display: 'grid',
+    gap: '10px',
+  },
+  analysisGroupTitle: {
+    color: '#1e293b',
+    fontSize: '12px',
+    fontWeight: 900,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+  },
+  analysisList: {
+    display: 'grid',
+    gap: '10px',
+  },
+  analysisButton: {
+    width: '100%',
+    minHeight: '68px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    border: '1px solid #dbe4ee',
+    borderRadius: '14px',
+    background: '#ffffff',
+    color: '#0f172a',
+    padding: '12px 14px',
+    textAlign: 'left',
+    cursor: 'pointer',
+    appearance: 'none',
+  },
+  analysisButtonDisabled: {
+    background: '#f8fafc',
+    color: '#94a3b8',
+    cursor: 'not-allowed',
+  },
+  analysisButtonContent: {
+    minWidth: 0,
+    display: 'grid',
+    gap: '4px',
+  },
+  analysisButtonTitle: {
+    fontSize: '15px',
+    fontWeight: 800,
+    lineHeight: 1.25,
+    overflowWrap: 'anywhere',
+  },
+  analysisButtonDesc: {
+    color: '#64748b',
+    fontSize: '12px',
+    lineHeight: 1.45,
+  },
+  analysisTag: {
+    flexShrink: 0,
+    borderRadius: '999px',
+    background: '#e2e8f0',
+    color: '#475569',
+    padding: '5px 8px',
+    fontSize: '11px',
+    fontWeight: 800,
+  },
+  analysisArrow: {
+    flexShrink: 0,
+    color: '#334155',
+    fontSize: '20px',
+    fontWeight: 800,
   },
 }
 
