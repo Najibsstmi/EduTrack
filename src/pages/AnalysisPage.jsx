@@ -94,10 +94,6 @@ const formatMetricMark = (metric) =>
 const formatMetricGrade = (metric) =>
   metric?.is_absent === true ? 'TH' : metric?.grade_name ?? '-'
 
-const hasMetricValue = (metric) =>
-  metric?.is_absent === true ||
-  (metric?.mark !== null && metric?.mark !== undefined && metric?.mark !== '') ||
-  (metric?.grade_name !== null && metric?.grade_name !== undefined && metric?.grade_name !== '')
 
 const getCurrentGradePoint = (gradeName, tingkatan, gradeScales) => {
   const grade = String(gradeName || '').trim().toUpperCase()
@@ -1070,7 +1066,6 @@ export default function AnalysisPage() {
       const examData = mergedRows.map((row) => getExamMetric(row.analysis, examKey))
 
       const grades = examData.map((item) => item.grade_name || null)
-      const belumIsi = examData.filter((item) => !hasMetricValue(item)).length
 
       const gradeCounts = {}
       gradeColumns.forEach((grade) => {
@@ -1089,6 +1084,7 @@ export default function AnalysisPage() {
       }).length
 
       const tidakHadir = thCount
+      const belumIsi = Math.max(0, jumlahMurid - hadir - tidakHadir)
 
       const lulus = grades.filter((g) => isPassGrade(g)).length
       const gagal = grades.filter((g) => isFailGrade(g)).length
@@ -1191,19 +1187,8 @@ export default function AnalysisPage() {
           )
           .map((target) => [String(target.student_enrollment_id), target.target_mark])
       )
-      const existingFilledOtrKeys = new Set(
-        targets
-          .filter(
-            (target) =>
-              String(target.subject_id) === String(selectedSubjectId) &&
-              enrollmentIds.has(String(target.student_enrollment_id)) &&
-              missingOtrKeySet.has(normalizeAnalysisExamKey(target.target_key)) &&
-              hasMetricValue({ mark: target.target_mark, grade_name: target.grade_name })
-          )
-          .map(
-            (target) =>
-              `${target.student_enrollment_id}__${target.subject_id}__${normalizeAnalysisExamKey(target.target_key)}`
-          )
+      const mergedRowByEnrollmentId = new Map(
+        mergedRows.map((row) => [String(row.enrollment_id), row])
       )
       const generatedRows = []
       const updatedAt = new Date().toISOString()
@@ -1223,8 +1208,12 @@ export default function AnalysisPage() {
 
         Object.entries(generatedMarks).forEach(([targetKey, targetMark]) => {
           const normalizedTargetKey = normalizeAnalysisExamKey(targetKey)
-          const rowKey = `${student.enrollment_id}__${selectedSubjectId}__${normalizedTargetKey}`
-          if (!missingOtrKeySet.has(normalizedTargetKey) || existingFilledOtrKeys.has(rowKey)) return
+          const currentMetric = getExamMetric(
+            mergedRowByEnrollmentId.get(String(student.enrollment_id))?.analysis,
+            normalizedTargetKey
+          )
+          const currentGrade = String(currentMetric?.grade_name || '').trim().toUpperCase()
+          if (!missingOtrKeySet.has(normalizedTargetKey) || (currentGrade && currentGrade !== 'TH')) return
 
           generatedRows.push({
             school_id: profile.school_id,
@@ -1284,6 +1273,7 @@ export default function AnalysisPage() {
   }, [
     canRegenerateMissingOtr,
     filteredStudents,
+    mergedRows,
     missingOtrKeys,
     profile,
     repairingOtr,
