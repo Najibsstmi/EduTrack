@@ -177,6 +177,18 @@ const getExamDisplayLabel = (exam) => {
   return `${key} - ${name}`
 }
 
+const appendUniqueText = (items, value) => {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue) return items
+
+  const exists = items.some(
+    (item) => normalizeCompareText(item) === normalizeCompareText(normalizedValue)
+  )
+
+  return exists ? items : [...items, normalizedValue]
+}
+
 const normalizeSubjectType = (value) =>
   String(value || '').trim().toLowerCase()
 
@@ -694,11 +706,39 @@ export default function StudentScoresPage() {
 
     mapped.forEach((item) => {
       if (!deduped.has(item.key)) {
-        deduped.set(item.key, item)
+        deduped.set(item.key, {
+          ...item,
+          exam_names: appendUniqueText([], item.name),
+          grade_labels: appendUniqueText([], item.grade_label),
+        })
+        return
+      }
+
+      const current = deduped.get(item.key)
+      current.exam_names = appendUniqueText(current.exam_names || [], item.name)
+      current.grade_labels = appendUniqueText(
+        current.grade_labels || [],
+        item.grade_label
+      )
+
+      const currentOrder = Number(current.exam_order)
+      const itemOrder = Number(item.exam_order)
+      if (
+        Number.isFinite(itemOrder) &&
+        (!Number.isFinite(currentOrder) || itemOrder < currentOrder)
+      ) {
+        current.exam_order = item.exam_order
       }
     })
 
-    return Array.from(deduped.values()).sort((a, b) => {
+    return Array.from(deduped.values()).map((item) => ({
+      ...item,
+      name:
+        item.exam_names?.length > 1
+          ? item.exam_names.join(' / ')
+          : item.exam_names?.[0] || item.name,
+      grade_label: item.grade_labels?.join(', ') || item.grade_label,
+    })).sort((a, b) => {
       const orderA = Number.isFinite(Number(a.exam_order)) ? Number(a.exam_order) : 500
       const orderB = Number.isFinite(Number(b.exam_order)) ? Number(b.exam_order) : 500
       return orderA - orderB || String(a.key).localeCompare(String(b.key), 'ms')
@@ -1427,33 +1467,44 @@ export default function StudentScoresPage() {
       const activeExamGradeSet = new Set(
         (examConfigRows || []).map((row) => normalizeGradeLabel(row.grade_label))
       )
-      const gradesInTemplate = new Set(
-        (enrollmentRows || [])
-          .map((enrollment) => classById.get(String(enrollment.class_id))?.tingkatan)
-          .map((tingkatan) => normalizeGradeLabel(tingkatan))
-          .filter(Boolean)
-      )
-      const missingActiveExam = Array.from(gradesInTemplate).some(
-        (gradeLabel) => !activeExamGradeSet.has(gradeLabel)
-      )
 
-      if (!activeExamGradeSet.size || missingActiveExam) {
+      if (!activeExamGradeSet.size) {
         alert('Peperiksaan ini belum dibuka oleh admin sekolah.')
         return
       }
 
+      const activeEnrollmentRows = (enrollmentRows || []).filter((enrollment) => {
+        const classRow = classById.get(String(enrollment.class_id))
+        return activeExamGradeSet.has(normalizeGradeLabel(classRow?.tingkatan))
+      })
+
+      if (!activeEnrollmentRows.length) {
+        alert('Tiada murid aktif untuk tingkatan peperiksaan ini.')
+        return
+      }
+
       const subjectHeaders = getUniqueSubjectHeaders(
-        normalizeSubjectRows(subjectRows).filter((subject) =>
-          canInputExamMark({
-            schoolInfo,
-            tingkatan: subject?.tingkatan,
-            subjectName: getSubjectRuleName(subject),
-            examKey,
-          })
-        )
+        normalizeSubjectRows(subjectRows)
+          .filter((subject) =>
+            activeExamGradeSet.has(normalizeGradeLabel(subject?.tingkatan))
+          )
+          .filter((subject) =>
+            canInputExamMark({
+              schoolInfo,
+              tingkatan: subject?.tingkatan,
+              subjectName: getSubjectRuleName(subject),
+              examKey,
+            })
+          )
       )
+
+      if (!subjectHeaders.length) {
+        alert('Tiada subjek aktif untuk tingkatan peperiksaan ini.')
+        return
+      }
+
       const headers = [...DYNAMIC_BULK_TEMPLATE_HEADERS, ...subjectHeaders]
-      const templateRows = (enrollmentRows || [])
+      const templateRows = activeEnrollmentRows
         .map((enrollment) => {
           const classRow = classById.get(String(enrollment.class_id))
           const studentProfile = enrollment.student_profiles
