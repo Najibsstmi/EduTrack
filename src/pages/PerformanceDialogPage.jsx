@@ -229,6 +229,12 @@ const formatPercent = (value) =>
     ? '-'
     : `${Number(value).toFixed(1)}%`
 
+const formatSummaryPercent = (value) =>
+  `${Number(value || 0).toLocaleString('ms-MY', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  })}%`
+
 const formatShortDate = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -367,6 +373,10 @@ const isPassGrade = (grade) => {
   const value = normalizeText(grade)
   return Boolean(value && !['G', 'TH'].includes(value))
 }
+
+const isFailGrade = (grade) => normalizeText(grade) === 'G'
+
+const isTHGrade = (grade) => normalizeText(grade) === 'TH'
 
 const splitLines = (value) =>
   String(value ?? '').split('\n')
@@ -548,6 +558,28 @@ const getDppReportContextKey = ({ academicYear, gradeLabel, classId, subjectId, 
     String(subjectId || ''),
     getCanonicalDppExamKey(examKey),
   ].join('|')
+
+const DEFAULT_SUMMARY_GRADE_COLUMNS = ['A+', 'A', 'A-', 'B+', 'B', 'C+', 'C', 'D', 'E', 'TH', 'G']
+
+const getGradeColumnsForLevel = (gradeScales, gradeLabel) => {
+  const scaleColumns = (gradeScales || [])
+    .filter((scale) =>
+      isSameLevel(
+        scale.tingkatan ?? scale.grade_label ?? scale.form_level ?? scale.level ?? '',
+        gradeLabel
+      )
+    )
+    .sort((a, b) => {
+      const minA = Number(a.min_mark ?? a.min_score ?? 0)
+      const minB = Number(b.min_mark ?? b.min_score ?? 0)
+      return minB - minA
+    })
+    .map((scale) => scale.grade_name ?? scale.grade ?? '')
+    .filter(Boolean)
+
+  const columns = scaleColumns.length ? scaleColumns : DEFAULT_SUMMARY_GRADE_COLUMNS
+  return [...new Set(columns)]
+}
 
 const getBandStyle = (bandKey) => TRAFFIC_STYLES[bandKey] || TRAFFIC_STYLES.red
 
@@ -1319,6 +1351,110 @@ export default function PerformanceDialogPage() {
     comparisonTargetLabel,
     contextStudents.length,
     draft.traffic_bands,
+  ])
+
+  const subjectSummary = useMemo(() => {
+    const gradeColumns = getGradeColumnsForLevel(gradeScales, selectedGrade)
+    if (!selectedSubjectId || !examOptions.length) return { gradeColumns, rows: [] }
+
+    const rows = examOptions
+      .map((exam) => {
+        const examKey = getCanonicalDppExamKey(exam.key)
+        const metrics = contextStudents.map((student) =>
+          getMetricForExam({
+            scores,
+            targets,
+            enrollmentId: student.id,
+            subjectId: selectedSubjectId,
+            examKey,
+            gradeLabel: student.classes?.tingkatan || selectedGrade,
+            gradeScales,
+          })
+        )
+        const gradeCounts = Object.fromEntries(gradeColumns.map((grade) => [grade, 0]))
+        const gradeColumnByKey = new Map(
+          gradeColumns.map((grade) => [normalizeText(grade), grade])
+        )
+        let hadir = 0
+        let tidakHadir = 0
+        let lulus = 0
+        let gagal = 0
+        const points = []
+
+        metrics.forEach((metric) => {
+          const gradeName = metric?.is_absent ? 'TH' : metric?.grade_name
+          const gradeKey = normalizeText(gradeName)
+          const hasMark =
+            metric?.mark !== null &&
+            metric?.mark !== undefined &&
+            metric?.mark !== '' &&
+            !Number.isNaN(Number(metric.mark))
+
+          const gradeColumn = gradeColumnByKey.get(gradeKey)
+          if (gradeColumn) {
+            gradeCounts[gradeColumn] += 1
+          }
+          if (isTHGrade(gradeName) || metric?.is_absent === true) {
+            tidakHadir += 1
+            return
+          }
+          if (!hasMark && !gradeKey) return
+
+          hadir += 1
+          if (isPassGrade(gradeName)) lulus += 1
+          if (isFailGrade(gradeName)) gagal += 1
+          if (
+            metric?.grade_point !== null &&
+            metric?.grade_point !== undefined &&
+            metric?.grade_point !== '' &&
+            !Number.isNaN(Number(metric.grade_point))
+          ) {
+            points.push(Number(metric.grade_point))
+          }
+        })
+
+        const jumlahMurid = contextStudents.length
+        const belumIsi = Math.max(0, jumlahMurid - hadir - tidakHadir)
+        const hasAnyData =
+          hadir > 0 ||
+          tidakHadir > 0 ||
+          metrics.some(
+            (metric) =>
+              metric?.mark !== null ||
+              metric?.grade_name ||
+              metric?.grade_point !== null
+          )
+
+        return {
+          examKey,
+          examLabel: exam.name || getDppExamDisplayName(examKey, exam.key),
+          jumlahMurid,
+          hadir,
+          tidakHadir,
+          belumIsi,
+          ...gradeCounts,
+          lulus,
+          peratusLulus: hadir ? Number(((lulus / hadir) * 100).toFixed(2)) : 0,
+          gagal,
+          peratusGagal: hadir ? Number(((gagal / hadir) * 100).toFixed(2)) : 0,
+          gpmp: points.length
+            ? Number((points.reduce((sum, point) => sum + point, 0) / points.length).toFixed(2))
+            : null,
+          hasAnyData,
+        }
+      })
+      .filter((row) => row.hasAnyData || row.examKey === getCanonicalDppExamKey(selectedExamKey))
+
+    return { gradeColumns, rows }
+  }, [
+    contextStudents,
+    examOptions,
+    gradeScales,
+    scores,
+    selectedExamKey,
+    selectedGrade,
+    selectedSubjectId,
+    targets,
   ])
 
   const generatedIssueStatement = useMemo(() => {
@@ -2138,6 +2274,7 @@ export default function PerformanceDialogPage() {
           exam={selectedExam}
           draft={draft}
           analytics={reportAnalytics}
+          subjectSummary={subjectSummary}
         />
       ) : null}
     </div>
@@ -2449,6 +2586,7 @@ function DppPreviewModal({
   exam,
   draft,
   analytics,
+  subjectSummary,
 }) {
   useEffect(() => {
     const originalOverflow = document.body.style.overflow
@@ -2509,6 +2647,7 @@ function DppPreviewModal({
           exam={exam}
           draft={draft}
           analytics={analytics}
+          subjectSummary={subjectSummary}
         />
       </div>
     </div>
@@ -3056,6 +3195,7 @@ function DppReportPreview({
   exam,
   draft,
   analytics,
+  subjectSummary,
 }) {
   const issueStatement = draft.issue_statement || ''
   const title = draft.report_title || `DIALOG PRESTASI PANITIA ${subject?.subject_name || ''}`
@@ -3119,6 +3259,10 @@ function DppReportPreview({
               </div>
             </div>
           </div>
+          <DppSubjectSummaryTable
+            gradeColumns={subjectSummary?.gradeColumns || []}
+            rows={subjectSummary?.rows || []}
+          />
           <DppWhatNextMatrix
             draft={draft}
             analytics={analytics}
@@ -3217,6 +3361,98 @@ function DppReportPreview({
         </article>
       </div>
     </section>
+  )
+}
+
+function DppSubjectSummaryTable({ gradeColumns, rows }) {
+  const columns = gradeColumns?.length ? gradeColumns : DEFAULT_SUMMARY_GRADE_COLUMNS
+  const colSpan = 5 + columns.length + 5
+
+  return (
+    <div className="dpp-subject-summary mt-4">
+      <h4 className="text-sm font-black uppercase text-slate-950">Ringkasan Subjek Dipilih</h4>
+      <div className="dpp-table-frame mt-2 overflow-x-auto rounded-xl border border-slate-200">
+        <table className="dpp-subject-summary-table min-w-[1120px] border-collapse text-xs">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="is-left border-b border-slate-200 px-2 py-2 text-left font-semibold text-slate-700">
+                Jenis Peperiksaan
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Jumlah Murid
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Hadir
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Tak Hadir
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Belum Isi
+              </th>
+              {columns.map((grade) => (
+                <th
+                  key={grade}
+                  className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700"
+                >
+                  {grade}
+                </th>
+              ))}
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Lulus
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                % Lulus
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                Gagal
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                % Gagal
+              </th>
+              <th className="border-b border-slate-200 px-2 py-2 text-center font-semibold text-slate-700">
+                GPMP
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((row) => (
+                <tr key={row.examKey} className="border-b border-slate-100">
+                  <td className="is-left px-2 py-2 font-bold text-slate-950">{row.examLabel}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">{row.jumlahMurid}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">{row.hadir}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">{row.tidakHadir}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">{row.belumIsi || 0}</td>
+                  {columns.map((grade) => (
+                    <td key={`${row.examKey}-${grade}`} className="px-2 py-2 text-center text-slate-700">
+                      {row[grade] ?? 0}
+                    </td>
+                  ))}
+                  <td className="px-2 py-2 text-center text-slate-700">{row.lulus}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">
+                    {formatSummaryPercent(row.peratusLulus)}
+                  </td>
+                  <td className="px-2 py-2 text-center text-slate-700">{row.gagal}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">
+                    {formatSummaryPercent(row.peratusGagal)}
+                  </td>
+                  <td className="px-2 py-2 text-center font-semibold text-slate-900">
+                    {row.gpmp ?? '-'}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={colSpan} className="px-3 py-4 text-center text-slate-500">
+                  Tiada data ringkasan untuk subjek ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

@@ -292,6 +292,29 @@ body.has-install-prompt {
     line-height: 1.25 !important;
   }
 
+  .dpp-subject-summary {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .dpp-report-document .dpp-subject-summary-table {
+    table-layout: auto !important;
+    font-size: 5.9pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .dpp-report-document .dpp-subject-summary-table th,
+  .dpp-report-document .dpp-subject-summary-table td {
+    padding: 1mm 1.1mm !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+
+  .dpp-report-document .dpp-subject-summary-table .is-left {
+    width: 23mm !important;
+    text-align: left !important;
+  }
+
   .dpp-report-document th,
   .dpp-report-document td {
     padding: 1.4mm 1.6mm !important;
