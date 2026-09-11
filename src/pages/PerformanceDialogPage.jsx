@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
   CalendarDays,
   ChevronUp,
+  Copy,
   Eye,
   FileText,
   Loader2,
@@ -172,6 +173,34 @@ const getDppComparisonTargetKey = (examKey) => {
   if (progressMatch) return `OTR${progressMatch[1]}`
 
   return ''
+}
+
+const DPP_DUPLICATE_NEXT_EXAM_KEYS = {
+  TOV: ['OTR1', 'AR1'],
+  OTR1: ['AR1'],
+  AR1: ['AR2', 'PAT'],
+  UP1: ['AR2', 'PAT'],
+  OTR2: ['AR2'],
+  AR2: ['PAT', 'OTR3'],
+  OTR3: ['PAT'],
+  PAT: ['AR2'],
+}
+
+const getDuplicateTargetExamOption = (sourceExamKey, options = []) => {
+  const sourceKey = getCanonicalDppExamKey(sourceExamKey)
+  const availableOptions = (options || []).filter(
+    (exam) => exam?.key && exam.key !== sourceKey
+  )
+  const preferredOption = (DPP_DUPLICATE_NEXT_EXAM_KEYS[sourceKey] || [])
+    .map((key) => availableOptions.find((exam) => exam.key === key))
+    .find(Boolean)
+
+  return (
+    preferredOption ||
+    availableOptions.find((exam) => !['TOV', 'ETR'].includes(exam.key)) ||
+    availableOptions[0] ||
+    null
+  )
 }
 
 const toNumberOrNull = (value) => {
@@ -495,6 +524,31 @@ const normalizeDraft = (row, defaults) => ({
   notes: row?.notes || defaults.notes,
 })
 
+const clonePlainObject = (value) => JSON.parse(JSON.stringify(value))
+
+const getDuplicatedDraft = ({ report, defaults, targetExamName }) => {
+  const sourceDraft = normalizeDraft(report, defaults)
+
+  return clonePlainObject({
+    ...sourceDraft,
+    report_title: defaults.report_title,
+    issue_statement: '',
+    implementation_window: {
+      ...sourceDraft.implementation_window,
+      label: targetExamName ? `Pasca ${targetExamName}` : defaults.implementation_window.label,
+    },
+  })
+}
+
+const getDppReportContextKey = ({ academicYear, gradeLabel, classId, subjectId, examKey }) =>
+  [
+    Number(academicYear) || '',
+    normalizeText(gradeLabel),
+    classId && classId !== 'all' ? String(classId) : 'all',
+    String(subjectId || ''),
+    getCanonicalDppExamKey(examKey),
+  ].join('|')
+
 const getBandStyle = (bandKey) => TRAFFIC_STYLES[bandKey] || TRAFFIC_STYLES.red
 
 const getInterventionToneClass = (toneKey) =>
@@ -503,6 +557,7 @@ const getInterventionToneClass = (toneKey) =>
 export default function PerformanceDialogPage() {
   const navigate = useNavigate()
   const checkingAuth = useRequireAuth()
+  const pendingDuplicateRef = useRef(null)
 
   const [loading, setLoading] = useState(true)
   const [contextLoading, setContextLoading] = useState(false)
@@ -1078,6 +1133,33 @@ export default function PerformanceDialogPage() {
 
       if (error) throw error
 
+      const pendingDuplicate = pendingDuplicateRef.current
+      const currentContextKey = getDppReportContextKey({
+        academicYear,
+        gradeLabel: selectedGrade,
+        classId: selectedClassId,
+        subjectId: selectedSubjectId,
+        examKey: selectedExamKey,
+      })
+
+      if (pendingDuplicate?.contextKey === currentContextKey) {
+        pendingDuplicateRef.current = null
+
+        if (data?.id) {
+          setReportRecord(data)
+          setDraft(normalizeDraft(data, reportDefaults))
+          setSuccessMessage(
+            `DPP ${pendingDuplicate.targetExamLabel} untuk ${pendingDuplicate.subjectName} sudah wujud. Rekod sedia ada dibuka.`
+          )
+          return
+        }
+
+        setReportRecord(null)
+        setDraft(pendingDuplicate.draft)
+        setSuccessMessage(pendingDuplicate.message)
+        return
+      }
+
       setReportRecord(data || null)
       setDraft(normalizeDraft(data, reportDefaults))
     } catch (error) {
@@ -1620,6 +1702,67 @@ export default function PerformanceDialogPage() {
     scrollToDialogForm()
   }
 
+  const duplicateReport = (report) => {
+    if (!report) return
+
+    const targetExam = getDuplicateTargetExamOption(report.exam_key, examOptions)
+    if (!targetExam) {
+      setErrorMessage('Tiada peperiksaan lain tersedia untuk duplicate DPP ini.')
+      setSuccessMessage('')
+      return
+    }
+
+    const sourceExamKey = getCanonicalDppExamKey(report.exam_key)
+    const targetExamLabel = targetExam.name || getDppExamDisplayName(targetExam.key, targetExam.key)
+    const sourceExamLabel =
+      report.examLabel ||
+      report.exam_name ||
+      getDppExamDisplayName(sourceExamKey, report.exam_key)
+    const subject = subjectById.get(String(report.subject_id))
+    const subjectName = subject?.subject_name || report.subjectName || 'subjek ini'
+    const duplicateYear = report.academic_year || academicYear || getCurrentYear()
+    const duplicateGrade = report.grade_label || ''
+    const duplicateClassId = report.class_id || 'all'
+    const duplicateSubjectId = report.subject_id || ''
+    const duplicateDefaults = getDefaultDraft({
+      subjectName,
+      examName: targetExamLabel,
+      academicYear: duplicateYear,
+    })
+
+    const targetContextKey = getDppReportContextKey({
+      academicYear: duplicateYear,
+      gradeLabel: duplicateGrade,
+      classId: duplicateClassId,
+      subjectId: duplicateSubjectId,
+      examKey: targetExam.key,
+    })
+
+    pendingDuplicateRef.current = {
+      contextKey: targetContextKey,
+      draft: getDuplicatedDraft({
+        report,
+        defaults: duplicateDefaults,
+        targetExamName: targetExamLabel,
+      }),
+      message: `Salinan DPP ${subjectName} ${sourceExamLabel} dibuka sebagai DPP ${targetExamLabel}. Senarai murid Hijau/Kuning/Merah akan dikira semula ikut markah ${targetExamLabel}.`,
+      subjectName,
+      targetExamLabel,
+    }
+
+    setDialogFormOpen(true)
+    setMobileActionsOpen(false)
+    setErrorMessage('')
+    setSuccessMessage('')
+    setAcademicYear(String(duplicateYear))
+    setSelectedGrade(duplicateGrade)
+    setSelectedClassId(duplicateClassId)
+    setSelectedSubjectId(duplicateSubjectId)
+    setSelectedExamKey(targetExam.key)
+    setReportRecord(null)
+    scrollToDialogForm()
+  }
+
   const printPreview = () => {
     setPreviewOpen(true)
     setMobileActionsOpen(false)
@@ -1739,6 +1882,7 @@ export default function PerformanceDialogPage() {
           contextLoading={contextLoading}
           dashboard={reportDashboard}
           onOpenReport={openReportForEditing}
+          onDuplicateReport={duplicateReport}
         />
 
         {dialogFormOpen ? (
@@ -1963,7 +2107,13 @@ export default function PerformanceDialogPage() {
   )
 }
 
-function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onOpenReport }) {
+function DppSubjectReportAnalysis({
+  academicYear,
+  contextLoading,
+  dashboard,
+  onOpenReport,
+  onDuplicateReport,
+}) {
   const subjectRows = dashboard.subjectRows || EMPTY_DPP_ROWS
   const subjectOptions = dashboard.subjectOptions || EMPTY_DPP_ROWS
   const allReportRows = dashboard.reports || EMPTY_DPP_ROWS
@@ -2150,6 +2300,7 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
                   key={report.id}
                   report={report}
                   onOpenReport={onOpenReport}
+                  onDuplicateReport={onDuplicateReport}
                 />
               ))}
               {activeSubjectKey === 'all' && reportRows.length > visibleReportRows.length ? (
@@ -2169,7 +2320,7 @@ function DppSubjectReportAnalysis({ academicYear, contextLoading, dashboard, onO
   )
 }
 
-function DppSavedReportCard({ report, onOpenReport }) {
+function DppSavedReportCard({ report, onOpenReport, onDuplicateReport }) {
   const teacherCauses = getFilledTextRows(report.problem_causes?.teacher).length
   const studentCauses = getFilledTextRows(report.problem_causes?.student).length
   const studentInterventions = Object.values(report.student_interventions || {}).reduce(
@@ -2204,7 +2355,15 @@ function DppSavedReportCard({ report, onOpenReport }) {
         <DppReportMiniStat label="Intervensi" value={studentInterventions + teacherInterventions} />
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => onDuplicateReport(report)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+        >
+          <Copy className="h-4 w-4" aria-hidden="true" />
+          Duplicate
+        </button>
         <button
           type="button"
           onClick={() => onOpenReport(report)}
