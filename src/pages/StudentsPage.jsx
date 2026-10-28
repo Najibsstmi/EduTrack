@@ -557,24 +557,29 @@ export default function StudentsPage() {
     }
   }
 
-  const handleDelete = async (enrollmentId) => {
+  const handleDelete = async (student) => {
     const confirmed = window.confirm(
-      'Adakah anda pasti mahu singkirkan murid ini daripada kelas semasa? Murid ini tidak akan muncul lagi dalam input markah, analisis, dan sasaran akademik semasa.'
+      'Adakah anda pasti mahu singkirkan murid ini daripada kelas semasa? Rekod snapshot penggal terdahulu akan kekal, tetapi murid ini tidak akan muncul dalam input dan snapshot PBD seterusnya.'
     )
     if (!confirmed) return
 
-    const { error } = await supabase
-      .from('student_enrollments')
-      .delete()
-      .eq('id', enrollmentId)
+    const { error } = await supabase.rpc('withdraw_school_student', {
+      target_enrollment_id: student.enrollment_id || student.id,
+      target_academic_year: Number(setupConfig.current_academic_year),
+    })
 
     if (error) {
       console.error(error)
-      alert(`Gagal padam murid: ${error.message}`)
+      alert(
+        error.message?.includes('withdraw_school_student')
+          ? 'Fungsi singkir murid belum tersedia. Jalankan migration singkir murid terkini di Supabase.'
+          : `Gagal singkir murid: ${error.message}`
+      )
       return
     }
 
     await loadEnrollments(profile.school_id, setupConfig.current_academic_year)
+    alert('Murid berjaya disingkirkan. Snapshot PBD penggal terdahulu kekal disimpan.')
   }
 
   const filteredStudents = useMemo(() => {
@@ -635,7 +640,7 @@ export default function StudentsPage() {
   }, [students, selectedTingkatan, selectedClassFilter, searchTerm])
 
   const handleDeleteStudent = (student) => {
-    handleDelete(student.enrollment_id || student.id)
+    handleDelete(student)
   }
 
   if (loading) {

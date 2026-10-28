@@ -19,6 +19,7 @@ import StudentImportPage from './pages/StudentImportPage'
 import StudentScoresPage from './pages/StudentScoresPage'
 import TargetsPage from './pages/TargetsPage'
 import AnalysisPage from './pages/AnalysisPage'
+import PivotTableAnalysisPage from './pages/PivotTableAnalysisPage.jsx'
 import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
 import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
 import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
@@ -177,6 +178,7 @@ function App() {
         <Route path="/analysis" element={<DashboardRedirect />} />
         <Route path="/analysis/class" element={<AnalysisPage />} />
         <Route path="/analysis/subject" element={<AnalysisPage />} />
+        <Route path="/analysis/pivot-table" element={<PivotTableAnalysisPage />} />
         <Route path="/analysis/student" element={<StudentIndividualAnalysisPage />} />
         <Route path="/analysis/student-subject" element={<StudentSubjectTrendPage />} />
         <Route path="/analysis/pajsk-segak" element={<PajskSegakAnalysisPage />} />

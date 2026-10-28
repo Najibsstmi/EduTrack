@@ -26,6 +26,10 @@ import {
   roundPercent,
   TP_LEVELS,
 } from '../lib/pbdAnalysis.js'
+import {
+  getPbdDatasetEnrollmentIds,
+  getPbdDatasetEnrollments,
+} from '../lib/pbdDatasetScope.js'
 import { formatSubjectName, normalizeSubjectRows } from '../lib/subjectLabels.js'
 import { useRequireAuth } from '../lib/useRequireAuth.js'
 
@@ -273,8 +277,7 @@ export default function PbdAnalysisPage() {
             )
           `)
           .eq('school_id', schoolId)
-          .eq('academic_year', year)
-          .eq('is_active', true),
+          .eq('academic_year', year),
         supabase
           .from('student_subject_enrollments')
           .select('id, student_enrollment_id, subject_id, academic_year, is_active')
@@ -384,6 +387,11 @@ export default function PbdAnalysisPage() {
     enrollments.forEach((item) => map.set(String(item.id), item))
     return map
   }, [enrollments])
+
+  const activeEnrollments = useMemo(
+    () => enrollments.filter((item) => item.is_active === true),
+    [enrollments]
+  )
 
   const availableTingkatan = useMemo(() => {
     const fromClasses = classes.map((item) => item.tingkatan).filter(Boolean)
@@ -500,13 +508,20 @@ export default function PbdAnalysisPage() {
           })
         }
 
-        const enrollmentIds = getRelevantEnrollmentIds({
+        const currentEnrollmentIds = getRelevantEnrollmentIds({
           classId: classRow.id,
           subject,
-          enrollments,
+          enrollments: activeEnrollments,
           studentSubjectEnrollments,
         })
-        const enrollmentIdSet = new Set(enrollmentIds.map((id) => String(id)))
+        const enrollmentIds = getPbdDatasetEnrollmentIds({
+          datasetKey,
+          classId: classRow.id,
+          subjectId: subject.id,
+          currentEnrollmentIds,
+          sourceRows,
+        })
+        const enrollmentIdSet = new Set(enrollmentIds)
 
         sourceRows
           .filter(
@@ -531,7 +546,7 @@ export default function PbdAnalysisPage() {
       })
     },
     [
-      enrollments,
+      activeEnrollments,
       levelMappings,
       reportClasses,
       resolveSubjectForClass,
@@ -751,6 +766,13 @@ export default function PbdAnalysisPage() {
     await Promise.resolve()
 
     try {
+      const scopedEnrollments = getPbdDatasetEnrollments({
+        datasetKey: activeDatasetKey,
+        classId: selectedClass.id,
+        enrollments,
+        sourceRows: sourceRowsByDataset[activeDatasetKey] || [],
+      })
+
       const slips = buildPbdClassSlips({
         schoolId: profile.school_id,
         classRow: selectedClass,
@@ -760,7 +782,7 @@ export default function PbdAnalysisPage() {
           levelMappings
         ),
         levelLabel: getDisplayLevel(selectedClass.tingkatan, levelMappings),
-        enrollments,
+        enrollments: scopedEnrollments,
         subjects,
         studentSubjectEnrollments,
         sourceRows: sourceRowsByDataset[activeDatasetKey] || [],
