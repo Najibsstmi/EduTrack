@@ -47,6 +47,11 @@ export function ActivityWizardPage() {
   const [loading, setLoading] = useState(Boolean(activityId))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const applicableComponentOptions = componentOptions.filter((option) =>
+    activity.category === 'EKSTRA_KURIKULUM'
+      ? option.value === 'EKSTRA_KURIKULUM'
+      : option.value !== 'EKSTRA_KURIKULUM'
+  )
 
   useEffect(() => {
     if (!activityId) return
@@ -212,8 +217,8 @@ export function ActivityWizardPage() {
             <div><label className="field-label" htmlFor="academic-year">Tahun akademik *</label><select id="academic-year" className="field" value={activity.academic_year} onChange={(event) => { setField('academic_year', Number(event.target.value)); setSelected({}) }} disabled={Boolean(activityId)}>{(data?.academic_years || [activity.academic_year]).map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
             <div><label className="field-label" htmlFor="organiser">Penganjur</label><input id="organiser" className="field" value={activity.organiser} onChange={(event) => setField('organiser', event.target.value)} /></div>
             <div><label className="field-label" htmlFor="teacher">Guru bertanggungjawab</label><input id="teacher" className="field" value={activity.teacher_in_charge} onChange={(event) => setField('teacher_in_charge', event.target.value)} /></div>
-            <div><label className="field-label" htmlFor="category">Kategori *</label><select id="category" className="field" value={activity.category} onChange={(event) => setField('category', event.target.value)}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-            <div><label className="field-label" htmlFor="component">Komponen PAJSK *</label><select id="component" className="field" value={activity.component} onChange={(event) => setField('component', event.target.value)}>{componentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+            <div><label className="field-label" htmlFor="category">Kategori *</label><select id="category" className="field" value={activity.category} onChange={(event) => { const category = event.target.value; setActivity((current) => ({ ...current, category, component: category === 'EKSTRA_KURIKULUM' ? 'EKSTRA_KURIKULUM' : current.component === 'EKSTRA_KURIKULUM' ? 'KELAB_PERSATUAN' : current.component })) }}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+            <div><label className="field-label" htmlFor="component">Komponen PAJSK *</label><select id="component" className="field" value={activity.component} onChange={(event) => setField('component', event.target.value)}>{applicableComponentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="level">Peringkat *</label><select id="level" className="field" value={activity.level} onChange={(event) => setField('level', event.target.value)}>{levelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="evidence">Pautan bukti / sijil</label><input id="evidence" type="url" className="field" value={activity.evidence_url} onChange={(event) => setField('evidence_url', event.target.value)} placeholder="https://..." /></div>
             <div className="sm:col-span-2"><label className="field-label" htmlFor="remarks">Catatan tambahan</label><textarea id="remarks" className="field min-h-24 resize-y" value={activity.remarks} onChange={(event) => setField('remarks', event.target.value)} /></div>

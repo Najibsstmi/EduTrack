@@ -570,6 +570,7 @@ const listHistory = async (session: ValidSession, body: JsonRecord) => {
     )
     .eq('school_id', session.schoolId)
     .eq('status', 'submitted')
+    .eq('pajsk_activity_participants.is_active', true)
     .order('activity_date', { ascending: false })
     .limit(100)
 

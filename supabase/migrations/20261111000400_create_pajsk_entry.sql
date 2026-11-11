@@ -415,6 +415,11 @@ begin
     raise exception 'Klasifikasi aktiviti tidak sah.' using errcode = '22023';
   end if;
 
+  if (p_activity->>'category' = 'KOKURIKULUM' and p_activity->>'component' = 'EKSTRA_KURIKULUM')
+     or (p_activity->>'category' = 'EKSTRA_KURIKULUM' and p_activity->>'component' <> 'EKSTRA_KURIKULUM') then
+    raise exception 'Komponen tidak sepadan dengan kategori aktiviti.' using errcode = '22023';
+  end if;
+
   if nullif(p_activity->>'id', '') is not null then
     v_activity_id := (p_activity->>'id')::uuid;
     select to_jsonb(a) into v_before
