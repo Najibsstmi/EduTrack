@@ -18,7 +18,7 @@ const admin = createClient(supabaseUrl, serviceRoleKey, {
 
 const allowedOrigins = new Set(
   (Deno.env.get('PAJSK_ALLOWED_ORIGINS') ||
-    'https://pajsk.cikgustem.com,http://localhost:5173,http://localhost:5174')
+    'https://pajsk.cikgustem.com,https://pajsk-entry.vercel.app,http://localhost:5173,http://localhost:5174')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
