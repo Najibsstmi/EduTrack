@@ -5,7 +5,11 @@ type JsonRecord = Record<string, unknown>
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
-const codePepper = Deno.env.get('PAJSK_CODE_PEPPER') || ''
+// Supabase injects the service-role key into every deployed Edge Function.
+// A dedicated pepper can still override it, while this derived fallback keeps
+// access-code hashes secret without requiring another dashboard secret.
+const codePepper =
+  Deno.env.get('PAJSK_CODE_PEPPER') || `pajsk-entry-access-code:${serviceRoleKey}`
 const encoder = new TextEncoder()
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
