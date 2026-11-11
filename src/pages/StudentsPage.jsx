@@ -21,6 +21,8 @@ const TINGKATAN_ORDER = [
   'Tingkatan 5',
 ]
 
+const ART_FIELDS = ['Seni Tari', 'Seni Muzik', 'Seni Teater', 'Seni Visual']
+
 const getTingkatanRank = (tingkatan = '') => {
   const index = TINGKATAN_ORDER.indexOf(String(tingkatan).trim())
   return index === -1 ? 999 : index
@@ -43,6 +45,7 @@ export default function StudentsPage() {
   const [saving, setSaving] = useState(false)
 
   const [profile, setProfile] = useState(null)
+  const [school, setSchool] = useState(null)
   const [setupConfig, setSetupConfig] = useState(null)
   const [levelMappings, setLevelMappings] = useState([])
 
@@ -54,12 +57,14 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTingkatan, setSelectedTingkatan] = useState('Tingkatan 1')
   const [selectedClassFilter, setSelectedClassFilter] = useState('Semua Kelas')
+  const [selectedArtField, setSelectedArtField] = useState('Semua Bidang')
   const [hasAppliedQueryParams, setHasAppliedQueryParams] = useState(false)
 
   const [form, setForm] = useState({
     full_name: '',
     ic_number: '',
     gender: '',
+    art_field: '',
     tingkatan: '',
     class_id: '',
   })
@@ -67,6 +72,7 @@ export default function StudentsPage() {
     full_name: '',
     ic_number: '',
     gender: '',
+    art_field: '',
     tingkatan: '',
     class_id: '',
   })
@@ -76,6 +82,7 @@ export default function StudentsPage() {
     profile?.is_school_admin === true ||
     profile?.role === 'admin' ||
     profile?.role === 'school_admin'
+  const isSsemj = school?.school_code === 'JEA1091'
 
   useEffect(() => {
     initPage()
@@ -119,6 +126,8 @@ export default function StudentsPage() {
       navigate('/dashboard', { replace: true })
       return
     }
+
+    setSchool(schoolData)
 
     const { data: configData, error: configError } = await supabase
       .from('school_setup_configs')
@@ -197,7 +206,8 @@ export default function StudentsPage() {
           school_id,
           ic_number,
           full_name,
-          gender
+          gender,
+          art_field
         )
       `)
       .eq('school_id', schoolId)
@@ -222,6 +232,7 @@ export default function StudentsPage() {
       full_name: row.student_profiles?.full_name || '',
       ic_number: row.student_profiles?.ic_number || '',
       gender: row.student_profiles?.gender || '',
+      art_field: row.student_profiles?.art_field || '',
       tingkatan: row.classes?.tingkatan || '',
       class_name: row.classes?.class_name || '',
       status: 'active',
@@ -304,6 +315,7 @@ export default function StudentsPage() {
       full_name: student.full_name || '',
       ic_number: student.ic_number || '',
       gender: student.gender || '',
+      art_field: student.art_field || '',
       tingkatan: student.tingkatan || '',
       class_id: matchedClass?.id || '',
     })
@@ -366,6 +378,11 @@ export default function StudentsPage() {
       return
     }
 
+    if (isSsemj && !editForm.art_field) {
+      alert('Sila pilih bidang seni murid.')
+      return
+    }
+
     if (!selectedClass) {
       alert('Kelas yang dipilih tidak sah atau tidak selaras dengan tingkatan.')
       return
@@ -399,7 +416,7 @@ export default function StudentsPage() {
         return
       }
 
-      const { error: updateError } = await supabase.rpc('update_school_student', {
+      const updateParams = {
         target_enrollment_id: editingStudent.enrollment_id,
         target_student_profile_id: editingStudent.student_profile_id,
         target_academic_year: Number(setupConfig.current_academic_year),
@@ -407,7 +424,13 @@ export default function StudentsPage() {
         new_ic_number: icNumber,
         new_gender: editForm.gender || null,
         new_class_id: selectedClass.id,
-      })
+      }
+      if (isSsemj) updateParams.new_art_field = editForm.art_field || null
+
+      const { error: updateError } = await supabase.rpc(
+        'update_school_student',
+        updateParams
+      )
 
       if (updateError) throw updateError
 
@@ -442,6 +465,11 @@ export default function StudentsPage() {
       return
     }
 
+    if (isSsemj && !form.art_field) {
+      alert('Sila pilih bidang seni murid.')
+      return
+    }
+
     if (!form.tingkatan) {
       alert('Sila pilih tingkatan.')
       return
@@ -471,26 +499,32 @@ export default function StudentsPage() {
       if (existingProfile?.id) {
         studentProfileId = existingProfile.id
 
+        const profileUpdates = {
+          full_name: form.full_name.trim(),
+          gender: form.gender || null,
+        }
+        if (isSsemj) profileUpdates.art_field = form.art_field || null
+
         const { error: updateProfileError } = await supabase
           .from('student_profiles')
-          .update({
-            full_name: form.full_name.trim(),
-            gender: form.gender || null,
-          })
+          .update(profileUpdates)
           .eq('id', studentProfileId)
 
         if (updateProfileError) {
           throw updateProfileError
         }
       } else {
+        const newProfile = {
+          school_id: profile.school_id,
+          ic_number: form.ic_number.trim(),
+          full_name: form.full_name.trim(),
+          gender: form.gender || null,
+        }
+        if (isSsemj) newProfile.art_field = form.art_field || null
+
         const { data: insertedProfile, error: insertProfileError } = await supabase
           .from('student_profiles')
-          .insert({
-            school_id: profile.school_id,
-            ic_number: form.ic_number.trim(),
-            full_name: form.full_name.trim(),
-            gender: form.gender || null,
-          })
+          .insert(newProfile)
           .select('id')
           .single()
 
@@ -546,6 +580,7 @@ export default function StudentsPage() {
         full_name: '',
         ic_number: '',
         gender: '',
+        art_field: '',
       }))
 
       await loadEnrollments(profile.school_id, setupConfig.current_academic_year)
@@ -587,10 +622,21 @@ export default function StudentsPage() {
 
     const normalizedSelectedTingkatan = normalizeCompareText(selectedTingkatan)
     const normalizedSelectedClass = normalizeCompareText(selectedClassFilter)
+    const normalizedSelectedArtField = normalizeCompareText(selectedArtField)
 
     if (normalizedSelectedTingkatan) {
       result = result.filter(
         (student) => normalizeCompareText(student.tingkatan) === normalizedSelectedTingkatan
+      )
+    }
+
+    if (
+      isSsemj &&
+      normalizedSelectedArtField &&
+      normalizedSelectedArtField !== normalizeCompareText('Semua Bidang')
+    ) {
+      result = result.filter(
+        (student) => normalizeCompareText(student.art_field) === normalizedSelectedArtField
       )
     }
 
@@ -609,11 +655,13 @@ export default function StudentsPage() {
         const name = String(student.full_name || '').toLowerCase()
         const ic = String(student.ic_number || '').toLowerCase()
         const kelas = String(student.class_name || '').toLowerCase()
+        const bidang = String(student.art_field || '').toLowerCase()
 
         return (
           name.includes(keyword) ||
           ic.includes(keyword) ||
-          kelas.includes(keyword)
+          kelas.includes(keyword) ||
+          bidang.includes(keyword)
         )
       })
     }
@@ -637,7 +685,7 @@ export default function StudentsPage() {
     })
 
     return result
-  }, [students, selectedTingkatan, selectedClassFilter, searchTerm])
+  }, [isSsemj, students, selectedTingkatan, selectedClassFilter, selectedArtField, searchTerm])
 
   const handleDeleteStudent = (student) => {
     handleDelete(student)
@@ -713,6 +761,21 @@ export default function StudentsPage() {
               <option value="Perempuan">Perempuan</option>
             </select>
 
+            {isSsemj ? (
+              <select
+                value={form.art_field}
+                onChange={(e) => setForm({ ...form, art_field: e.target.value })}
+                className="rounded-lg border border-slate-300 px-3 py-2"
+              >
+                <option value="">Bidang seni</option>
+                {ART_FIELDS.map((artField) => (
+                  <option key={artField} value={artField}>
+                    {artField}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
             <select
               value={form.tingkatan}
               onChange={(e) => handleGradeChange(e.target.value)}
@@ -785,9 +848,24 @@ export default function StudentsPage() {
                 ))}
               </select>
 
+              {isSsemj ? (
+                <select
+                  value={selectedArtField}
+                  onChange={(e) => setSelectedArtField(e.target.value)}
+                  className="rounded-xl border border-slate-300 px-4 py-2"
+                >
+                  <option value="Semua Bidang">Semua Bidang</option>
+                  {ART_FIELDS.map((artField) => (
+                    <option key={artField} value={artField}>
+                      {artField}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+
               <input
                 type="text"
-                placeholder="Cari nama / IC / kelas"
+                placeholder={isSsemj ? 'Cari nama / IC / kelas / bidang' : 'Cari nama / IC / kelas'}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="rounded-lg border border-slate-300 px-3 py-2"
@@ -810,7 +888,7 @@ export default function StudentsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse">
+                <table className="w-full min-w-[840px] border-collapse">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
@@ -828,6 +906,11 @@ export default function StudentsPage() {
                       <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
                         Kelas
                       </th>
+                      {isSsemj ? (
+                        <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                          Bidang Seni
+                        </th>
+                      ) : null}
                       <th className="border-b border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-700">
                         Status
                       </th>
@@ -853,6 +936,13 @@ export default function StudentsPage() {
                         <td className="px-4 py-3 text-sm text-slate-700">
                           {student.class_name}
                         </td>
+                        {isSsemj ? (
+                          <td className="px-4 py-3 text-sm text-slate-700">
+                            {student.art_field || (
+                              <span className="text-slate-400">Belum ditetapkan</span>
+                            )}
+                          </td>
+                        ) : null}
                         <td className="px-4 py-3 text-sm text-slate-700">
                           {student.status || 'active'}
                         </td>
@@ -953,6 +1043,26 @@ export default function StudentsPage() {
                   <option value="Perempuan">Perempuan</option>
                 </select>
               </label>
+
+              {isSsemj ? (
+                <label className="grid gap-2 text-sm font-medium text-slate-700">
+                  <span>Bidang seni</span>
+                  <select
+                    value={editForm.art_field}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({ ...prev, art_field: event.target.value }))
+                    }
+                    className="rounded-lg border border-slate-300 px-3 py-2"
+                  >
+                    <option value="">Belum ditetapkan</option>
+                    {ART_FIELDS.map((artField) => (
+                      <option key={artField} value={artField}>
+                        {artField}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
               <label className="grid gap-2 text-sm font-medium text-slate-700">
                 <span>Tingkatan</span>
