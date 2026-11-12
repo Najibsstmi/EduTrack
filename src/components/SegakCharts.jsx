@@ -25,6 +25,7 @@ const BMI_COLORS = {
   Normal: '#22c55e',
   'Berlebihan Berat Badan': '#f59e0b',
   Obes: '#ef4444',
+  'Tiada Data BMI': '#94a3b8',
 }
 
 export function SegakGradeBarChart({ summary }) {

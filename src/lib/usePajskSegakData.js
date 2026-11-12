@@ -22,6 +22,9 @@ export function usePajskSegakData({ checkingAuth }) {
   const [classes, setClasses] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [segakRows, setSegakRows] = useState([])
+  const [pajskRows, setPajskRows] = useState([])
+  const [pajskErrorMessage, setPajskErrorMessage] = useState('')
+  const [lastPajskRefresh, setLastPajskRefresh] = useState(null)
 
   const init = useCallback(async () => {
     setLoading(true)
@@ -73,6 +76,7 @@ export function usePajskSegakData({ checkingAuth }) {
   const loadYearData = useCallback(async (schoolId, year) => {
     setLoading(true)
     setErrorMessage('')
+    setPajskErrorMessage('')
 
     try {
       const [
@@ -80,6 +84,7 @@ export function usePajskSegakData({ checkingAuth }) {
         { data: classData, error: classError },
         { data: enrollmentData, error: enrollmentError },
         { data: segakData, error: segakError },
+        { data: pajskData, error: pajskError },
       ] = await Promise.all([
         fetchSchoolLevelLabels({ schoolId, academicYear: year }),
         supabase
@@ -102,7 +107,8 @@ export function usePajskSegakData({ checkingAuth }) {
               id,
               full_name,
               ic_number,
-              gender
+              gender,
+              art_field
             )
           `)
           .eq('school_id', schoolId)
@@ -135,6 +141,38 @@ export function usePajskSegakData({ checkingAuth }) {
           `)
           .eq('school_id', schoolId)
           .eq('academic_year', year),
+        supabase
+          .from('pajsk_student_activity_history')
+          .select(`
+            school_id,
+            academic_year,
+            activity_id,
+            activity_name,
+            activity_date,
+            organiser,
+            competition_category,
+            category,
+            component,
+            level,
+            teacher_in_charge,
+            student_profile_id,
+            student_enrollment_id,
+            student_name_snapshot,
+            form_snapshot,
+            class_name_snapshot,
+            art_field_snapshot,
+            participation_type,
+            participation_score,
+            contribution_type,
+            achievement_result,
+            achievement_score,
+            participant_remarks,
+            created_at,
+            updated_at
+          `)
+          .eq('school_id', schoolId)
+          .eq('academic_year', year)
+          .order('activity_date', { ascending: false }),
       ])
 
       if (classError) throw classError
@@ -145,6 +183,18 @@ export function usePajskSegakData({ checkingAuth }) {
       setClasses(classData || [])
       setEnrollments(enrollmentData || [])
       setSegakRows(segakData || [])
+      if (pajskError) {
+        console.error(pajskError)
+        setPajskRows([])
+        setPajskErrorMessage(
+          pajskError.message?.toLowerCase().includes('permission')
+            ? 'Anda tidak mempunyai kebenaran membaca rekod PAJSK sekolah ini.'
+            : `Rekod PAJSK tidak dapat dibaca: ${pajskError.message || 'Ralat pangkalan data.'}`
+        )
+      } else {
+        setPajskRows(pajskData || [])
+        setLastPajskRefresh(new Date())
+      }
     } catch (error) {
       console.error(error)
       setErrorMessage(
@@ -179,6 +229,9 @@ export function usePajskSegakData({ checkingAuth }) {
     classes,
     enrollments,
     segakRows,
+    pajskRows,
+    pajskErrorMessage,
+    lastPajskRefresh,
     reload: () => {
       if (profile?.school_id && academicYear) {
         return loadYearData(profile.school_id, academicYear)

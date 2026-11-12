@@ -7,9 +7,11 @@ Frontend berasingan untuk merekod aktiviti, penglibatan dan pencapaian murid Sek
 1. Guru masuk menggunakan kod akses yang unik.
 2. Guru mendaftarkan aktiviti terlebih dahulu.
 3. Murid dicari mengikut nama, tingkatan, kelas atau bidang seni.
-4. Penglibatan dan pencapaian boleh diterapkan secara pukal atau diubah bagi setiap murid.
-5. Semua rekod disemak dan disimpan dalam satu transaksi pangkalan data.
-6. Admin boleh mempratonton fail bidang seni 2026; hanya IC, nama dan kelas aktif yang sepadan akan dikemas kini.
+4. Jenis penglibatan dan pencapaian dipilih serta diterapkan secara berasingan bagi setiap murid.
+5. Skor penglibatan dan pencapaian dikira secara bebas mengikut jadual rasmi PAJSK dan peringkat aktiviti.
+6. Kategori pertandingan disimpan sekali pada aktiviti; tiada butiran pencapaian berulang pada murid.
+7. Semua rekod disemak dan disimpan dalam satu transaksi pangkalan data.
+8. Admin boleh mempratonton fail bidang seni 2026; hanya IC, nama dan kelas aktif yang sepadan akan dikemas kini.
 
 ## Pembangunan lokal
 
@@ -23,7 +25,13 @@ Isi `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` menggunakan nilai projek Ed
 
 ## Supabase
 
-Jalankan migrasi `20261111000400_create_pajsk_entry.sql`, kemudian tetapkan secret fungsi:
+Jalankan migrasi berikut mengikut urutan:
+
+1. `20261111000400_create_pajsk_entry.sql`
+2. `20261112000100_separate_pajsk_participation_achievement.sql`
+3. `20261112000200_add_pajsk_analysis_api.sql`
+
+Kemudian tetapkan secret fungsi:
 
 ```bash
 supabase secrets set PAJSK_CODE_PEPPER=<nilai-rawak-sekurang-kurangnya-32-aksara>

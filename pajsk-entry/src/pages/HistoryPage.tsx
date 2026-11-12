@@ -35,7 +35,7 @@ export function HistoryPage() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('ms-MY')
     if (!needle) return activities
-    return activities.filter((activity) => `${activity.activity_name} ${activity.organiser || ''} ${activity.teacher_in_charge}`.toLocaleLowerCase('ms-MY').includes(needle))
+    return activities.filter((activity) => `${activity.activity_name} ${activity.organiser || ''} ${activity.competition_category || ''} ${activity.teacher_in_charge}`.toLocaleLowerCase('ms-MY').includes(needle))
   }, [activities, query])
 
   const cancelActivity = async (activity: ActivitySummary) => {
@@ -71,6 +71,7 @@ export function HistoryPage() {
                 <div className="flex flex-wrap gap-2"><span className="chip">{optionLabel(data?.classifications || [], 'component', activity.component)}</span><span className="chip">{optionLabel(data?.classifications || [], 'level', activity.level)}</span></div>
                 <h2 className="mt-3 text-lg font-bold text-slate-950">{activity.activity_name}</h2>
                 <p className="mt-1 text-sm text-slate-600">{formatDate(activity.activity_date)}{activity.organiser ? ` · ${activity.organiser}` : ''}</p>
+                {activity.competition_category && <p className="mt-1 text-sm text-slate-600">Kategori: {activity.competition_category}</p>}
                 <div className="mt-3 flex items-center gap-2 text-sm font-semibold text-brand-800"><UsersRound className="h-4 w-4" />{activity.participant_count} murid</div>
               </div>
               <div className="flex gap-2">

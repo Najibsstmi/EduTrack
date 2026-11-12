@@ -10,14 +10,12 @@ interface StudentSelectorProps {
   academicYear: number
   selected: Record<string, ParticipantDraft>
   onChange: (next: Record<string, ParticipantDraft>) => void
-  defaultParticipationType: string
 }
 
 export function StudentSelector({
   academicYear,
   selected,
   onChange,
-  defaultParticipationType,
 }: StudentSelectorProps) {
   const { data } = useSession()
   const [query, setQuery] = useState('')
@@ -73,10 +71,9 @@ export function StudentSelector({
 
   const buildParticipant = (student: StudentOption): ParticipantDraft => ({
     ...student,
-    participation_type: defaultParticipationType || 'PENGLIBATAN_I',
+    participation_type: '',
     contribution_type: '',
     achievement_result: 'TIADA',
-    achievement_note: '',
     remarks: '',
   })
 

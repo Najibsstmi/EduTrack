@@ -7,6 +7,7 @@ export const BMI_CATEGORIES = [
   'Normal',
   'Berlebihan Berat Badan',
   'Obes',
+  'Tiada Data BMI',
 ]
 
 const SEGAK_BANDS = [
@@ -161,22 +162,26 @@ export function calculateSegakSummary(rows = []) {
   let missingBmiCount = 0
 
   safeRows.forEach((row) => {
-    const bmi = toFiniteNumber(row?.bmi)
-    const bmiCategory = row?.bmi_category || row?.kategori_bmi || getBmiCategory(bmi)
+    const rawBmi = toFiniteNumber(row?.bmi)
+    const bmi = rawBmi !== null && rawBmi > 0 ? rawBmi : null
+    const bmiCategory = bmi === null
+      ? 'Tiada Data BMI'
+      : row?.bmi_category || row?.kategori_bmi || getBmiCategory(bmi)
 
     if (bmi !== null) {
       bmiTotal += bmi
       bmiCount += 1
     }
 
-    if (bmiCategory && bmiCategoryCounts[bmiCategory] !== undefined) {
+    if (bmiCategoryCounts[bmiCategory] !== undefined) {
       bmiCategoryCounts[bmiCategory] += 1
-    } else {
+    }
+    if (bmi === null) {
       missingBmiCount += 1
     }
 
     const score = getRowScore(row)
-    const normalizedScore = row?.is_absent ? 0 : normalizeSegakScore(score)
+    const normalizedScore = row?.is_absent ? null : normalizeSegakScore(score)
     const grade = getRowGrade(row, normalizedScore)
     const stars = getRowStars(row, normalizedScore)
 
@@ -185,19 +190,15 @@ export function calculateSegakSummary(rows = []) {
       segakScoreCount += 1
     }
 
-    if (gradeCounts[grade] !== undefined) {
+    if (normalizedScore !== null && gradeCounts[grade] !== undefined) {
       gradeCounts[grade] += 1
-    } else {
-      gradeCounts.F += 1
     }
 
-    if (starCounts[stars] !== undefined) {
+    if (normalizedScore !== null && starCounts[stars] !== undefined) {
       starCounts[stars] += 1
-    } else {
-      starCounts[0] += 1
     }
 
-    if (grade === 'F' || normalizedScore === null || row?.is_absent) {
+    if (normalizedScore === null || row?.is_absent) {
       incompleteCount += 1
     }
   })
@@ -221,8 +222,8 @@ export function calculateSegakSummary(rows = []) {
     starCounts,
     incompleteCount,
     fitCount,
-    fitPercent: totalStudents > 0 ? roundTo((fitCount / totalStudents) * 100, 1) : 0,
+    fitPercent: segakScoreCount > 0 ? roundTo((fitCount / segakScoreCount) * 100, 1) : 0,
     attentionCount,
-    attentionPercent: totalStudents > 0 ? roundTo((attentionCount / totalStudents) * 100, 1) : 0,
+    attentionPercent: segakScoreCount > 0 ? roundTo((attentionCount / segakScoreCount) * 100, 1) : 0,
   }
 }

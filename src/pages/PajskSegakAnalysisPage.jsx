@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, ClipboardList } from 'lucide-react'
+import { Activity, ArrowLeft, ClipboardList, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import {
@@ -8,6 +8,7 @@ import {
   SegakTermComparisonChart,
 } from '../components/SegakCharts.jsx'
 import SegakTabs from '../components/SegakTabs.jsx'
+import PajskAnalyticsPanel from '../components/PajskAnalyticsPanel.jsx'
 import {
   getDisplayClassLabel,
   getDisplayLevel,
@@ -36,14 +37,20 @@ export default function PajskSegakAnalysisPage() {
     loading,
     errorMessage,
     setupConfig,
+    profile,
     academicYear,
     setAcademicYear,
     levelMappings,
     classes,
     enrollments,
     segakRows,
+    pajskRows,
+    pajskErrorMessage,
+    lastPajskRefresh,
+    reload,
   } = usePajskSegakData({ checkingAuth })
 
+  const [activeAnalysis, setActiveAnalysis] = useState('pajsk')
   const [selectedTingkatan, setSelectedTingkatan] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('PENGGAL_1')
@@ -194,32 +201,31 @@ export default function PajskSegakAnalysisPage() {
 
         <SegakTabs active="analysis" />
 
+        <div className="grid grid-cols-2 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+          <button type="button" onClick={() => setActiveAnalysis('pajsk')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${activeAnalysis === 'pajsk' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}><Trophy className="h-4 w-4" /> Analisis PAJSK</button>
+          <button type="button" onClick={() => setActiveAnalysis('segak')} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${activeAnalysis === 'segak' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}><Activity className="h-4 w-4" /> Analisis SEGAK</button>
+        </div>
+
+        {activeAnalysis === 'pajsk' ? (
+          <PajskAnalyticsPanel
+            schoolId={profile?.school_id}
+            academicYear={academicYear}
+            setAcademicYear={setAcademicYear}
+            classes={classes}
+            enrollments={enrollments}
+            levelMappings={levelMappings}
+            pajskRows={pajskRows}
+            pajskErrorMessage={pajskErrorMessage}
+            lastPajskRefresh={lastPajskRefresh}
+            reload={reload}
+          />
+        ) : (
+          <>
         {errorMessage ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
             {errorMessage}
           </div>
         ) : null}
-
-        <section className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="font-semibold text-slate-900">Ringkasan PAJSK</div>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Data belum tersedia.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="font-semibold text-slate-900">Ringkasan SEGAK</div>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Analisis SEGAK menggunakan rekod sedia ada di bawah.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="font-semibold text-slate-900">BMI / kecergasan</div>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Paparan BMI dan skor kecergasan kekal menggunakan data SEGAK.
-            </p>
-          </div>
-        </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Penapis Analisis SEGAK</h2>
@@ -281,8 +287,8 @@ export default function PajskSegakAnalysisPage() {
 
         <section className="grid gap-4 md:grid-cols-4">
           <SummaryCard title="Jumlah Murid" value={overallSummary.totalStudents} />
-          <SummaryCard title="Purata BMI" value={formatNumber(overallSummary.averageBmi)} />
-          <SummaryCard title="Purata Skor SEGAK" value={formatNumber(overallSummary.averageSegakScore)} />
+          <SummaryCard title="Purata BMI" value={formatNumber(overallSummary.averageBmi)} note={`${overallSummary.bmiCount} rekod sah`} />
+          <SummaryCard title="Purata Skor SEGAK" value={formatNumber(overallSummary.averageSegakScore)} note={`${overallSummary.segakScoreCount} rekod sah`} />
           <SummaryCard title="Tidak Melengkapkan" value={overallSummary.incompleteCount} />
         </section>
 
@@ -309,6 +315,10 @@ export default function PajskSegakAnalysisPage() {
             ])}
           />
         </section>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+          Kategori BMI berjumlah {overallSummary.totalStudents} murid termasuk {overallSummary.missingBmiCount} murid tanpa data BMI. Gred F yang sah dipisahkan daripada {overallSummary.incompleteCount} rekod tidak lengkap.
+        </div>
 
         <section className="grid gap-4 xl:grid-cols-2">
           <ChartSection title="Taburan Gred SEGAK">
@@ -410,16 +420,19 @@ export default function PajskSegakAnalysisPage() {
             </table>
           </div>
         </section>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-function SummaryCard({ title, value }) {
+function SummaryCard({ title, value, note }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="text-sm font-medium text-slate-500">{title}</div>
       <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+      {note ? <div className="mt-1 text-xs text-slate-500">{note}</div> : null}
     </div>
   )
 }

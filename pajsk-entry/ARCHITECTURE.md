@@ -14,14 +14,14 @@
 
 Garis panduan sekolah menengah menetapkan tiga komponen PAJSK: SEGAK, Kokurikulum dan Ekstra Kurikulum. Kokurikulum merangkumi Kelab/Persatuan, Pasukan Badan Beruniform serta Sukan/Permainan.
 
-MVP menyimpan pilihan rasmi berikut tanpa mengira skor:
+Sistem menyimpan pilihan rasmi berikut dan mengira skor penglibatan serta pencapaian secara berasingan:
 
-- Penglibatan I, II dan III.
+- Penglibatan I, II dan III dipilih secara eksplisit sebagai peranan sebenar murid.
 - Peringkat Sekolah, Daerah/Zon, Negeri, Kebangsaan dan Antarabangsa.
-- Pencapaian Tiada, Johan, Naib Johan, Ketiga, Keempat dan Kelima.
+- Pencapaian Tiada, Johan, Naib Johan, Ketiga, Keempat dan Kelima disimpan serta dikira berasingan daripada penglibatan.
 - Khidmat Sumbangan: Atlet/Peserta, Kemahiran Khusus, Persembahan dan Sokongan.
 
-Skor dalam helaian 2024 tidak dipindahkan ke enjin aplikasi. Lajur `score` dalam jadual rujukan dibiarkan kosong sehingga semua peraturan, edisi dokumen dan formula dipersetujui.
+Skor penglibatan menggunakan jenis penglibatan bersama peringkat aktiviti. Skor pencapaian menggunakan keputusan pertandingan bersama peringkat aktiviti. Kedua-dua pengiraan mengikuti jadual rasmi PAJSK sekolah menengah dan tidak berkongsi input selain peringkat aktiviti.
 
 ## Jadual baharu
 
@@ -32,10 +32,12 @@ Skor dalam helaian 2024 tidak dipindahkan ke enjin aplikasi. Lajur `score` dalam
 | `pajsk_login_attempts` | Had cubaan mengikut cap jari kod dan alamat rangkaian berhash. |
 | `pajsk_classification_options` | Pilihan terkawal yang disahkan daripada panduan. |
 | `pajsk_activities` | Maklumat induk aktiviti/program. |
-| `pajsk_activity_participants` | Penglibatan dan pencapaian setiap murid beserta snapshot sejarah. |
+| `pajsk_activity_participants` | Penglibatan, pencapaian dan skor bebas setiap murid beserta snapshot sejarah. |
 | `pajsk_audit_logs` | Jejak penciptaan, perubahan, pembatalan dan pengurusan akses. |
 
 View `pajsk_student_activity_history` menyediakan bacaan terus kepada EduTrack melalui RLS sekolah. RPC import bidang seni memadankan IC selepas membuang sengkang dan ruang, tetapi hanya menulis apabila IC unik, nama sepadan, kelas 2026 sepadan dan enrolmen masih aktif.
+
+EduTrack membaca view yang sama untuk ringkasan dan carta. Fungsi `pajsk_analysis_student_rows` menyediakan carian serta pembahagian halaman pada pelayan untuk jadual murid tanpa membuka akses merentas sekolah.
 
 ## Keselamatan
 

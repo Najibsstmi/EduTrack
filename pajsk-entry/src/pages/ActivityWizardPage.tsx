@@ -4,6 +4,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { StudentSelector } from '../components/StudentSelector'
 import { ApiError, apiRequest } from '../lib/api'
 import { optionLabel, optionsByType } from '../lib/options'
+import {
+  calculateAchievementScore,
+  calculateParticipationScore,
+  PARTICIPATION_DESCRIPTIONS,
+  setParticipantAchievement,
+  setParticipantParticipation,
+} from '../lib/pajskScoring'
 import { useSession } from '../session/useSession'
 import type { ActivityDraft, ParticipantDraft } from '../types'
 
@@ -33,6 +40,7 @@ export function ActivityWizardPage() {
     activity_date: todayLocal(),
     academic_year: data?.current_academic_year || new Date().getFullYear(),
     organiser: '',
+    competition_category: '',
     category: categoryOptions[0]?.value || 'KOKURIKULUM',
     component: componentOptions[0]?.value || 'KELAB_PERSATUAN',
     level: levelOptions[0]?.value || 'SEKOLAH',
@@ -41,7 +49,7 @@ export function ActivityWizardPage() {
     remarks: '',
   })
   const [selected, setSelected] = useState<Record<string, ParticipantDraft>>({})
-  const [bulkParticipation, setBulkParticipation] = useState('PENGLIBATAN_I')
+  const [bulkParticipation, setBulkParticipation] = useState('')
   const [bulkContribution, setBulkContribution] = useState('')
   const [bulkAchievement, setBulkAchievement] = useState('TIADA')
   const [loading, setLoading] = useState(Boolean(activityId))
@@ -70,6 +78,7 @@ export function ActivityWizardPage() {
           activity_date: String(row.activity_date || ''),
           academic_year: Number(row.academic_year),
           organiser: String(row.organiser || ''),
+          competition_category: String(row.competition_category || ''),
           category: String(row.category || ''),
           component: String(row.component || ''),
           level: String(row.level || ''),
@@ -89,10 +98,9 @@ export function ActivityWizardPage() {
             form: String(participant.form_snapshot || ''),
             class_name: String(participant.class_name_snapshot || ''),
             art_field: participant.art_field_snapshot ? String(participant.art_field_snapshot) : null,
-            participation_type: String(participant.participation_type || 'PENGLIBATAN_I'),
+            participation_type: String(participant.participation_type || ''),
             contribution_type: String(participant.contribution_type || ''),
             achievement_result: String(participant.achievement_result || 'TIADA'),
-            achievement_note: String(participant.achievement_note || ''),
             remarks: String(participant.remarks || ''),
           }
         })
@@ -137,17 +145,35 @@ export function ActivityWizardPage() {
     if (canContinue()) setStep((current) => Math.min(current + 1, steps.length - 1))
   }
 
-  const applyBulk = () => {
+  const applyBulkParticipation = () => {
+    if (!bulkParticipation) return
     setSelected((current) =>
       Object.fromEntries(
         Object.entries(current).map(([key, participant]) => [
           key,
-          {
-            ...participant,
-            participation_type: bulkParticipation,
-            contribution_type: bulkContribution,
-            achievement_result: bulkAchievement,
-          },
+          setParticipantParticipation(participant, bulkParticipation),
+        ])
+      )
+    )
+  }
+
+  const applyBulkContribution = () => {
+    setSelected((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([key, participant]) => [
+          key,
+          { ...participant, contribution_type: bulkContribution },
+        ])
+      )
+    )
+  }
+
+  const applyBulkAchievement = () => {
+    setSelected((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([key, participant]) => [
+          key,
+          setParticipantAchievement(participant, bulkAchievement),
         ])
       )
     )
@@ -173,7 +199,6 @@ export function ActivityWizardPage() {
           participation_type: participant.participation_type,
           contribution_type: participant.contribution_type || null,
           achievement_result: participant.achievement_result,
-          achievement_note: participant.achievement_note,
           remarks: participant.remarks,
         })),
       })
@@ -217,6 +242,7 @@ export function ActivityWizardPage() {
             <div><label className="field-label" htmlFor="academic-year">Tahun akademik *</label><select id="academic-year" className="field" value={activity.academic_year} onChange={(event) => { setField('academic_year', Number(event.target.value)); setSelected({}) }} disabled={Boolean(activityId)}>{(data?.academic_years || [activity.academic_year]).map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
             <div><label className="field-label" htmlFor="organiser">Penganjur</label><input id="organiser" className="field" value={activity.organiser} onChange={(event) => setField('organiser', event.target.value)} /></div>
             <div><label className="field-label" htmlFor="teacher">Guru bertanggungjawab</label><input id="teacher" className="field" value={activity.teacher_in_charge} onChange={(event) => setField('teacher_in_charge', event.target.value)} /></div>
+            <div className="sm:col-span-2"><label className="field-label" htmlFor="competition-category">Kategori pertandingan (jika berkenaan)</label><input id="competition-category" className="field" value={activity.competition_category} onChange={(event) => setField('competition_category', event.target.value)} placeholder="Contoh: Tarian berkumpulan sekolah menengah" /></div>
             <div><label className="field-label" htmlFor="category">Kategori *</label><select id="category" className="field" value={activity.category} onChange={(event) => { const category = event.target.value; setActivity((current) => ({ ...current, category, component: category === 'EKSTRA_KURIKULUM' ? 'EKSTRA_KURIKULUM' : current.component === 'EKSTRA_KURIKULUM' ? 'KELAB_PERSATUAN' : current.component })) }}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="component">Komponen PAJSK *</label><select id="component" className="field" value={activity.component} onChange={(event) => setField('component', event.target.value)}>{applicableComponentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="level">Peringkat *</label><select id="level" className="field" value={activity.level} onChange={(event) => setField('level', event.target.value)}>{levelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
@@ -228,20 +254,22 @@ export function ActivityWizardPage() {
 
       {step === 1 && (
         <section className="card p-4 sm:p-6">
-          <StudentSelector academicYear={activity.academic_year} selected={selected} onChange={setSelected} defaultParticipationType={participationOptions[0]?.value || 'PENGLIBATAN_I'} />
+          <StudentSelector academicYear={activity.academic_year} selected={selected} onChange={setSelected} />
         </section>
       )}
 
       {step === 2 && (
         <div className="space-y-4">
           <section className="card p-5">
-            <h2 className="font-bold text-slate-950">Terapkan maklumat sama kepada semua</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <select className="field" value={bulkParticipation} onChange={(event) => setBulkParticipation(event.target.value)} aria-label="Penglibatan pukal">{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-              <select className="field" value={bulkContribution} onChange={(event) => setBulkContribution(event.target.value)} aria-label="Khidmat sumbangan pukal"><option value="">Tiada khidmat khusus</option>{contributionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-              <select className="field" value={bulkAchievement} onChange={(event) => setBulkAchievement(event.target.value)} aria-label="Pencapaian pukal">{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+            <h2 className="font-bold text-slate-950">Terapkan pilihan secara berasingan</h2>
+            <p className="mt-1 text-sm text-slate-600">Jenis penglibatan menerangkan peranan murid. Pencapaian ialah keputusan pertandingan dan tidak akan mengubah jenis penglibatan.</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div><select className="field" value={bulkParticipation} onChange={(event) => setBulkParticipation(event.target.value)} aria-label="Penglibatan pukal"><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description || PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkParticipation} disabled={!bulkParticipation}>Terap penglibatan</button></div>
+              <div><select className="field" value={bulkContribution} onChange={(event) => setBulkContribution(event.target.value)} aria-label="Khidmat sumbangan pukal"><option value="">Tiada khidmat khusus</option>{contributionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkContribution}>Terap khidmat</button></div>
+              <div><select className="field" value={bulkAchievement} onChange={(event) => setBulkAchievement(event.target.value)} aria-label="Pencapaian pukal">{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkAchievement}>Terap pencapaian</button></div>
             </div>
-            <button type="button" className="btn-secondary mt-3" onClick={applyBulk}>Terap kepada {participants.length} murid</button>
+            <p className="mt-3 text-xs text-slate-500">Setiap tindakan di atas hanya mengubah medan yang dinamakan untuk {participants.length} murid.</p>
+            <p className="mt-1 text-xs text-slate-500">Pencapaian Keempat dan Kelima hanya digunakan untuk kategori individu sukan. Penyertaan antarabangsa tertakluk kepada pengiktirafan BSKK.</p>
           </section>
 
           <section className="space-y-3">
@@ -249,10 +277,9 @@ export function ActivityWizardPage() {
               <article key={participant.student_profile_id} className="card p-5">
                 <div className="flex items-start gap-3"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-800">{index + 1}</div><div><h3 className="font-semibold text-slate-950">{participant.full_name}</h3><p className="mt-1 text-xs text-slate-500">{participant.form} · {participant.class_name}{participant.art_field ? ` · ${participant.art_field}` : ''}</p></div></div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div><label className="field-label">Jenis penglibatan *</label><select className="field" value={participant.participation_type} onChange={(event) => updateParticipant(participant.student_profile_id, { participation_type: event.target.value })}>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                  <div><label className="field-label">Jenis penglibatan *</label><select className="field" value={participant.participation_type} onChange={(event) => setSelected((current) => ({ ...current, [participant.student_profile_id]: setParticipantParticipation(current[participant.student_profile_id], event.target.value) }))}><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description || PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select>{participant.participation_type && <p className="mt-1 text-xs leading-5 text-slate-500">Skor penglibatan: {calculateParticipationScore(activity.level, participant.participation_type) ?? '—'} / 20</p>}</div>
                   <div><label className="field-label">Khidmat sumbangan</label><select className="field" value={participant.contribution_type} onChange={(event) => updateParticipant(participant.student_profile_id, { contribution_type: event.target.value })}><option value="">Tiada / tidak berkenaan</option>{contributionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-                  <div><label className="field-label">Pencapaian *</label><select className="field" value={participant.achievement_result} onChange={(event) => updateParticipant(participant.student_profile_id, { achievement_result: event.target.value })}>{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
-                  <div className="md:col-span-2"><label className="field-label">Butiran pencapaian</label><input className="field" value={participant.achievement_note} onChange={(event) => updateParticipant(participant.student_profile_id, { achievement_note: event.target.value })} placeholder="Contoh: Kategori berkumpulan sekolah menengah" /></div>
+                  <div><label className="field-label">Pencapaian *</label><select className="field" value={participant.achievement_result} onChange={(event) => setSelected((current) => ({ ...current, [participant.student_profile_id]: setParticipantAchievement(current[participant.student_profile_id], event.target.value) }))}>{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><p className="mt-1 text-xs leading-5 text-slate-500">Skor pencapaian: {calculateAchievementScore(activity.level, participant.achievement_result) ?? '—'} / 20</p></div>
                   <div><label className="field-label">Catatan</label><input className="field" value={participant.remarks} onChange={(event) => updateParticipant(participant.student_profile_id, { remarks: event.target.value })} /></div>
                 </div>
               </article>
@@ -263,9 +290,9 @@ export function ActivityWizardPage() {
 
       {step === 3 && (
         <div className="space-y-4">
-          <section className="card p-5 sm:p-6"><h2 className="font-bold text-slate-950">Ringkasan aktiviti</h2><dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-slate-500">Aktiviti</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_name}</dd></div><div><dt className="text-slate-500">Tarikh</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_date}</dd></div><div><dt className="text-slate-500">Peringkat</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'level', activity.level)}</dd></div><div><dt className="text-slate-500">Komponen</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'component', activity.component)}</dd></div><div><dt className="text-slate-500">Guru</dt><dd className="mt-1 font-semibold text-slate-900">{activity.teacher_in_charge}</dd></div><div><dt className="text-slate-500">Jumlah murid</dt><dd className="mt-1 font-semibold text-slate-900">{participants.length}</dd></div></dl></section>
-          <section className="card overflow-hidden"><div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-950">Murid dan pencapaian</div><div className="divide-y divide-slate-100">{participants.map((participant) => <div key={participant.student_profile_id} className="px-5 py-4"><div className="font-semibold text-slate-900">{participant.full_name}</div><div className="mt-1 text-xs text-slate-500">{optionLabel(classifications, 'participation_type', participant.participation_type)} · {optionLabel(classifications, 'achievement_result', participant.achievement_result)}{participant.achievement_note ? ` · ${participant.achievement_note}` : ''}</div></div>)}</div></section>
-          <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">Rekod ini menyimpan penglibatan mentah. Markah PAJSK rasmi belum dikira dalam MVP.</div>
+          <section className="card p-5 sm:p-6"><h2 className="font-bold text-slate-950">Ringkasan aktiviti</h2><dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-slate-500">Aktiviti</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_name}</dd></div><div><dt className="text-slate-500">Tarikh</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_date}</dd></div><div><dt className="text-slate-500">Peringkat</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'level', activity.level)}</dd></div><div><dt className="text-slate-500">Komponen</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'component', activity.component)}</dd></div>{activity.competition_category && <div><dt className="text-slate-500">Kategori pertandingan</dt><dd className="mt-1 font-semibold text-slate-900">{activity.competition_category}</dd></div>}<div><dt className="text-slate-500">Guru</dt><dd className="mt-1 font-semibold text-slate-900">{activity.teacher_in_charge}</dd></div><div><dt className="text-slate-500">Jumlah murid</dt><dd className="mt-1 font-semibold text-slate-900">{participants.length}</dd></div></dl></section>
+          <section className="card overflow-hidden"><div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-950">Murid, penglibatan dan pencapaian</div><div className="divide-y divide-slate-100">{participants.map((participant) => <div key={participant.student_profile_id} className="px-5 py-4"><div className="font-semibold text-slate-900">{participant.full_name}</div><div className="mt-1 text-xs text-slate-500">{optionLabel(classifications, 'participation_type', participant.participation_type)} ({calculateParticipationScore(activity.level, participant.participation_type) ?? '—'}/20) · {optionLabel(classifications, 'achievement_result', participant.achievement_result)} ({calculateAchievementScore(activity.level, participant.achievement_result) ?? '—'}/20)</div></div>)}</div></section>
+          <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm leading-6 text-brand-950">Skor penglibatan dan skor pencapaian dikira secara berasingan mengikut peringkat. Menukar salah satu tidak mengubah yang lain.</div>
         </div>
       )}
 
