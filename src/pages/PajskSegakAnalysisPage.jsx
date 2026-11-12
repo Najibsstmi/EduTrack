@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Activity, ArrowLeft, ClipboardList, Trophy } from 'lucide-react'
+import { Activity, ArrowLeft, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import {
@@ -14,6 +14,7 @@ import {
   getDisplayLevel,
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels.js'
+import { getDashboardPath } from '../lib/dashboardPath.js'
 import {
   BMI_CATEGORIES,
   calculateSegakSummary,
@@ -172,29 +173,21 @@ export default function PajskSegakAnalysisPage() {
     return <div className="p-6 text-slate-600">Loading Analisis PAJSK & SEGAK...</div>
   }
 
+  const dashboardPath = getDashboardPath(profile)
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
       <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
           title="Analisis PAJSK & SEGAK"
-          actionLeft={
-            <button
-              type="button"
-              onClick={() => navigate('/pbs/pajsk/segak')}
-              className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span>SEGAK</span>
-            </button>
-          }
           actionRight={
             <button
               type="button"
-              onClick={() => navigate('/pbs/pajsk/segak/input')}
+              onClick={() => navigate(dashboardPath)}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              <ClipboardList className="h-4 w-4" aria-hidden="true" />
-              <span>Input</span>
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <span>Kembali ke Dashboard</span>
             </button>
           }
         />

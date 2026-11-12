@@ -43,7 +43,7 @@ export default function PajskInputPage() {
     <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 sm:p-4 md:p-6">
       <div className="mx-auto min-w-0 max-w-7xl space-y-4">
         <AppHeader
-          title="Input PAJSK"
+          title="PAJSK & SEGAK"
           actionLeft={
             <button
               type="button"
@@ -86,7 +86,7 @@ export default function PajskInputPage() {
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 <ClipboardList className="h-4 w-4" aria-hidden="true" />
-                <span>Input</span>
+                <span>Input SEGAK</span>
               </button>
               <button
                 type="button"
@@ -94,7 +94,7 @@ export default function PajskInputPage() {
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 <BarChart3 className="h-4 w-4" aria-hidden="true" />
-                <span>Analisis</span>
+                <span>Analisis PAJSK & SEGAK</span>
               </button>
             </div>
           </div>

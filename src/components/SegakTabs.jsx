@@ -10,7 +10,7 @@ const tabs = [
   },
   {
     key: 'input',
-    label: 'Input',
+    label: 'Input SEGAK',
     path: '/pbs/pajsk/segak/input',
     icon: ClipboardList,
   },
