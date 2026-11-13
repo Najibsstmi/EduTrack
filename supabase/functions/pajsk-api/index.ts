@@ -11,6 +11,8 @@ const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const codePepper =
   Deno.env.get('PAJSK_CODE_PEPPER') || `pajsk-entry-access-code:${serviceRoleKey}`
 const encoder = new TextEncoder()
+const sharedTeacherCode = 'JEA1091'
+const sharedTeacherDisplayName = 'Guru SSeMJ'
 
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -229,6 +231,58 @@ const createAccess = async ({
   return { accessCode, access: data }
 }
 
+const ensureSharedTeacherAccess = async (normalizedCode: string, codeLookup: string) => {
+  if (normalizedCode !== sharedTeacherCode) return
+
+  const { data: existingAccess, error: existingAccessError } = await admin
+    .from('pajsk_teacher_access')
+    .select('id, role, is_active, expires_at')
+    .eq('code_lookup', codeLookup)
+    .maybeSingle()
+
+  if (existingAccessError) throw new HttpError(500, 'Kod guru bersama tidak dapat disemak.')
+  if (existingAccess) {
+    const { error } = await admin
+      .from('pajsk_teacher_access')
+      .update({
+        display_name: sharedTeacherDisplayName,
+        role: 'teacher',
+        is_active: true,
+        expires_at: null,
+        failed_attempts: 0,
+        locked_until: null,
+      })
+      .eq('id', existingAccess.id)
+    if (error) throw new HttpError(500, 'Kod guru bersama tidak dapat diaktifkan.')
+    return
+  }
+
+  const { data: school, error: schoolError } = await admin
+    .from('schools')
+    .select('id')
+    .eq('school_code', 'JEA1091')
+    .maybeSingle()
+  if (schoolError || !school) {
+    throw new HttpError(500, 'Sekolah Seni Malaysia Johor tidak ditemui.')
+  }
+
+  const salt = randomHex(16)
+  const codeHash = await deriveCodeHash(normalizedCode, salt)
+  const { error } = await admin.from('pajsk_teacher_access').insert({
+    school_id: school.id,
+    display_name: sharedTeacherDisplayName,
+    role: 'teacher',
+    code_lookup: codeLookup,
+    code_hash: codeHash,
+    code_salt: salt,
+    is_active: true,
+  })
+
+  if (error && error.code !== '23505') {
+    throw new HttpError(500, 'Kod guru bersama tidak dapat diwujudkan.')
+  }
+}
+
 interface ValidSession {
   sessionId: string
   accessId: string
@@ -321,7 +375,9 @@ const recordLoginAttempt = async ({
 
 const loginWithCode = async (request: Request, body: JsonRecord) => {
   const normalizedCode = normalizeCode(body.code)
-  if (normalizedCode.length < 8) throw new HttpError(400, 'Masukkan kod akses yang sah.')
+  if (normalizedCode !== sharedTeacherCode && normalizedCode.length < 8) {
+    throw new HttpError(400, 'Masukkan kod akses yang sah.')
+  }
 
   const ipAddress = getClientIp(request)
   const [ipHash, codeLookup, codeFingerprint] = await Promise.all([
@@ -329,6 +385,7 @@ const loginWithCode = async (request: Request, body: JsonRecord) => {
     hmac(`lookup:${normalizedCode}`),
     hmac(`attempt:${normalizedCode}`),
   ])
+  await ensureSharedTeacherAccess(normalizedCode, codeLookup)
   const windowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString()
 
   const [{ count: ipAttempts }, { count: codeAttempts }] = await Promise.all([

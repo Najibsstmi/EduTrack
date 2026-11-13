@@ -64,7 +64,7 @@ export function AccessPage() {
             </div>
             <h2 className="mt-4 text-2xl font-bold text-slate-950">Masukkan kod akses</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Kod ini diberikan oleh pentadbir PAJSK sekolah anda.
+              Semua guru SSeMJ boleh menggunakan kod sekolah yang sama.
             </p>
           </div>
 
@@ -76,7 +76,7 @@ export function AccessPage() {
                 className="field text-center font-mono text-lg uppercase tracking-[0.18em]"
                 value={code}
                 onChange={(event) => setCode(event.target.value.toUpperCase())}
-                placeholder="PJK-XXXXX-XXXXX"
+                placeholder="JEA1091"
                 autoComplete="one-time-code"
                 autoFocus
                 required
