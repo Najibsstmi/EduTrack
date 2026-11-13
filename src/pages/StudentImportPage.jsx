@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabaseClient'
 import { useNavigate } from 'react-router-dom'
 
 const REQUIRED_HEADERS = ['ic_number', 'full_name', 'gender', 'tingkatan', 'class_name']
+const ART_FIELD_HEADER = 'bidang'
+const ART_FIELDS = ['Seni Tari', 'Seni Muzik', 'Seni Teater', 'Seni Visual']
 
 function normalizeSpaces(value) {
   return String(value || '')
@@ -19,6 +21,19 @@ function normalizeIcNumber(rawValue) {
   }
 
   return value.toUpperCase()
+}
+
+function normalizeArtField(rawValue) {
+  const value = normalizeSpaces(rawValue).toUpperCase()
+  return ART_FIELDS.find((field) => field.toUpperCase() === value) || ''
+}
+
+function chunkItems(items, size = 100) {
+  const chunks = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
 }
 
 function getGradeNumber(rawValue) {
@@ -118,12 +133,18 @@ function parseCsv(text) {
   return { headers, rows }
 }
 
-function downloadTemplate() {
-  const csv = [
-    'ic_number,full_name,gender,tingkatan,class_name',
-    '100101011234,Ahmad Firdaus bin Ali,Lelaki,Tingkatan 1,TANGO',
-    '100101011235,Nur Ain Syafiqah binti Rahman,Perempuan,Tingkatan 1,BALADA',
-  ].join('\n')
+function downloadTemplate(includeArtField = false) {
+  const csv = includeArtField
+    ? [
+        'ic_number,full_name,gender,tingkatan,class_name,bidang',
+        '100101011234,Ahmad Firdaus bin Ali,Lelaki,Tingkatan 1,TANGO,Seni Tari',
+        '100101011235,Nur Ain Syafiqah binti Rahman,Perempuan,Tingkatan 1,BALADA,Seni Muzik',
+      ].join('\n')
+    : [
+        'ic_number,full_name,gender,tingkatan,class_name',
+        '100101011234,Ahmad Firdaus bin Ali,Lelaki,Tingkatan 1,TANGO',
+        '100101011235,Nur Ain Syafiqah binti Rahman,Perempuan,Tingkatan 1,BALADA',
+      ].join('\n')
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
@@ -151,6 +172,7 @@ export default function StudentImportPage() {
   const [parsedRows, setParsedRows] = useState([])
   const [previewRows, setPreviewRows] = useState([])
   const [errors, setErrors] = useState([])
+  const isSsemj = school?.school_code === 'JEA1091'
 
   useEffect(() => {
     initPage()
@@ -262,7 +284,10 @@ export default function StudentImportPage() {
     const text = await file.text()
     const { headers, rows } = parseCsv(text)
 
-    const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h))
+    const requiredHeaders = isSsemj
+      ? [...REQUIRED_HEADERS, ART_FIELD_HEADER]
+      : REQUIRED_HEADERS
+    const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h))
     if (missingHeaders.length > 0) {
       setErrors([
         `Header wajib tiada: ${missingHeaders.join(', ')}. Sila guna template rasmi sistem.`,
@@ -283,6 +308,9 @@ export default function StudentImportPage() {
         gender: normalizeSpaces(cells[headerIndex.gender] || ''),
         tingkatan: normalizeTingkatan(rawTingkatan),
         class_name: normalizeSpaces(rawClassName),
+        art_field: isSsemj
+          ? normalizeArtField(cells[headerIndex[ART_FIELD_HEADER]] || '')
+          : '',
       }
 
       return row
@@ -321,6 +349,13 @@ export default function StudentImportPage() {
 
       if (row.gender && !['Lelaki', 'Perempuan'].includes(row.gender)) {
         validationErrors.push(`Baris ${row.row_number}: gender mesti Lelaki atau Perempuan.`)
+        continue
+      }
+
+      if (isSsemj && !row.art_field) {
+        validationErrors.push(
+          `Baris ${row.row_number}: bidang mesti salah satu daripada ${ART_FIELDS.join(', ')}.`
+        )
         continue
       }
 
@@ -368,7 +403,7 @@ export default function StudentImportPage() {
 
       const { data: existingProfiles, error: existingProfilesError } = await supabase
         .from('student_profiles')
-        .select('id, ic_number')
+        .select('id, ic_number, art_field')
         .eq('school_id', profile.school_id)
         .in('ic_number', icNumbers)
 
@@ -387,6 +422,7 @@ export default function StudentImportPage() {
           ic_number: row.ic_number,
           full_name: row.full_name,
           gender: row.gender || null,
+          ...(isSsemj ? { art_field: row.art_field } : {}),
         }))
 
       if (profilesToInsert.length > 0) {
@@ -396,6 +432,31 @@ export default function StudentImportPage() {
 
         if (insertProfilesError) {
           throw insertProfilesError
+        }
+      }
+
+      if (isSsemj) {
+        const changedProfileIdsByField = new Map(ART_FIELDS.map((field) => [field, []]))
+
+        parsedRows.forEach((row) => {
+          const existingProfile = existingMap.get(row.ic_number)
+          if (existingProfile && existingProfile.art_field !== row.art_field) {
+            changedProfileIdsByField.get(row.art_field).push(existingProfile.id)
+          }
+        })
+
+        for (const [artField, profileIds] of changedProfileIdsByField) {
+          for (const profileIdChunk of chunkItems(profileIds)) {
+            const { error: updateArtFieldError } = await supabase
+              .from('student_profiles')
+              .update({ art_field: artField })
+              .eq('school_id', profile.school_id)
+              .in('id', profileIdChunk)
+
+            if (updateArtFieldError) {
+              throw updateArtFieldError
+            }
+          }
         }
       }
 
@@ -501,7 +562,7 @@ export default function StudentImportPage() {
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={downloadTemplate}
+              onClick={() => downloadTemplate(isSsemj)}
               className="rounded-xl bg-slate-800 px-5 py-3 font-medium text-white hover:bg-slate-900"
             >
               Download Template CSV
@@ -530,6 +591,9 @@ export default function StudentImportPage() {
           <p className="mt-2 text-sm text-slate-500">
             Tingkatan boleh ditulis sebagai 1, T1, F1, Form 1 atau Tingkatan 1.
             Nama kelas tidak sensitif huruf besar/kecil.
+            {isSsemj && (
+              <> Lajur bidang wajib diisi dengan Seni Tari, Seni Muzik, Seni Teater atau Seni Visual.</>
+            )}
           </p>
 
           {fileName && (
@@ -567,6 +631,9 @@ export default function StudentImportPage() {
                     <th className="px-3 py-3 text-sm font-semibold text-slate-700">Jantina</th>
                     <th className="px-3 py-3 text-sm font-semibold text-slate-700">Tingkatan</th>
                     <th className="px-3 py-3 text-sm font-semibold text-slate-700">Kelas</th>
+                    {isSsemj && (
+                      <th className="px-3 py-3 text-sm font-semibold text-slate-700">Bidang</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -577,6 +644,7 @@ export default function StudentImportPage() {
                       <td className="px-3 py-3">{row.gender || '-'}</td>
                       <td className="px-3 py-3">{row.tingkatan}</td>
                       <td className="px-3 py-3">{row.class_name}</td>
+                      {isSsemj && <td className="px-3 py-3">{row.art_field}</td>}
                     </tr>
                   ))}
                 </tbody>
