@@ -6,7 +6,6 @@ import {
   KeyRound,
   LogOut,
   Menu,
-  Palette,
   X,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -27,7 +26,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     ? [
         ...roleItems,
         { to: '/admin/access', label: 'Kod Guru', icon: KeyRound },
-        { to: '/admin/art-fields', label: 'Bidang Seni', icon: Palette },
       ]
     : roleItems
 

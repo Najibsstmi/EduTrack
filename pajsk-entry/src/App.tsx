@@ -7,7 +7,6 @@ import { useSession } from './session/useSession'
 const AccessPage = lazy(() => import('./pages/AccessPage').then((module) => ({ default: module.AccessPage })))
 const ActivityWizardPage = lazy(() => import('./pages/ActivityWizardPage').then((module) => ({ default: module.ActivityWizardPage })))
 const AdminAccessPage = lazy(() => import('./pages/AdminAccessPage').then((module) => ({ default: module.AdminAccessPage })))
-const AdminArtFieldsPage = lazy(() => import('./pages/AdminArtFieldsPage').then((module) => ({ default: module.AdminArtFieldsPage })))
 const AdminSetupPage = lazy(() => import('./pages/AdminSetupPage').then((module) => ({ default: module.AdminSetupPage })))
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const HistoryPage = lazy(() => import('./pages/HistoryPage').then((module) => ({ default: module.HistoryPage })))
@@ -49,7 +48,6 @@ export default function App() {
           </Route>
           <Route element={<AdminRoute />}>
             <Route path="admin/access" element={<AdminAccessPage />} />
-            <Route path="admin/art-fields" element={<AdminArtFieldsPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
