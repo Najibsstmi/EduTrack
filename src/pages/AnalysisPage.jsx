@@ -84,6 +84,16 @@ const isFailGrade = (grade) => {
   return value === 'G'
 }
 
+const isMinimumCGrade = (grade) => {
+  const value = String(grade || '').trim().toUpperCase().replace(/[−–—]/g, '-')
+  return ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C'].includes(value)
+}
+
+const isBelowMinimumCGrade = (grade) => {
+  const value = String(grade || '').trim().toUpperCase().replace(/[−–—]/g, '-')
+  return ['D', 'E', 'F', 'G'].includes(value)
+}
+
 const isTHGrade = (grade) => {
   return String(grade || '').trim().toUpperCase() === 'TH'
 }
@@ -1090,6 +1100,8 @@ export default function AnalysisPage() {
 
       const lulus = grades.filter((g) => isPassGrade(g)).length
       const gagal = grades.filter((g) => isFailGrade(g)).length
+      const minimumC = grades.filter((g) => isMinimumCGrade(g)).length
+      const bawahC = grades.filter((g) => isBelowMinimumCGrade(g)).length
 
       const points = mergedRows
         .map((row) => {
@@ -1113,6 +1125,9 @@ export default function AnalysisPage() {
         belumIsi,
         ...gradeCounts,
         lulus,
+        minimumC,
+        peratusMinimumC: hadir ? Number(((minimumC / hadir) * 100).toFixed(2)) : null,
+        bawahC,
         peratusLulus: hadir ? Number(((lulus / hadir) * 100).toFixed(2)) : 0,
         gagal,
         peratusGagal: hadir ? Number(((gagal / hadir) * 100).toFixed(2)) : 0,
@@ -1799,7 +1814,7 @@ export default function AnalysisPage() {
               </div>
             ) : (
               <div className="overflow-x-auto -mx-4 md:mx-0">
-                <table className="w-full min-w-[760px] border-collapse text-xs md:text-sm">
+                <table className="w-full min-w-[1040px] border-collapse text-xs md:text-sm">
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="border-b px-3 py-3 text-left font-semibold">Jenis Peperiksaan</th>
@@ -1812,6 +1827,9 @@ export default function AnalysisPage() {
                           {grade}
                         </th>
                       ))}
+                      <th className="border-b bg-emerald-50 px-3 py-3 text-left font-semibold text-emerald-900">Minimum C</th>
+                      <th className="border-b bg-emerald-50 px-3 py-3 text-left font-semibold text-emerald-900">% Minimum C</th>
+                      <th className="border-b bg-red-50 px-3 py-3 text-left font-semibold text-red-900">Bawah C</th>
                       <th className="border-b px-3 py-3 text-left font-semibold">Lulus</th>
                       <th className="border-b px-3 py-3 text-left font-semibold">% Lulus</th>
                       <th className="border-b px-3 py-3 text-left font-semibold">Gagal</th>
@@ -1834,6 +1852,11 @@ export default function AnalysisPage() {
                             {row[grade] ?? 0}
                           </td>
                         ))}
+                        <td className="bg-emerald-50/60 px-3 py-3 font-semibold text-emerald-800">{row.minimumC}</td>
+                        <td className="bg-emerald-50/60 px-3 py-3 font-semibold text-emerald-800">
+                          {row.peratusMinimumC === null ? 'Tiada Data' : `${row.peratusMinimumC}%`}
+                        </td>
+                        <td className="bg-red-50/60 px-3 py-3 font-semibold text-red-800">{row.bawahC}</td>
                         <td className="px-3 py-3">{row.lulus}</td>
                         <td className="px-3 py-3">{row.peratusLulus}%</td>
                         <td className="px-3 py-3">{row.gagal}</td>

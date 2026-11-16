@@ -264,7 +264,7 @@ function SubjectAnalysisReport({ report }) {
   const summaryRows = report?.summaryRows || []
   const studentRows = report?.studentRows || []
   const analysisColumns = report?.analysisColumns || []
-  const summaryColSpan = 5 + gradeColumns.length + 5
+  const summaryColSpan = 5 + gradeColumns.length + 8
   const studentColSpan = 4 + analysisColumns.length * 2
 
   return (
@@ -290,6 +290,9 @@ function SubjectAnalysisReport({ report }) {
               {gradeColumns.map((grade) => (
                 <th key={grade}>{grade}</th>
               ))}
+              <th>Minimum C</th>
+              <th>% Minimum C</th>
+              <th>Bawah C</th>
               <th>Lulus</th>
               <th>% Lulus</th>
               <th>Gagal</th>
@@ -309,6 +312,9 @@ function SubjectAnalysisReport({ report }) {
                   {gradeColumns.map((grade) => (
                     <td key={`${row.examKey}-${grade}`}>{row[grade] ?? 0}</td>
                   ))}
+                  <td>{row.minimumC ?? 0}</td>
+                  <td>{row.peratusMinimumC === null ? 'Tiada Data' : `${row.peratusMinimumC}%`}</td>
+                  <td>{row.bawahC ?? 0}</td>
                   <td>{row.lulus}</td>
                   <td>{row.peratusLulus}%</td>
                   <td>{row.gagal}</td>

@@ -39,6 +39,7 @@ const TEACHER_NAVIGATION = [
           { key: 'student-performance', label: 'Prestasi Murid', path: '/analysis/student' },
           { key: 'class-performance', label: 'Prestasi Kelas', path: '/analysis/class' },
           { key: 'subject-performance', label: 'Prestasi Subjek (GPMP)', path: '/analysis/subject' },
+          { key: 'minimum-c-analysis', label: 'Analisis Minimum C', path: '/analysis/minimum-c' },
           { key: 'pivot-table', label: 'Pivot Table', path: '/analysis/pivot-table' },
           { key: 'school-performance', label: 'Prestasi Sekolah (GPS)', disabled: true, note: 'Akan datang' },
         ],
@@ -83,6 +84,11 @@ const ANALYSIS_GROUPS = [
         label: 'Prestasi Subjek (GPMP)',
         description: 'Bandingkan prestasi subjek dan GPMP mengikut kelas.',
         path: '/analysis/subject',
+      },
+      {
+        label: 'Analisis Minimum C',
+        description: 'Pantau Minimum C dan empat subjek utama RPM 2026–2035.',
+        path: '/analysis/minimum-c',
       },
       {
         label: 'Pivot Table',
