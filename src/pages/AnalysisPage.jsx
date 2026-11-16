@@ -19,6 +19,9 @@ import {
   sortLevelsByDisplayOrder,
 } from '../lib/levelLabels'
 import { normalizeSubjectRows } from '../lib/subjectLabels.js'
+import { buildClassAnalysis, buildClassInterventions, comparisonSignature, rankClasses } from '../lib/classPerformance.js'
+import { buildAssessmentIndex } from '../lib/minimumCAnalysis.js'
+import ClassDeepAnalysis from '../components/ClassDeepAnalysis.jsx'
 import {
   getSubjectRuleName,
   shouldCountInSchoolGps,
@@ -38,6 +41,17 @@ const getExamMetric = (analysis, examKey) => {
 
 const normalizeAnalysisExamKey = (value) =>
   String(value || '').trim().toUpperCase()
+
+async function fetchAllRows(buildQuery) {
+  const rows = []
+  const size = 1000
+  for (let offset = 0; ; offset += size) {
+    const { data, error } = await buildQuery().range(offset, offset + size - 1)
+    if (error) return { data: null, error }
+    rows.push(...(data || []))
+    if ((data || []).length < size) return { data: rows, error: null }
+  }
+}
 
 const getLevelNumber = (value) => {
   const match = String(value || '').match(/\d+/)
@@ -194,65 +208,6 @@ const normalizeMetric = (metric, tingkatan, gradeScales) => {
   }
 }
 
-const getMetricPoint = (metric, tingkatan, gradeScales) => {
-  const directPoint = metric?.grade_point
-  if (directPoint !== null && directPoint !== undefined && directPoint !== '' && !Number.isNaN(Number(directPoint))) {
-    return Number(directPoint)
-  }
-
-  return getCurrentGradePoint(metric?.grade_name, tingkatan, gradeScales)
-}
-
-const getMetricForExam = ({
-  scores,
-  targets,
-  enrollmentId,
-  subjectId,
-  examKey,
-  tingkatan,
-  gradeScales,
-}) => {
-  const normalizedExamKey = normalizeAnalysisExamKey(examKey)
-  const sourceRow = isTargetExamKey(normalizedExamKey)
-    ? (targets || []).find(
-        (target) =>
-          String(target.student_enrollment_id) === String(enrollmentId) &&
-          String(target.subject_id) === String(subjectId) &&
-          normalizeAnalysisExamKey(target.target_key) === normalizedExamKey
-      )
-    : (scores || []).find(
-        (score) =>
-          String(score.student_enrollment_id) === String(enrollmentId) &&
-          String(score.subject_id) === String(subjectId) &&
-          normalizeAnalysisExamKey(score.exam_key) === normalizedExamKey
-      )
-
-  if (!sourceRow) {
-    return { mark: null, grade_name: null, grade_point: null }
-  }
-
-  const rawMetric = isTargetExamKey(normalizedExamKey)
-    ? {
-        mark: sourceRow.target_mark,
-        grade_name: sourceRow.grade_name,
-        grade_point: sourceRow.grade_point,
-        is_absent: false,
-      }
-    : {
-        mark: sourceRow.mark,
-        grade_name: sourceRow.grade_name,
-        grade_point: sourceRow.grade_point,
-        is_absent: sourceRow.is_absent === true,
-      }
-
-  const metric = normalizeMetric(rawMetric, tingkatan, gradeScales)
-
-  return {
-    ...metric,
-    grade_point: getMetricPoint(metric, tingkatan, gradeScales),
-  }
-}
-
 const getGradeBand = (grade) => {
   const value = String(grade || '').trim().toUpperCase()
   if (['A+', 'A', 'A-'].includes(value)) return 'A+/A'
@@ -297,6 +252,8 @@ export default function AnalysisPage() {
   const [scores, setScores] = useState([])
   const [targets, setTargets] = useState([])
   const [gradeScales, setGradeScales] = useState([])
+  const [subjectEnrollments, setSubjectEnrollments] = useState([])
+  const [classDataError, setClassDataError] = useState('')
   const [examConfigs, setExamConfigs] = useState([])
   const [setupConfig, setSetupConfig] = useState(null)
   const [levelMappings, setLevelMappings] = useState([])
@@ -350,7 +307,8 @@ export default function AnalysisPage() {
     setProfile(profileData)
 
     const schoolId = profileData.school_id
-    const currentYear = new Date().getFullYear()
+    const { data: activeSetup } = await supabase.from('school_setup_configs').select('current_academic_year').eq('school_id', schoolId).order('updated_at', { ascending: false }).limit(1)
+    const currentYear = activeSetup?.[0]?.current_academic_year || new Date().getFullYear()
 
     const [
       { data: classesData, error: classesError },
@@ -361,6 +319,7 @@ export default function AnalysisPage() {
       { data: gradeScalesData, error: gradeScalesError },
       { data: setupConfigRows, error: setupConfigError },
       { data: schoolData, error: schoolError },
+      { data: subjectEnrollmentData, error: subjectEnrollmentError },
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -374,7 +333,7 @@ export default function AnalysisPage() {
         .eq('school_id', schoolId)
         .eq('is_active', true),
 
-      supabase
+      fetchAllRows(() => supabase
         .from('student_enrollments')
         .select(`
           id,
@@ -395,19 +354,19 @@ export default function AnalysisPage() {
         `)
         .eq('school_id', schoolId)
         .eq('academic_year', currentYear)
-        .eq('is_active', true),
+        .eq('is_active', true).order('id')),
 
-      supabase
+      fetchAllRows(() => supabase
         .from('student_scores')
         .select('*')
         .eq('school_id', schoolId)
-        .eq('academic_year', currentYear),
+        .eq('academic_year', currentYear).order('id')),
 
-      supabase
+      fetchAllRows(() => supabase
         .from('student_targets')
         .select('*')
         .eq('school_id', schoolId)
-        .eq('academic_year', currentYear),
+        .eq('academic_year', currentYear).order('id')),
 
       supabase
         .from('grade_scales')
@@ -427,6 +386,7 @@ export default function AnalysisPage() {
         .select('id, school_name, school_code, school_type, logo_url')
         .eq('id', schoolId)
         .maybeSingle(),
+      fetchAllRows(() => supabase.from('student_subject_enrollments').select('id, student_enrollment_id, subject_id').eq('school_id', schoolId).eq('is_active', true).order('id')),
     ])
 
     if (classesError) console.error(classesError)
@@ -437,6 +397,9 @@ export default function AnalysisPage() {
     if (gradeScalesError) console.error(gradeScalesError)
     if (setupConfigError) console.error(setupConfigError)
     if (schoolError) console.error(schoolError)
+    if (subjectEnrollmentError) console.error(subjectEnrollmentError)
+    const analysisError = classesError || subjectsError || enrollmentsError || scoresError || targetsError || gradeScalesError || subjectEnrollmentError
+    setClassDataError(analysisError?.message || '')
 
     const currentAcademicYear =
       setupConfigRows?.[0]?.current_academic_year || currentYear
@@ -472,6 +435,7 @@ export default function AnalysisPage() {
     setScores(scoresData || [])
     setTargets(targetsData || [])
     setGradeScales(gradeScalesData || [])
+    setSubjectEnrollments(subjectEnrollmentData || [])
     setExamConfigs(examConfigRows || [])
     setLevelMappings(loadedLevelMappings)
     setSetupConfig(
@@ -612,39 +576,50 @@ export default function AnalysisPage() {
     }
   }, [subjects, selectedTingkatan, selectedClassExamKey, schoolInfo])
 
-  const getStudentSubjectResults = useCallback((student, subjectRows) =>
-    (subjectRows || []).map((subject) => ({
-      subject,
-      metric: getMetricForExam({
-        scores,
-        targets,
-        enrollmentId: student.enrollment_id,
-        subjectId: subject.id,
-        examKey: selectedClassExamKey,
-        tingkatan: student.tingkatan,
-        gradeScales,
-      }),
-    })),
-    [scores, targets, selectedClassExamKey, gradeScales]
-  )
+  const subjectEnrollmentSet = useMemo(() => new Set(subjectEnrollments.map((row) => `${row.student_enrollment_id}__${row.subject_id}`)), [subjectEnrollments])
+  const scoreIndex = useMemo(() => buildAssessmentIndex(scores, 'exam_key'), [scores])
+  const targetIndex = useMemo(() => buildAssessmentIndex(targets, 'target_key'), [targets])
+  const classMetric = useCallback((student, subject, examKey) => {
+    const key = normalizeAnalysisExamKey(examKey)
+    const target = isTargetExamKey(key)
+    const row = (target ? targetIndex : scoreIndex).get(`${student.enrollment_id}__${subject.id}__${key}`)
+    if (!row) return { mark: null, grade_name: null, grade_point: null, is_absent: false }
+    return normalizeMetric({ mark: target ? row.target_mark : row.mark, grade_name: row.grade_name, grade_point: row.grade_point, is_absent: !target && row.is_absent === true }, student.tingkatan, gradeScales)
+  }, [scoreIndex, targetIndex, gradeScales])
+  const analysisYear = setupConfig?.current_academic_year || new Date().getFullYear()
+  const detailedClassRows = useMemo(() => buildClassAnalysis({
+    students: classStudents, subjects: classSubjectRows.chartSubjects,
+    enrollmentSet: subjectEnrollmentSet, gradeScales, academicYear: analysisYear,
+    examKey: selectedClassExamKey, getMetric: classMetric, isPassGrade,
+  }), [classStudents, classSubjectRows.chartSubjects, subjectEnrollmentSet, gradeScales, analysisYear, selectedClassExamKey, classMetric])
+  const gpsClassRows = useMemo(() => {
+    const gpsIds = new Set(classSubjectRows.gpsSubjects.map((subject) => String(subject.id)))
+    return detailedClassRows.filter((row) => gpsIds.has(String(row.subject.id)))
+  }, [detailedClassRows, classSubjectRows.gpsSubjects])
+  const classTrend = useMemo(() => classExamOptions.map((exam) => {
+    const examSubjects = subjects.filter((subject) => subject.tingkatan === selectedTingkatan && shouldCountInSchoolGps({schoolInfo, tingkatan: subject.tingkatan, subjectName: getSubjectRuleName(subject), examKey: exam.key}))
+    const rows = buildClassAnalysis({ students: classStudents, subjects: examSubjects, enrollmentSet: subjectEnrollmentSet, gradeScales, academicYear: analysisYear, examKey: exam.key, getMetric: classMetric, isPassGrade })
+    const valid = rows.flatMap((row) => row.valid)
+    return { ...exam, rows, gps: average(valid.map((item) => item.point)), passRate: valid.length ? valid.filter((item) => item.passed).length / valid.length * 100 : null, minimumRate: valid.filter((item) => item.minimumC !== null).length ? valid.filter((item) => item.minimumC === true).length / valid.filter((item) => item.minimumC !== null).length * 100 : null, count: valid.length, signature: comparisonSignature(rows), isTarget: isTargetExamKey(exam.key) }
+  }), [classExamOptions, subjects, selectedTingkatan, schoolInfo, classStudents, subjectEnrollmentSet, gradeScales, analysisYear, classMetric])
+  const classInterventions = useMemo(() => {
+    const index = classTrend.findIndex((exam) => exam.key === selectedClassExamKey)
+    const current = classTrend[index]
+    const previous = current && !current.isTarget ? classTrend.slice(0, index).reverse().find((exam) => exam.count > 0 && !exam.isTarget) : null
+    return buildClassInterventions(detailedClassRows, previous, classMetric)
+  }, [detailedClassRows, classTrend, selectedClassExamKey, classMetric])
 
   const classStudentRankings = useMemo(() => {
     return classStudents
       .map((student) => {
-        const results = getStudentSubjectResults(student, classSubjectRows.gpsSubjects)
-        const scoredResults = results.filter(
-          ({ metric }) =>
-            metric?.grade_point !== null &&
-            metric?.grade_point !== undefined &&
-            !Number.isNaN(Number(metric.grade_point))
-        )
-        const gradePoints = scoredResults.map(({ metric }) => Number(metric.grade_point))
-        const grades = scoredResults.map(({ metric }) => metric.grade_name)
+        const scoredResults = gpsClassRows.flatMap((row) => row.valid.filter((item) => item.student.enrollment_id === student.enrollment_id))
+        const gradePoints = scoredResults.map((item) => item.point)
+        const grades = scoredResults.map((item) => item.grade)
         const gp = average(gradePoints)
         const bilA = grades.filter((grade) =>
           ['A+', 'A', 'A-'].includes(String(grade || '').trim().toUpperCase())
         ).length
-        const bilLulus = grades.filter(isPassGrade).length
+        const bilLulus = scoredResults.filter((item) => item.passed).length
 
         return {
           ...student,
@@ -664,75 +639,34 @@ export default function AnalysisPage() {
         })
       })
       .map((student, index) => ({ ...student, rank: index + 1 }))
-  }, [classStudents, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+  }, [classStudents, gpsClassRows])
 
   const classSubjectPerformanceRows = useMemo(() => {
-    return classSubjectRows.chartSubjects
-      .map((subject) => {
-        const metrics = classStudents.map((student) =>
-          getMetricForExam({
-            scores,
-            targets,
-            enrollmentId: student.enrollment_id,
-            subjectId: subject.id,
-            examKey: selectedClassExamKey,
-            tingkatan: student.tingkatan,
-            gradeScales,
-          })
-        )
-        const scoredMetrics = metrics.filter(
-          (metric) =>
-            metric?.grade_point !== null &&
-            metric?.grade_point !== undefined &&
-            !Number.isNaN(Number(metric.grade_point))
-        )
-        const gp = average(scoredMetrics.map((metric) => metric.grade_point))
-        const passCount = scoredMetrics.filter((metric) => isPassGrade(metric.grade_name)).length
-        const passRate = scoredMetrics.length ? (passCount / scoredMetrics.length) * 100 : null
-
-        return {
-          subject_id: subject.id,
-          subject_name: subject.subject_name || '-',
-          gp,
-          passRate,
-          scoredCount: scoredMetrics.length,
-        }
-      })
+    return detailedClassRows.map((row) => ({ subject_id: row.subject.id, subject_name: row.subject.subject_name || '-', gp: row.gp, passRate: row.passRate, scoredCount: row.scoredCount, passCount: row.passCount, failCount: row.failCount }))
       .filter((row) => row.scoredCount > 0)
-  }, [classSubjectRows.chartSubjects, classStudents, scores, targets, selectedClassExamKey, gradeScales])
+  }, [detailedClassRows])
 
   const classGradeDistribution = useMemo(() => {
     const counts = { 'A+/A': 0, B: 0, C: 0, D: 0, 'E/G': 0 }
 
-    classStudents.forEach((student) => {
-      getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
-        const band = getGradeBand(metric?.grade_name)
+    gpsClassRows.forEach((row) => {
+      row.valid.forEach(({ grade }) => {
+        const band = getGradeBand(grade)
         if (band) counts[band] += 1
       })
     })
 
     return counts
-  }, [classStudents, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+  }, [gpsClassRows])
 
   const classRankingRows = useMemo(() => {
-    return availableClasses
+    return rankClasses(availableClasses
       .map((classItem) => {
         const studentsInClass = studentRows.filter(
           (student) => String(student.class_id) === String(classItem.id)
         )
-        const points = []
-
-        studentsInClass.forEach((student) => {
-          getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
-            if (
-              metric?.grade_point !== null &&
-              metric?.grade_point !== undefined &&
-              !Number.isNaN(Number(metric.grade_point))
-            ) {
-              points.push(Number(metric.grade_point))
-            }
-          })
-        })
+        const rows = buildClassAnalysis({ students: studentsInClass, subjects: classSubjectRows.gpsSubjects, enrollmentSet: subjectEnrollmentSet, gradeScales, academicYear: analysisYear, examKey: selectedClassExamKey, getMetric: classMetric, isPassGrade })
+        const points = rows.flatMap((row) => row.valid.map((item) => item.point))
 
         return {
           id: classItem.id,
@@ -741,15 +675,8 @@ export default function AnalysisPage() {
           scoredCount: points.length,
         }
       })
-      .filter((row) => row.scoredCount > 0)
-      .sort((a, b) => {
-        if (a.gps !== b.gps) return a.gps - b.gps
-        return String(a.class_name || '').localeCompare(String(b.class_name || ''), 'ms', {
-          sensitivity: 'base',
-        })
-      })
-      .map((row, index) => ({ ...row, rank: index + 1 }))
-  }, [availableClasses, studentRows, classSubjectRows.gpsSubjects, getStudentSubjectResults])
+      .filter((row) => row.scoredCount > 0))
+  }, [availableClasses, studentRows, classSubjectRows.gpsSubjects, subjectEnrollmentSet, gradeScales, analysisYear, selectedClassExamKey, classMetric])
 
   const selectedClassRanking = useMemo(
     () =>
@@ -764,17 +691,11 @@ export default function AnalysisPage() {
     let passCount = 0
     let gradedCount = 0
 
-    classStudents.forEach((student) => {
-      getStudentSubjectResults(student, classSubjectRows.gpsSubjects).forEach(({ metric }) => {
-        if (
-          metric?.grade_point !== null &&
-          metric?.grade_point !== undefined &&
-          !Number.isNaN(Number(metric.grade_point))
-        ) {
-          gpsPoints.push(Number(metric.grade_point))
+    gpsClassRows.forEach((row) => {
+      row.valid.forEach(({ metric, point, passed }) => {
+          gpsPoints.push(point)
           gradedCount += 1
-          if (isPassGrade(metric.grade_name)) passCount += 1
-        }
+          if (passed) passCount += 1
 
         if (metric?.mark !== null && metric?.mark !== undefined && !Number.isNaN(Number(metric.mark))) {
           marks.push(Number(metric.mark))
@@ -782,9 +703,7 @@ export default function AnalysisPage() {
       })
     })
 
-    const studentsWithMarks = classStudentRankings.filter(
-      (student) => student.scoredSubjectCount > 0
-    ).length
+    const studentsWithMarks = new Set(detailedClassRows.flatMap((row) => row.valid.map((item) => item.student.enrollment_id))).size
 
     return {
       totalStudents: classStudents.length,
@@ -796,7 +715,7 @@ export default function AnalysisPage() {
       highest: marks.length ? Math.max(...marks) : null,
       averageMark: average(marks),
     }
-  }, [classStudents, classSubjectRows.gpsSubjects, classStudentRankings, selectedClassRanking, classRankingRows, getStudentSubjectResults])
+  }, [classStudents, gpsClassRows, detailedClassRows, selectedClassRanking, classRankingRows])
 
   const subjectGpmpSubjects = useMemo(
     () =>
@@ -1361,6 +1280,9 @@ export default function AnalysisPage() {
       studentRankings: classStudentRankings,
       gradeDistribution: classGradeDistribution,
       classRankingRows,
+      detailedRows: detailedClassRows,
+      trend: classTrend,
+      interventions: classInterventions,
     }),
     [
       selectedClassData,
@@ -1369,6 +1291,9 @@ export default function AnalysisPage() {
       classStudentRankings,
       classGradeDistribution,
       classRankingRows,
+      detailedClassRows,
+      classTrend,
+      classInterventions,
     ]
   )
 
@@ -1418,18 +1343,20 @@ export default function AnalysisPage() {
     selectedTingkatan,
   ])
 
-  if (loading) {
-    return <div className="p-6">Loading {pageTitle}...</div>
-  }
+  if (loading) return <div className="min-h-screen bg-slate-50 p-6" aria-label={`Memuatkan ${pageTitle}`}><div className="mx-auto max-w-7xl space-y-4"><div className="h-24 animate-pulse rounded-2xl bg-slate-200"/><div className="h-32 animate-pulse rounded-2xl bg-slate-200"/><div className="grid grid-cols-2 gap-4 md:grid-cols-5">{[1,2,3,4,5].map((n) => <div key={n} className="h-24 animate-pulse rounded-xl bg-slate-200"/>)}</div></div></div>
 
   if (!isSubjectPerformancePage) {
+    const selectedTrendIndex = classTrend.findIndex((row) => row.key === selectedClassExamKey)
+    const selectedTrend = classTrend[selectedTrendIndex]
+    const previousTrend = !selectedTrend?.isTarget ? classTrend.slice(0, selectedTrendIndex).reverse().find((row) => !row.isTarget && row.gps !== null) : null
+    const gpsChange = previousTrend && selectedTrend?.gps !== null && previousTrend.signature === selectedTrend?.signature ? selectedTrend.gps - previousTrend.gps : null
     const subjectGpRows = [...classSubjectPerformanceRows]
       .filter((row) => row.gp !== null)
       .sort((a, b) => a.gp - b.gp)
       .map((row) => ({
         label: row.subject_name,
         value: row.gp,
-        meta: `${row.scoredCount} markah`,
+        meta: `${row.scoredCount} calon · GPS lebih rendah lebih baik`,
       }))
 
     const subjectPassRows = [...classSubjectPerformanceRows]
@@ -1438,7 +1365,7 @@ export default function AnalysisPage() {
       .map((row) => ({
         label: row.subject_name,
         value: row.passRate,
-        meta: `${row.scoredCount} markah`,
+        meta: `${row.passCount}/${row.scoredCount} lulus · ${row.failCount} tidak lulus`,
       }))
 
     return (
@@ -1537,22 +1464,23 @@ export default function AnalysisPage() {
             </div>
           </div>
 
-          {!selectedClassData || !selectedClassExamKey ? (
+          {classDataError ? <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">Data analisis tidak dapat dimuatkan: {classDataError}</div> : !selectedClassData || !selectedClassExamKey ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-slate-500">
               Tiada data kelas atau peperiksaan aktif untuk paparan ini.
             </div>
           ) : (
             <>
               <div className="grid gap-3 md:gap-4 grid-cols-2 lg:grid-cols-5">
-                <Card title="Bil Murid" value={classSummary.totalStudents} />
-                <Card title="Ada Markah" value={classSummary.studentsWithMarks} />
-                <Card title="GPS Kelas" value={formatDecimal(classSummary.gps)} />
-                <Card title="% Lulus" value={formatPercent(classSummary.passRate)} />
+                <Card title="Bil Murid" value={classSummary.totalStudents} hint="Jumlah murid berdaftar aktif dalam kelas." />
+                <Card title="Kelengkapan Markah" value={`${classSummary.studentsWithMarks}/${classSummary.totalStudents}`} hint="Bilangan murid yang mempunyai sekurang-kurangnya satu keputusan sah; tidak bermaksud semua subjek lengkap." />
+                <Card title="GPS Kelas" value={formatDecimal(classSummary.gps)} hint="Nilai GPS lebih rendah menunjukkan prestasi akademik yang lebih baik." note={gpsChange === null ? '' : `${gpsChange < 0 ? 'Meningkat' : gpsChange > 0 ? 'Merosot' : 'Tiada perubahan'} ${Math.abs(gpsChange).toFixed(2)} berbanding ${previousTrend.name}`} noteTone={gpsChange < 0 ? 'text-emerald-700' : gpsChange > 0 ? 'text-red-700' : 'text-slate-500'} />
+                <Card title="% Lulus" value={formatPercent(classSummary.passRate)} hint="Jumlah keputusan subjek yang lulus dibahagi jumlah keputusan subjek yang mempunyai mata gred sah. Ini bukan peratus murid lulus semua subjek." />
                 <Card
-                  title="Kedudukan"
+                  title="Kedudukan Kelas"
+                  hint="Kedudukan dalam tingkatan dan peperiksaan yang sama. GPS sama mendapat kedudukan yang sama."
                   value={
                     classSummary.classRank
-                      ? `${classSummary.classRank} / ${classSummary.classRankTotal}`
+                      ? `${classSummary.classRank} daripada ${classSummary.classRankTotal}`
                       : '-'
                   }
                 />
@@ -1565,6 +1493,7 @@ export default function AnalysisPage() {
                   valueFormatter={(value) => formatDecimal(value)}
                   emptyText="Tiada data GP subjek untuk peperiksaan ini."
                   tone="indigo"
+                  axisLabel="GPMP (lebih rendah lebih baik)"
                 />
                 <HorizontalBarChart
                   title="Peratus Lulus Setiap Subjek"
@@ -1575,6 +1504,8 @@ export default function AnalysisPage() {
                   tone="emerald"
                 />
               </div>
+
+              <ClassDeepAnalysis rows={detailedClassRows} trend={classTrend} gradeScales={gradeScales} level={selectedTingkatan} academicYear={analysisYear} interventionRows={classInterventions} navigate={navigate} />
 
               <div className="grid gap-6 lg:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm lg:col-span-2">
@@ -1943,7 +1874,7 @@ export default function AnalysisPage() {
   )
 }
 
-function Card({ title, value }) {
+function Card({ title, value, hint, note, noteTone }) {
   const colorMap = {
     'Murid': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600', value: 'text-blue-900' },
     'Ada Markah': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', value: 'text-emerald-900' },
@@ -1955,9 +1886,10 @@ function Card({ title, value }) {
   const colors = colorMap[title] || { bg: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-600', value: 'text-slate-900' }
 
   return (
-    <div className={`rounded-lg border ${colors.bg} ${colors.border} p-4 md:p-5 shadow-sm`}>
+    <div title={hint} className={`rounded-lg border ${colors.bg} ${colors.border} p-4 md:p-5 shadow-sm`}>
       <div className={`text-xs md:text-sm ${colors.text} font-medium`}>{title}</div>
       <div className={`mt-2 text-xl md:text-2xl font-bold ${colors.value}`}>{value}</div>
+      {note && <div className={`mt-2 text-xs font-medium ${noteTone}`}>{note}</div>}
     </div>
   )
 }
@@ -1969,7 +1901,9 @@ function HorizontalBarChart({
   maxValue,
   emptyText,
   tone = 'indigo',
+  axisLabel,
 }) {
+  const [descending, setDescending] = useState(false)
   const colors = {
     indigo: 'bg-indigo-600',
     emerald: 'bg-emerald-600',
@@ -1986,7 +1920,7 @@ function HorizontalBarChart({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
-      <h2 className="mb-4 text-lg md:text-xl font-semibold text-slate-900">{title}</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg md:text-xl font-semibold text-slate-900">{title}</h2>{axisLabel && <p className="text-xs text-slate-500">{axisLabel}</p>}</div><button type="button" onClick={() => setDescending(!descending)} className="rounded-lg border px-3 py-2 text-xs font-semibold">{descending ? 'Tertinggi dahulu' : 'Terendah dahulu'} ↕</button></div>
 
       {!rows.length ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">
@@ -1994,7 +1928,7 @@ function HorizontalBarChart({
         </div>
       ) : (
         <div className="space-y-4">
-          {rows.map((row) => {
+          {[...rows].sort((a,b) => descending ? b.value-a.value : a.value-b.value).map((row) => {
             const numericValue = Number(row.value)
             const width = Math.max(
               4,
@@ -2014,12 +1948,13 @@ function HorizontalBarChart({
                     {valueFormatter(row.value)}
                   </div>
                 </div>
-                <div className="h-3 rounded-full bg-slate-100">
+                <div className="h-3 rounded-full bg-slate-100" title={`${row.label}: ${valueFormatter(row.value)} · ${row.meta}`}>
                   <div
                     className={`h-3 rounded-full ${barColor}`}
                     style={{ width: `${width}%` }}
                   />
                 </div>
+                {axisLabel && <div className="flex justify-between text-[10px] text-slate-500"><span>0</span><span>{formatDecimal(calculatedMax)}</span></div>}
               </div>
             )
           })}

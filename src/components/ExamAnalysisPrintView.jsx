@@ -127,7 +127,7 @@ function ClassAnalysisReport({ report }) {
     <>
       <section className="exam-analysis-summary-grid" aria-label="Ringkasan kelas">
         <SummaryCard label="Bil Murid" value={summary.totalStudents ?? 0} />
-        <SummaryCard label="Ada Markah" value={summary.studentsWithMarks ?? 0} />
+        <SummaryCard label="Kelengkapan Markah" value={`${summary.studentsWithMarks ?? 0}/${summary.totalStudents ?? 0}`} />
         <SummaryCard label="GPS Kelas" value={formatDecimal(summary.gps)} />
         <SummaryCard label="% Lulus" value={formatPercent(summary.passRate)} />
         <SummaryCard
@@ -146,6 +146,8 @@ function ClassAnalysisReport({ report }) {
                 <th>GP</th>
                 <th>% Lulus</th>
                 <th>Bil Markah</th>
+                <th>Lulus / Calon</th>
+                <th>Tidak Lulus</th>
               </tr>
             </thead>
             <tbody>
@@ -156,10 +158,12 @@ function ClassAnalysisReport({ report }) {
                     <td>{formatDecimal(row.gp)}</td>
                     <td>{formatPercent(row.passRate)}</td>
                     <td>{row.scoredCount ?? 0}</td>
+                    <td>{row.passCount ?? 0} / {row.scoredCount ?? 0}</td>
+                    <td>{row.failCount ?? 0}</td>
                   </tr>
                 ))
               ) : (
-                renderEmptyRow(4, 'Tiada data prestasi subjek.')
+                renderEmptyRow(6, 'Tiada data prestasi subjek.')
               )}
             </tbody>
           </table>
@@ -188,6 +192,22 @@ function ClassAnalysisReport({ report }) {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="exam-analysis-print-section">
+        <h2>Taburan Gred dan Minimum C Mengikut Subjek</h2>
+        <table className="exam-analysis-table"><thead><tr><th className="is-left">Subjek</th><th>Calon Sah</th><th>Taburan Gred</th><th>Capai C</th><th>Bawah C</th><th>% Minimum C</th></tr></thead><tbody>
+          {(report?.detailedRows || []).map((row) => <tr key={row.subject.id}><td className="is-left">{row.subject.subject_name}</td><td>{row.scoredCount}</td><td>{Object.entries(row.gradeCounts).map(([grade, count]) => `${grade}: ${count}`).join(' · ')}</td><td>{row.minimumCount}</td><td>{row.belowCount}</td><td>{formatPercent(row.minimumRate)}</td></tr>)}
+        </tbody></table><p>Sasaran Minimum C belum ditetapkan.</p>
+      </section>
+      <section className="exam-analysis-print-section">
+        <h2>Trend Prestasi Kelas</h2>
+        <table className="exam-analysis-table"><thead><tr><th>Peperiksaan</th><th>GPS</th><th>% Lulus</th><th>Rekod Sah</th></tr></thead><tbody>{(report?.trend || []).map((exam) => <tr key={exam.key}><td>{exam.name || exam.key}{exam.isTarget ? ' (Sasaran)' : ''}</td><td>{formatDecimal(exam.gps)}</td><td>{formatPercent(exam.passRate)}</td><td>{exam.count}</td></tr>)}</tbody></table>
+        <p>Perbandingan perlu ditafsir dengan berhati-hati jika set calon atau subjek berbeza.</p>
+      </section>
+      <section className="exam-analysis-print-section">
+        <h2>Murid Memerlukan Intervensi</h2>
+        <table className="exam-analysis-table"><thead><tr><th className="is-left">Murid</th><th className="is-left">Subjek</th><th>Markah / Gred</th><th>ETR</th><th className="is-left">Status</th></tr></thead><tbody>{(report?.interventions || []).map((item) => <tr key={`${item.subject.id}-${item.student.enrollment_id}`}><td className="is-left">{item.student.full_name}</td><td className="is-left">{item.subject.subject_name}</td><td>{item.metric.mark ?? '-'} / {item.grade}</td><td>{item.target?.mark ?? '-'}</td><td className="is-left">{item.flags.join(', ')}</td></tr>)}</tbody></table>
       </section>
 
       <section className="exam-analysis-print-section exam-analysis-student-section">
