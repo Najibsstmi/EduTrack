@@ -22,6 +22,7 @@ import {
 import { normalizeSubjectRows } from '../lib/subjectLabels.js'
 import { buildClassAnalysis, buildClassInterventions, comparisonSignature, rankClasses } from '../lib/classPerformance.js'
 import { buildAssessmentIndex } from '../lib/minimumCAnalysis.js'
+import { indexFirstAssessmentRows } from '../lib/analysisLookup.js'
 import ClassDeepAnalysis from '../components/ClassDeepAnalysis.jsx'
 import {
   getSubjectRuleName,
@@ -308,7 +309,7 @@ export default function AnalysisPage() {
     setProfile(profileData)
 
     const schoolId = profileData.school_id
-    const { data: activeSetup } = await supabase.from('school_setup_configs').select('current_academic_year').eq('school_id', schoolId).order('updated_at', { ascending: false }).limit(1)
+    const { data: activeSetup } = await supabase.from('school_setup_configs').select('current_academic_year').eq('school_id', schoolId).order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(1)
     const currentYear = activeSetup?.[0]?.current_academic_year || new Date().getFullYear()
 
     const [
@@ -321,6 +322,8 @@ export default function AnalysisPage() {
       { data: setupConfigRows, error: setupConfigError },
       { data: schoolData, error: schoolError },
       { data: subjectEnrollmentData, error: subjectEnrollmentError },
+      { data: examConfigRows, error: examConfigError },
+      loadedLevelMappings,
     ] = await Promise.all([
       supabase
         .from('classes')
@@ -388,6 +391,8 @@ export default function AnalysisPage() {
         .eq('id', schoolId)
         .maybeSingle(),
       fetchAllRows(() => supabase.from('student_subject_enrollments').select('id, student_enrollment_id, subject_id').eq('school_id', schoolId).eq('is_active', true).order('id')),
+      supabase.from('exam_configs').select('grade_label, exam_key, exam_name, exam_order, is_active').eq('school_id', schoolId).eq('academic_year', currentYear),
+      fetchSchoolLevelLabels({ schoolId, academicYear: currentYear }),
     ])
 
     if (classesError) console.error(classesError)
@@ -401,20 +406,6 @@ export default function AnalysisPage() {
     if (subjectEnrollmentError) console.error(subjectEnrollmentError)
     const analysisError = classesError || subjectsError || enrollmentsError || scoresError || targetsError || gradeScalesError || subjectEnrollmentError
     setClassDataError(analysisError?.message || '')
-
-    const currentAcademicYear =
-      setupConfigRows?.[0]?.current_academic_year || currentYear
-
-    const { data: examConfigRows, error: examConfigError } = await supabase
-      .from('exam_configs')
-      .select('grade_label, exam_key, exam_name, exam_order, is_active')
-      .eq('school_id', schoolId)
-      .eq('academic_year', currentAcademicYear)
-
-    const loadedLevelMappings = await fetchSchoolLevelLabels({
-      schoolId,
-      academicYear: currentAcademicYear,
-    })
 
     if (examConfigError) console.error(examConfigError)
 
@@ -888,29 +879,20 @@ export default function AnalysisPage() {
       .filter(Boolean)
   }, [gradeScales, selectedTingkatan])
 
+  const subjectScoresIndex = useMemo(() => selectedSubjectId ? indexFirstAssessmentRows(examScores, 'exam_key') : new Map(), [examScores, selectedSubjectId])
+  const subjectTargetsIndex = useMemo(() => selectedSubjectId ? indexFirstAssessmentRows(examTargets, 'target_key') : new Map(), [examTargets, selectedSubjectId])
+
   const mergedRows = useMemo(() => {
     if (!selectedSubjectId) return []
 
     return filteredStudents.map((student) => {
-      const studentScores = examScores.filter(
-        (s) =>
-          String(s.student_enrollment_id) === String(student.enrollment_id) &&
-          String(s.subject_id) === String(selectedSubjectId)
-      )
-
-      const studentTargets = examTargets.filter(
-        (t) =>
-          String(t.student_enrollment_id) === String(student.enrollment_id) &&
-          String(t.subject_id) === String(selectedSubjectId)
-      )
-
       const analysis = {}
 
       analysisColumns.forEach((exam) => {
         const key = String(exam.key || '').toUpperCase()
 
         if (key.startsWith('OTR') || key === 'ETR') {
-          const targetRow = studentTargets.find((t) => String(t.target_key || '').toUpperCase() === key)
+          const targetRow = subjectTargetsIndex.get(`${student.enrollment_id}__${selectedSubjectId}__${key}`)
 
           analysis[key] = normalizeMetric({
             mark: targetRow?.target_mark ?? null,
@@ -920,7 +902,7 @@ export default function AnalysisPage() {
             label: exam.name || key,
           }, student.tingkatan, gradeScales)
         } else {
-          const scoreRow = studentScores.find((s) => String(s.exam_key || '').toUpperCase() === key)
+          const scoreRow = subjectScoresIndex.get(`${student.enrollment_id}__${selectedSubjectId}__${key}`)
 
           analysis[key] = normalizeMetric({
             mark: scoreRow?.mark ?? null,
@@ -937,7 +919,7 @@ export default function AnalysisPage() {
         analysis,
       }
     })
-  }, [filteredStudents, examScores, examTargets, selectedSubjectId, analysisColumns, gradeScales])
+  }, [filteredStudents, subjectScoresIndex, subjectTargetsIndex, selectedSubjectId, analysisColumns, gradeScales])
 
   const summaryExamKey = useMemo(() => {
     const firstRealExam = analysisColumns.find((exam) => {

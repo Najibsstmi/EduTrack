@@ -1,45 +1,46 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import SignupPage from './pages/SignupPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
-import PendingApprovalPage from './pages/PendingApprovalPage.jsx'
-import MasterAdminDashboard from './pages/MasterAdminDashboard.jsx'
-import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
-import SchoolAdminDashboard from './pages/SchoolAdminDashboard.jsx'
-import DashboardPage from './pages/DashboardPage.jsx'
-import SchoolSetupPage from './pages/SchoolSetupPage.jsx'
-import SchoolSetupExamsPage from './pages/SchoolSetupExamsPage.jsx'
-import SchoolSetupGradesPage from './pages/SchoolSetupGradesPage.jsx'
-import SchoolSetupSubjectsPage from './pages/SchoolSetupSubjectsPage.jsx'
-import SchoolLogoSettingsPage from './pages/SchoolLogoSettingsPage.jsx'
-import StudentsPage from './pages/StudentsPage'
-import ClassesPage from './pages/ClassesPage'
-import StudentImportPage from './pages/StudentImportPage'
-import StudentScoresPage from './pages/StudentScoresPage'
-import TargetsPage from './pages/TargetsPage'
-import AnalysisPage from './pages/AnalysisPage'
-import MinimumCAnalysisPage from './pages/MinimumCAnalysisPage.jsx'
-import PivotTableAnalysisPage from './pages/PivotTableAnalysisPage.jsx'
-import StudentIndividualAnalysisPage from './pages/StudentIndividualAnalysisPage'
-import StudentSubjectTrendPage from './pages/StudentSubjectTrendPage'
-import ManageSubjectStudentsPage from './pages/ManageSubjectStudentsPage'
-import PbdInputPage from './pages/PbdInputPage.jsx'
-import PbdAnalysisPage from './pages/PbdAnalysisPage.jsx'
-import PajskInputPage from './pages/PajskInputPage.jsx'
-import PajskSegakPage from './pages/PajskSegakPage.jsx'
-import PajskSegakInputPage from './pages/PajskSegakInputPage.jsx'
-import PajskSegakAnalysisPage from './pages/PajskSegakAnalysisPage.jsx'
-import PsychometricInputPage from './pages/PsychometricInputPage.jsx'
-import PsychometricAnalysisPage from './pages/PsychometricAnalysisPage.jsx'
-import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
-import PerformanceDialogPage from './pages/PerformanceDialogPage.jsx'
-import UserProfilePage from './pages/UserProfilePage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
 import AppShell from './components/AppShell.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
 import { getDashboardPath } from './lib/dashboardPath'
+
+const SignupPage = lazy(() => import('./pages/SignupPage.jsx'))
+const LoginPage = lazy(() => import('./pages/LoginPage.jsx'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage.jsx'))
+const PendingApprovalPage = lazy(() => import('./pages/PendingApprovalPage.jsx'))
+const MasterAdminDashboard = lazy(() => import('./pages/MasterAdminDashboard.jsx'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage.jsx'))
+const SchoolAdminDashboard = lazy(() => import('./pages/SchoolAdminDashboard.jsx'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage.jsx'))
+const SchoolSetupPage = lazy(() => import('./pages/SchoolSetupPage.jsx'))
+const SchoolSetupExamsPage = lazy(() => import('./pages/SchoolSetupExamsPage.jsx'))
+const SchoolSetupGradesPage = lazy(() => import('./pages/SchoolSetupGradesPage.jsx'))
+const SchoolSetupSubjectsPage = lazy(() => import('./pages/SchoolSetupSubjectsPage.jsx'))
+const SchoolLogoSettingsPage = lazy(() => import('./pages/SchoolLogoSettingsPage.jsx'))
+const StudentsPage = lazy(() => import('./pages/StudentsPage'))
+const ClassesPage = lazy(() => import('./pages/ClassesPage'))
+const StudentImportPage = lazy(() => import('./pages/StudentImportPage'))
+const StudentScoresPage = lazy(() => import('./pages/StudentScoresPage'))
+const TargetsPage = lazy(() => import('./pages/TargetsPage'))
+const AnalysisPage = lazy(() => import('./pages/AnalysisPage'))
+const MinimumCAnalysisPage = lazy(() => import('./pages/MinimumCAnalysisPage.jsx'))
+const PivotTableAnalysisPage = lazy(() => import('./pages/PivotTableAnalysisPage.jsx'))
+const StudentIndividualAnalysisPage = lazy(() => import('./pages/StudentIndividualAnalysisPage'))
+const StudentSubjectTrendPage = lazy(() => import('./pages/StudentSubjectTrendPage'))
+const ManageSubjectStudentsPage = lazy(() => import('./pages/ManageSubjectStudentsPage'))
+const PbdInputPage = lazy(() => import('./pages/PbdInputPage.jsx'))
+const PbdAnalysisPage = lazy(() => import('./pages/PbdAnalysisPage.jsx'))
+const PajskInputPage = lazy(() => import('./pages/PajskInputPage.jsx'))
+const PajskSegakPage = lazy(() => import('./pages/PajskSegakPage.jsx'))
+const PajskSegakInputPage = lazy(() => import('./pages/PajskSegakInputPage.jsx'))
+const PajskSegakAnalysisPage = lazy(() => import('./pages/PajskSegakAnalysisPage.jsx'))
+const PsychometricInputPage = lazy(() => import('./pages/PsychometricInputPage.jsx'))
+const PsychometricAnalysisPage = lazy(() => import('./pages/PsychometricAnalysisPage.jsx'))
+const PbsAnalysisPage = lazy(() => import('./pages/PbsAnalysisPage.jsx'))
+const PerformanceDialogPage = lazy(() => import('./pages/PerformanceDialogPage.jsx'))
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage.jsx'))
 
 function AuthSessionWatcher() {
   const navigate = useNavigate()
@@ -134,6 +135,7 @@ function App() {
     <>
       <AuthSessionWatcher />
       <InstallEduTrackButton />
+      <Suspense fallback={<div role="status" className="p-6 text-sm text-slate-600">Memuatkan halaman...</div>}>
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/signup" element={<SignupPage />} />
@@ -196,6 +198,7 @@ function App() {
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      </Suspense>
     </>
   )
 }

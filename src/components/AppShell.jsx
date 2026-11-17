@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BarChart3, BookOpenCheck, ChevronDown, GraduationCap, LayoutDashboard, LogOut, Menu, MessageSquareText, Settings, X } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
@@ -129,7 +129,7 @@ export default function AppShell() {
           <button type="button" onClick={logout}><LogOut size={18} /> Log Keluar</button>
         </div>
       </aside>
-      <div className={`app-shell-content${['/home', '/dashboard'].includes(location.pathname) ? ' app-shell-dashboard' : ''}`}><Outlet /></div>
+      <div className={`app-shell-content${['/home', '/dashboard'].includes(location.pathname) ? ' app-shell-dashboard' : ''}`}><Suspense fallback={<div role="status" className="p-6 text-sm text-slate-600">Memuatkan halaman...</div>}><Outlet /></Suspense></div>
     </div>
   )
 }

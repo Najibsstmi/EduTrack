@@ -350,12 +350,9 @@ export default function MinimumCAnalysisPage() {
 
   const dataCurrent = Boolean(selectedSchoolId && selectedAcademicYear && loadedContext === `${selectedSchoolId}__${selectedAcademicYear}` && !error)
   const selectedExam = examOptions.find((row) => row.key === effectiveExamKey) || null
-  const selectedAssessmentIndex = useMemo(
-    () => isTargetExam(effectiveExamKey)
-      ? buildAssessmentIndex(targets, 'target_key')
-      : buildAssessmentIndex(scores, 'exam_key'),
-    [scores, targets, effectiveExamKey]
-  )
+  const scoreIndex = useMemo(() => buildAssessmentIndex(scores, 'exam_key'), [scores])
+  const targetIndex = useMemo(() => buildAssessmentIndex(targets, 'target_key'), [targets])
+  const selectedAssessmentIndex = isTargetExam(effectiveExamKey) ? targetIndex : scoreIndex
 
   const filteredStudents = useMemo(
     () => students
@@ -397,9 +394,7 @@ export default function MinimumCAnalysisPage() {
   ) || null
 
   const trendRows = useMemo(() => examOptions.map((exam) => {
-    const index = exam.isTarget
-      ? buildAssessmentIndex(targets, 'target_key')
-      : buildAssessmentIndex(scores, 'exam_key')
+    const index = exam.isTarget ? targetIndex : scoreIndex
     const rows = analyzeFourSubjects({
       students: filteredStudents,
       subjectMap: buildRpmSubjectMap(relevantSubjects),
@@ -420,7 +415,7 @@ export default function MinimumCAnalysisPage() {
       belumCapai: hasAnyData ? examSummary.belowCount : null,
       lengkap: examSummary.completeCount,
     }
-  }), [examOptions, targets, scores, filteredStudents, relevantSubjects, gradeScales])
+  }), [examOptions, targetIndex, scoreIndex, filteredStudents, relevantSubjects, gradeScales])
 
   const filteredFourSubjectRows = useMemo(() => fourSubjectRows.filter((row) => {
     if (studentStatusFilter === 'achieved') return row.status === 'Capai'

@@ -11,11 +11,17 @@ export function configuredGrades(scales, level, year) {
 
 export function buildClassAnalysis({ students, subjects, enrollmentSet, gradeScales, academicYear, examKey, getMetric, isPassGrade }) {
   const rows = []
+  const scalesByLevel = new Map()
+  const scalesForLevel = (level) => {
+    const key = String(level || '').trim().toLowerCase()
+    if (!scalesByLevel.has(key)) scalesByLevel.set(key, configuredGrades(gradeScales, level, academicYear))
+    return scalesByLevel.get(key)
+  }
   for (const subject of subjects) {
     const eligible = students.filter((student) => String(subject.subject_type || '').toLowerCase() !== 'selective' || enrollmentSet.has(`${student.enrollment_id}__${subject.id}`))
     const results = eligible.map((student) => {
       const metric = getMetric(student, subject, examKey)
-      const scale = configuredGrades(gradeScales, student.tingkatan, academicYear)
+      const scale = scalesForLevel(student.tingkatan)
       const mark = metric?.mark
       const hasMark = mark !== null && mark !== undefined && mark !== '' && Number.isFinite(Number(mark))
       const markGrade = hasMark ? scale.find((item) => Math.round(Number(mark)) >= Number(item.min_mark ?? item.min_score) && Math.round(Number(mark)) <= Number(item.max_mark ?? item.max_score)) : null
@@ -34,7 +40,7 @@ export function buildClassAnalysis({ students, subjects, enrollmentSet, gradeSca
     const totalPoint = valid.reduce((sum, item) => sum + item.point, 0)
     const passCount = valid.filter((item) => item.passed).length
     const minimumCount = minimumValid.filter((item) => item.minimumC).length
-    const gradeCounts = Object.fromEntries(configuredGrades(gradeScales, students[0]?.tingkatan, academicYear).map((item) => [normalizeGrade(item.grade_name ?? item.grade), 0]))
+    const gradeCounts = Object.fromEntries(scalesForLevel(students[0]?.tingkatan).map((item) => [normalizeGrade(item.grade_name ?? item.grade), 0]))
     valid.forEach((item) => { gradeCounts[item.grade] = (gradeCounts[item.grade] || 0) + 1 })
     rows.push({ subject, results, valid, gradeCounts, scoredCount: valid.length, passCount, failCount: valid.length - passCount, gp: valid.length ? totalPoint / valid.length : null, passRate: valid.length ? passCount / valid.length * 100 : null, minimumCount, belowCount: minimumValid.length - minimumCount, minimumValidCount: minimumValid.length, minimumRate: minimumValid.length ? minimumCount / minimumValid.length * 100 : null })
   }
