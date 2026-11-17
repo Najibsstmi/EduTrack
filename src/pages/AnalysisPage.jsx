@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import ExamAnalysisPrintView from '../components/ExamAnalysisPrintView.jsx'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
-  formatExamDisplayName,
+  buildClassExamOptions,
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
@@ -53,21 +53,6 @@ async function fetchAllRows(buildQuery) {
     rows.push(...(data || []))
     if ((data || []).length < size) return { data: rows, error: null }
   }
-}
-
-const getLevelNumber = (value) => {
-  const match = String(value || '').match(/\d+/)
-  return match ? Number(match[0]) : null
-}
-
-const isSameLevel = (a, b) => {
-  const textA = String(a || '').trim().toLowerCase()
-  const textB = String(b || '').trim().toLowerCase()
-  if (textA && textA === textB) return true
-
-  const numberA = getLevelNumber(a)
-  const numberB = getLevelNumber(b)
-  return numberA !== null && numberA === numberB
 }
 
 const isTargetExamKey = (value) => {
@@ -463,26 +448,10 @@ export default function AnalysisPage() {
       )
   }, [classes, selectedTingkatan])
 
-  const classExamOptions = useMemo(() => {
-    return (examConfigs || [])
-      .filter((exam) => exam?.is_active === true)
-      .filter((exam) => isSameLevel(exam?.grade_label, selectedTingkatan))
-      .map((exam) => ({
-        key: normalizeAnalysisExamKey(exam.exam_key),
-        name: formatExamDisplayName(exam.exam_name || exam.exam_key),
-        order: Number.isFinite(Number(exam.exam_order))
-          ? Number(exam.exam_order)
-          : getDefaultExamOrder(exam.exam_key),
-      }))
-      .filter((exam) => exam.key)
-      .sort((a, b) => {
-        const orderDiff = a.order - b.order
-        if (orderDiff !== 0) return orderDiff
-        return String(a.name || '').localeCompare(String(b.name || ''), 'ms', {
-          sensitivity: 'base',
-        })
-      })
-  }, [examConfigs, selectedTingkatan])
+  const classExamOptions = useMemo(
+    () => buildClassExamOptions(examConfigs, selectedTingkatan),
+    [examConfigs, selectedTingkatan]
+  )
 
   useEffect(() => {
     if (isSubjectPerformancePage) return

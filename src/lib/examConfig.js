@@ -53,6 +53,25 @@ const getDefaultExamOrder = (examKey) => {
   return 500
 }
 
+// Exam access controls data entry; closed exams remain available for reporting.
+export const buildClassExamOptions = (examConfigs = [], gradeLabel) => {
+  const target = normalizeGradeLabel(gradeLabel)
+  const gradeNumber = extractGradeNumber(gradeLabel)
+  if (!target) return []
+  return examConfigs
+    .filter((exam) => {
+      const label = normalizeGradeLabel(exam?.grade_label)
+      return label === target || (gradeNumber !== null && extractGradeNumber(exam?.grade_label) === gradeNumber)
+    })
+    .map((exam) => ({
+      key: String(exam.exam_key || '').trim().toUpperCase(),
+      name: formatExamDisplayName(exam.exam_name || exam.exam_key),
+      order: Number.isFinite(Number(exam.exam_order)) ? Number(exam.exam_order) : getDefaultExamOrder(exam.exam_key),
+    }))
+    .filter((exam) => exam.key)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ms', { sensitivity: 'base' }))
+}
+
 const normalizeExamItems = (exams = []) => {
   return exams
     .filter(Boolean)
