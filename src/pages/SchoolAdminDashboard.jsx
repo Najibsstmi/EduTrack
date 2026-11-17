@@ -138,6 +138,12 @@ export default function SchoolAdminDashboard() {
   }, [navigate])
 
   useEffect(() => {
+    if (!loading && location.hash === '#user-management-section') {
+      document.getElementById('user-management-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading, location.hash])
+
+  useEffect(() => {
     const handleClickOutside = (event) => {
       if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target)) {
         setActiveDesktopMenu('')

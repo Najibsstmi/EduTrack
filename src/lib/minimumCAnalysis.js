@@ -2,16 +2,16 @@ export const DEFAULT_MINIMUM_GRADE = 'C'
 
 export const RPM_SUBJECT_CONFIG = [
   {
-    key: 'bm',
-    label: 'Bahasa Melayu',
-    shortLabel: 'BM',
-    aliases: ['BM', 'BAHASA MELAYU', 'BAHASA MALAYSIA', '1103'],
-  },
-  {
     key: 'bi',
     label: 'Bahasa Inggeris',
     shortLabel: 'BI',
     aliases: ['BI', 'BAHASA INGGERIS', 'ENGLISH', '1119'],
+  },
+  {
+    key: 'bm',
+    label: 'Bahasa Melayu',
+    shortLabel: 'BM',
+    aliases: ['BM', 'BAHASA MELAYU', 'BAHASA MALAYSIA', '1103'],
   },
   {
     key: 'matematik',
@@ -69,14 +69,13 @@ const getSubjectTokens = (subject = {}) =>
     .filter(Boolean)
 
 export const getRpmSubjectKey = (subject, config = RPM_SUBJECT_CONFIG) => {
-  const tokens = getSubjectTokens(subject)
-
-  return (
-    config.find((item) => {
-      const aliases = (item.aliases || []).map(normalizeSubjectToken)
-      return tokens.some((token) => aliases.includes(token))
-    })?.key || null
-  )
+  const code = normalizeSubjectToken(subject.subject_code || subject.code)
+  const codeMatch = config.find((item) => (item.aliases || []).map(normalizeSubjectToken).includes(code))
+  if (codeMatch) return codeMatch.key
+  // Explicit numeric codes identify a different subject; do not merge on a misleading name.
+  if (code && /^\d+$/.test(code)) return null
+  const tokens = getSubjectTokens({ subject_name: subject.subject_name, name: subject.name, subject_label: subject.subject_label })
+  return config.find((item) => tokens.some((token) => (item.aliases || []).map(normalizeSubjectToken).includes(token)))?.key || null
 }
 
 export const buildRpmSubjectMap = (subjects = [], config = RPM_SUBJECT_CONFIG) => {
@@ -141,14 +140,17 @@ export const findGradeFromMark = (mark, gradeScales = [], level = '') => {
     return !normalizedLevel || !scaleLevel || scaleLevel === normalizedLevel
   })
 
-  const match = candidates.find((scale) => {
+  const matches = candidates.filter((scale) => {
     if (normalizeGrade(scale.grade_name ?? scale.grade) === 'TH') return false
-    const minimum = Number(scale.min_mark ?? scale.min_score ?? 0)
-    const maximum = Number(scale.max_mark ?? scale.max_score ?? 100)
-    return numericMark >= minimum && numericMark <= maximum
+    const minValue = scale.min_mark ?? scale.min_score
+    const maxValue = scale.max_mark ?? scale.max_score
+    if (minValue === null || minValue === undefined || maxValue === null || maxValue === undefined || minValue === '' || maxValue === '') return false
+    const minimum = Number(minValue)
+    const maximum = Number(maxValue)
+    return Number.isFinite(minimum) && Number.isFinite(maximum) && numericMark >= minimum && numericMark <= maximum
   })
 
-  return match ? normalizeGrade(match.grade_name ?? match.grade) : null
+  return matches.length === 1 ? normalizeGrade(matches[0].grade_name ?? matches[0].grade) : null
 }
 
 const getGradePoint = (grade, gradeScales = [], level = '') => {
@@ -197,9 +199,11 @@ export const normalizeMetric = (row, options = {}) => {
     return { state: 'absent', grade: 'TH', mark: null, isAbsent: true, row }
   }
 
-  const grade =
-    normalizeGrade(row.grade_name ?? row.grade) ||
-    findGradeFromMark(row.mark ?? row.target_mark, options.gradeScales, options.level)
+  const scales = options.gradeScales || []
+  const level = String(options.level || '').trim().toLowerCase()
+  const matchingScales = scales.filter((scale) => String(scale.tingkatan ?? scale.grade_label ?? scale.form_level ?? scale.level ?? '').trim().toLowerCase() === level)
+  const hasMinimum = matchingScales.some((scale) => normalizeGrade(scale.grade_name ?? scale.grade) === normalizeGrade(options.minimumGrade || DEFAULT_MINIMUM_GRADE))
+  const grade = hasMinimum ? findGradeFromMark(row.mark ?? row.target_mark, matchingScales, options.level) : null
 
   if (!grade) {
     return {
@@ -259,18 +263,15 @@ export const analyzeFourSubjects = ({
       let chosenMetric = null
       let chosenSubject = null
 
-      candidates.some((subject) => {
-        const row = assessmentIndex.get(
-          `${student.enrollment_id}__${subject.id}__${normalizedExamKey}`
-        )
-        if (!row) return false
-        chosenSubject = subject
-        chosenMetric = normalizeMetric(row, {
-          gradeScales,
-          minimumGrade,
-          level: student.tingkatan,
-        })
-        return true
+      candidates.forEach((subject) => {
+        const subjectLevel = String(subject.tingkatan || '').trim().toLowerCase()
+        if (subjectLevel && subjectLevel !== String(student.tingkatan || '').trim().toLowerCase()) return
+        const row = assessmentIndex.get(`${student.enrollment_id}__${subject.id}__${normalizedExamKey}`)
+        if (!row) return
+        if (!chosenMetric || preferLatestRow(chosenMetric.row, row) === row) {
+          chosenSubject = subject
+          chosenMetric = normalizeMetric(row, { gradeScales, minimumGrade, level: student.tingkatan })
+        }
       })
 
       subjectResults[configItem.key] = {
@@ -288,7 +289,7 @@ export const analyzeFourSubjects = ({
     ).length
     const achievedCount = results.filter((result) => result.state === 'achieved').length
     const isComplete = incompleteCount === 0
-    const status = belowCount > 0 ? 'Belum Capai' : isComplete ? 'Capai' : 'Tidak Lengkap'
+    const status = !isComplete ? 'Tidak Lengkap' : belowCount > 0 ? 'Belum Capai' : 'Capai'
 
     return {
       ...student,
@@ -321,11 +322,24 @@ export const summarizeFourSubjectResults = (rows = []) => {
     cohortRate: rows.length ? (achievedRows.length / rows.length) * 100 : null,
     coverageRate: rows.length ? (completeRows.length / rows.length) * 100 : null,
     belowByCount: [1, 2, 3, 4].reduce((result, count) => {
-      result[count] = rows.filter((row) => row.belowCount === count).length
+      result[count] = completeRows.filter((row) => row.belowCount === count).length
       return result
     }, {}),
   }
 }
+
+export const summarizeRpmSubjects = (rows = [], config = RPM_SUBJECT_CONFIG) => config.map((item) => {
+  const studentResults = rows.map((row) => ({ ...row, metric: row.subjects[item.key] }))
+  const evaluated = studentResults.filter((row) => ['achieved', 'below'].includes(row.metric.state))
+  const minimumCCount = evaluated.filter((row) => row.metric.state === 'achieved').length
+  const absentCount = studentResults.filter((row) => row.metric.state === 'absent').length
+  const missingCount = studentResults.filter((row) => row.metric.state === 'missing').length
+  const gradeDistribution = evaluated.reduce((acc, row) => ({ ...acc, [row.metric.grade]: (acc[row.metric.grade] || 0) + 1 }), {})
+  return { subject: { id: item.key, subject_name: item.label }, studentResults, evaluatedCount: evaluated.length,
+    minimumCCount, belowCount: evaluated.length - minimumCCount, absentCount, missingCount,
+    noDataCount: absentCount + missingCount, gradeDistribution,
+    minimumCRate: evaluated.length ? minimumCCount / evaluated.length * 100 : null }
+})
 
 export const summarizeSubject = ({
   students = [],

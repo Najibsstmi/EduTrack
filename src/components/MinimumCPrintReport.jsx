@@ -64,8 +64,7 @@ export default function MinimumCPrintReport({
           <PrintStat label="Jumlah Murid" value={summary?.totalStudents ?? 0} />
           <PrintStat label="Keputusan Lengkap" value={summary?.completeCount ?? 0} />
           <PrintStat label="Capai Minimum C" value={summary?.achievedCount ?? 0} />
-          <PrintStat label="Peratus Pencapaian" value={formatPercentage(summary?.achievementRate)} />
-          <PrintStat label="Belum Capai" value={summary?.belowCount ?? 0} />
+          <PrintStat label="Peratus Pencapaian" value={summary?.achievementRate == null ? 'Tiada data mencukupi' : formatPercentage(summary.achievementRate)} />
           <PrintStat label="Rekod Tidak Lengkap" value={summary?.incompleteCount ?? 0} />
         </section>
 

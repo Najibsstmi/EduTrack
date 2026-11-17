@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
@@ -282,32 +282,27 @@ export default function StudentIndividualAnalysisPage() {
 
   const dashboardPath = getDashboardPath(profile)
   const [selectedExamKey, setSelectedExamKey] = useState('')
-  const [hasAppliedInitialState, setHasAppliedInitialState] = useState(false)
+  const previousTingkatan = useRef(selectedTingkatan)
+  const previousClassId = useRef(selectedClassId)
 
   useEffect(() => {
     loadInitialData()
   }, [])
 
   useEffect(() => {
-    if (!hasAppliedInitialState && location.state) {
-      setHasAppliedInitialState(true)
-      return
-    }
-
+    if (previousTingkatan.current === selectedTingkatan) return
+    previousTingkatan.current = selectedTingkatan
     setSelectedClassId('')
     setSelectedStudentId('')
     setSelectedExamKey('')
-  }, [selectedTingkatan, hasAppliedInitialState, location.state])
+  }, [selectedTingkatan])
 
   useEffect(() => {
-    if (!hasAppliedInitialState && location.state) {
-      setHasAppliedInitialState(true)
-      return
-    }
-
+    if (previousClassId.current === selectedClassId) return
+    previousClassId.current = selectedClassId
     setSelectedStudentId('')
     setSelectedExamKey('')
-  }, [selectedClassId, hasAppliedInitialState, location.state])
+  }, [selectedClassId])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -336,7 +331,8 @@ export default function StudentIndividualAnalysisPage() {
 
     setProfile(profileData)
 
-    const schoolId = profileData.school_id
+    const isMaster = profileData.is_master_admin || String(profileData.role || '').toLowerCase() === 'master_admin'
+    const schoolId = isMaster && location.state?.schoolId ? location.state.schoolId : profileData.school_id
 
     const { data: setupRows, error: setupError } = await supabase
       .from('school_setup_configs')
@@ -350,7 +346,7 @@ export default function StudentIndividualAnalysisPage() {
       console.error(setupError)
     }
 
-    const currentYear = setupRows?.[0]?.current_academic_year || new Date().getFullYear()
+    const currentYear = Number(location.state?.academicYear) || setupRows?.[0]?.current_academic_year || new Date().getFullYear()
 
     const loadedLevelMappings = await fetchSchoolLevelLabels({
       schoolId,
@@ -368,7 +364,7 @@ export default function StudentIndividualAnalysisPage() {
     }
 
     setSetupConfig(
-      normalizeSetupConfigWithExamConfigs(setupRows?.[0] || null, examConfigRows || [])
+      normalizeSetupConfigWithExamConfigs({ ...(setupRows?.[0] || {}), current_academic_year: currentYear }, examConfigRows || [])
     )
 
     const [
@@ -431,7 +427,8 @@ export default function StudentIndividualAnalysisPage() {
       supabase
         .from('grade_scales')
         .select('*')
-        .eq('school_id', schoolId),
+        .eq('school_id', schoolId)
+        .eq('academic_year', currentYear),
 
       supabase
         .from('schools')

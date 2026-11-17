@@ -36,6 +36,7 @@ import PbsAnalysisPage from './pages/PbsAnalysisPage.jsx'
 import PerformanceDialogPage from './pages/PerformanceDialogPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
 import InstallEduTrackButton from './components/InstallEduTrackButton.jsx'
+import AppShell from './components/AppShell.jsx'
 import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { forceCleanLogout } from './lib/authSession'
 import { getDashboardPath } from './lib/dashboardPath'
@@ -140,9 +141,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route element={<AppShell />}>
         <Route path="/dashboard" element={<SchoolAdminDashboard />} />
         <Route path="/home" element={<DashboardPage />} />
-        <Route path="/master-admin" element={<MasterAdminDashboard />} />
         <Route path="/school-setup" element={<SchoolSetupPage />} />
         <Route path="/school-setup/exams" element={<SchoolSetupExamsPage />} />
         <Route path="/school-setup/grades" element={<SchoolSetupGradesPage />} />
@@ -187,10 +188,12 @@ function App() {
         <Route path="/analysis/psychometric" element={<PsychometricAnalysisPage />} />
         <Route path="/analysis/pbs" element={<PbsAnalysisPage />} />
         <Route path="/dialog-prestasi" element={<PerformanceDialogPage />} />
-        <Route path="/pending" element={<PendingApprovalPage />} />
-        <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="/profile" element={<UserProfilePage />} />
         <Route path="/profil-saya" element={<UserProfilePage />} />
+        </Route>
+        <Route path="/master-admin" element={<MasterAdminDashboard />} />
+        <Route path="/pending" element={<PendingApprovalPage />} />
+        <Route path="/pending-approval" element={<PendingApprovalPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>
