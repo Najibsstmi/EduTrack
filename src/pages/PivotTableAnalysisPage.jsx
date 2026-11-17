@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
+import { formatExamDisplayName } from '../lib/examConfig.js'
 import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
@@ -531,7 +532,7 @@ export default function PivotTableAnalysisPage() {
       .forEach((exam) =>
         addOption({
           key: exam.exam_key,
-          name: exam.exam_name || exam.exam_key,
+          name: formatExamDisplayName(exam.exam_name || exam.exam_key),
           order: exam.exam_order,
           source: 'config',
         })

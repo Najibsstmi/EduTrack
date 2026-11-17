@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { getDashboardPath } from '../lib/dashboardPath'
 import ClassSubjectAnalysisPanel from '../components/ClassSubjectAnalysisPanel'
 import {
+  formatExamDisplayName,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
 import {
@@ -694,7 +695,7 @@ export default function StudentScoresPage() {
       .map((item) => ({
         id: item.id,
         key: normalizeExamKey(item.exam_key),
-        name: item.exam_name || item.exam_key,
+        name: formatExamDisplayName(item.exam_name || item.exam_key),
         grade_label: item.grade_label,
         exam_order: item.exam_order,
       }))

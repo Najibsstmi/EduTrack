@@ -1,3 +1,4 @@
+import { formatExamDisplayName } from '../lib/examConfig.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BarChart3,
@@ -1008,7 +1009,7 @@ export default function PerformanceDialogPage() {
         .forEach((exam) =>
           addOption({
             key: exam.exam_key,
-          name: exam.exam_name || exam.exam_key,
+          name: formatExamDisplayName(exam.exam_name || exam.exam_key),
           order: Number.isFinite(Number(exam.exam_order))
             ? Number(exam.exam_order)
             : getDefaultExamOrder(exam.exam_key),

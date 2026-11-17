@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import {
+  formatExamDisplayName,
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
@@ -112,7 +113,7 @@ const buildExamList = ({ setupConfig, examConfigs, currentTingkatan, scores, tar
   ;(examConfigs || []).forEach((exam) => {
     addExam({
       key: exam.exam_key,
-      label: exam.exam_name || exam.exam_key,
+      label: formatExamDisplayName(exam.exam_name || exam.exam_key),
       order: exam.exam_order,
     })
   })

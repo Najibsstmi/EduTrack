@@ -23,6 +23,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabaseClient.js'
 import { getDashboardPath } from '../lib/dashboardPath.js'
+import { formatExamDisplayName } from '../lib/examConfig.js'
 import {
   analyzeFourSubjects,
   buildAssessmentIndex,
@@ -329,7 +330,7 @@ export default function MinimumCAnalysisPage() {
       const current = map.get(normalized)
       map.set(normalized, {
         key: normalized,
-        label: current?.label || label || normalized,
+        label: formatExamDisplayName(current?.label || label || normalized),
         order: Number.isFinite(Number(order)) ? Number(order) : current?.order ?? getExamOrder(normalized),
         isTarget: isTargetExam(normalized),
       })

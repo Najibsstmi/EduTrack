@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import ExamAnalysisPrintView from '../components/ExamAnalysisPrintView.jsx'
 import { getDashboardPath } from '../lib/dashboardPath'
 import {
+  formatExamDisplayName,
   getExamStructureForGrade,
   normalizeSetupConfigWithExamConfigs,
 } from '../lib/examConfig'
@@ -477,7 +478,7 @@ export default function AnalysisPage() {
       .filter((exam) => isSameLevel(exam?.grade_label, selectedTingkatan))
       .map((exam) => ({
         key: normalizeAnalysisExamKey(exam.exam_key),
-        name: exam.exam_name || exam.exam_key,
+        name: formatExamDisplayName(exam.exam_name || exam.exam_key),
         order: Number.isFinite(Number(exam.exam_order))
           ? Number(exam.exam_order)
           : getDefaultExamOrder(exam.exam_key),

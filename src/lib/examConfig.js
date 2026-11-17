@@ -1,3 +1,8 @@
+export const formatExamDisplayName = (value) => {
+  const name = String(value || '').trim()
+  return name.toUpperCase() === 'USASA' ? 'UASA' : name
+}
+
 const normalizeGradeLabel = (value) =>
   String(value || '')
     .trim()
@@ -53,7 +58,7 @@ const normalizeExamItems = (exams = []) => {
     .filter(Boolean)
     .map((exam) => ({
       key: String(exam.key || exam.exam_key || '').trim().toUpperCase(),
-      name: String(exam.name || exam.exam_name || exam.key || exam.exam_key || '').trim(),
+      name: formatExamDisplayName(exam.name || exam.exam_name || exam.key || exam.exam_key),
       exam_order: Number.isFinite(Number(exam.exam_order))
         ? Number(exam.exam_order)
         : getDefaultExamOrder(exam.key || exam.exam_key),
@@ -126,7 +131,7 @@ export const buildExamStructureFromExamConfigs = (
 
       acc[gradeLabel].push({
         key: examKey,
-        name: String(row.exam_name || examKey).trim() || examKey,
+        name: formatExamDisplayName(row.exam_name || examKey) || examKey,
         exam_order: row.exam_order,
       })
 

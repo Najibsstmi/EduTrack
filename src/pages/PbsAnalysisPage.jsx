@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import AppHeader from '../components/AppHeader.jsx'
 import Student360PrintReport from '../components/Student360PrintReport.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
+import { formatExamDisplayName } from '../lib/examConfig.js'
 import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
@@ -326,7 +327,7 @@ const buildAcademicSummary = ({
     ).size,
     dominantGrade: getDominantGrade(resolvedExamRows),
     examKey: selectedExam.exam_key,
-    examName: selectedExam.exam_name || selectedExam.exam_key,
+    examName: formatExamDisplayName(selectedExam.exam_name || selectedExam.exam_key),
     subjectResults,
   }
 }
