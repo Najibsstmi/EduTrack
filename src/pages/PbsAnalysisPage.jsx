@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader.jsx'
 import Student360PrintReport from '../components/Student360PrintReport.jsx'
 import { getDashboardPath } from '../lib/dashboardPath.js'
 import { formatExamDisplayName } from '../lib/examConfig.js'
+import { latestPbdBySubject, latestRecord, scoreMatchesExam } from '../lib/pbsIntegrated.js'
 import {
   fetchSchoolLevelLabels,
   getDisplayClassLabel,
@@ -74,6 +75,16 @@ const getCurrentYear = () => new Date().getFullYear()
 const buildYearOptions = (year) => {
   const baseYear = Number(year) || getCurrentYear()
   return [baseYear - 2, baseYear - 1, baseYear, baseYear + 1]
+}
+
+async function fetchAllRows(buildQuery) {
+  const rows = []
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await buildQuery().range(offset, offset + 999)
+    if (error) return { data: null, error }
+    rows.push(...(data || []))
+    if ((data || []).length < 1000) return { data: rows, error: null }
+  }
 }
 
 const normalizeKey = (value) => String(value || '').trim().toLocaleUpperCase('ms-MY')
@@ -208,42 +219,15 @@ const normalizeGpForRadar = (gp, range) => {
   return clampScore(((range.worst - numericGp) / (range.worst - range.best)) * 100)
 }
 
-const getLatestAcademicExam = ({ scores, examConfigs, gradeLabel }) =>
-  examConfigs
-    .filter((exam) => isSameGrade(exam.grade_label, gradeLabel))
-    .sort((a, b) => Number(b.exam_order || 0) - Number(a.exam_order || 0))
-    .find((exam) =>
-      scores.some((score) => {
-        const sameExam =
-          (score.exam_config_id && String(score.exam_config_id) === String(exam.id)) ||
-          normalizeKey(score.exam_key) === normalizeKey(exam.exam_key)
-        return (
-          sameExam &&
-          (toNumericMark(score.mark) !== null || toNumericMark(score.grade_point) !== null)
-        )
-      })
-    ) || null
-
 const buildAcademicSummary = ({
   scores,
-  examConfigs,
   gradeLabel,
   selectedExam: requestedExam = null,
   subjects = [],
   schoolInfo = null,
   gradeScales = [],
 }) => {
-  const matchingExams = examConfigs
-    .filter((exam) => isSameGrade(exam.grade_label, gradeLabel))
-    .sort((a, b) => Number(b.exam_order || 0) - Number(a.exam_order || 0))
-
-  const selectedExam =
-    requestedExam ||
-    getLatestAcademicExam({
-      scores,
-      examConfigs: matchingExams,
-      gradeLabel,
-    })
+  const selectedExam = requestedExam
 
   if (!selectedExam) {
     return {
@@ -261,11 +245,8 @@ const buildAcademicSummary = ({
     }
   }
 
-  const examRows = scores.filter(
-    (score) =>
-      ((score.exam_config_id && String(score.exam_config_id) === String(selectedExam.id)) ||
-        normalizeKey(score.exam_key) === normalizeKey(selectedExam.exam_key))
-  )
+  const examRows = scores.filter((score) => scoreMatchesExam(score, selectedExam) && score.is_absent !== true)
+
   const levelGradeScales = getGradeScalesForLevel(gradeScales, gradeLabel)
   const resolvedExamRows = examRows.map((score) => resolveScoreGrade(score, levelGradeScales))
   const subjectById = new Map(subjects.map((subject) => [String(subject.id), subject]))
@@ -414,7 +395,7 @@ const buildPbdSubjectRadarData = ({
   )
   const pbdBySubject = new Map()
 
-  ;[...(pbdLegacyRows || []), ...(pbdCurrentRows || [])].forEach((row) => {
+  ;latestPbdBySubject(pbdCurrentRows, pbdLegacyRows).forEach((row) => {
     const subjectId = String(row.subject_id || '')
     const tp = toPbdLevel(row.tp ?? row.tp_level)
     if (!subjectId || tp === null) return
@@ -455,16 +436,9 @@ const buildPbdSubjectRadarData = ({
     )
 }
 
-const getLatestSegakRow = (rows) =>
-  [...rows].sort((a, b) => {
-    const timeA = Date.parse(a.updated_at || a.assessment_date || '') || 0
-    const timeB = Date.parse(b.updated_at || b.assessment_date || '') || 0
-    if (timeA !== timeB) return timeB - timeA
-    return String(b.term || '').localeCompare(String(a.term || ''))
-  })[0] || null
 
 const buildSegakSummary = (rows) => {
-  const row = getLatestSegakRow(rows)
+  const row = latestRecord(rows)
   const rawScore = toNumericMark(row?.segak_total_score)
   const normalizedScore = rawScore === null ? null : clampScore(rawScore * 5)
   const bmi = toNumericMark(row?.bmi)
@@ -498,8 +472,8 @@ const buildSegakSummary = (rows) => {
 
 const buildPajskSummary = (kokurikulumRows, ekstraRows) => {
   const rows = [
-    ...kokurikulumRows.map((row) => ({ ...row, sourceLabel: 'Kokurikulum' })),
-    ...ekstraRows.map((row) => ({ ...row, sourceLabel: 'Ekstrakurikulum' })),
+    ...[latestRecord(kokurikulumRows)].filter(Boolean).map((row) => ({ ...row, sourceLabel: 'Kokurikulum' })),
+    ...[latestRecord(ekstraRows)].filter(Boolean).map((row) => ({ ...row, sourceLabel: 'Ekstrakurikulum' })),
   ].filter((row) => toNumericMark(row.score) !== null || row.grade)
   const primaryRow =
     rows.find((row) => row.sourceLabel === 'Kokurikulum' && toNumericMark(row.score) !== null) ||
@@ -704,7 +678,7 @@ const findPsychometricResults = (results, student) => {
   return Object.fromEntries(
     PSYCHOMETRIC_REPORT_KEYS.map((assessmentName) => [
       assessmentName,
-      matchingRows.find((row) => getPsychometricInstrumentKey(row) === assessmentName) || null,
+      latestRecord(matchingRows.filter((row) => getPsychometricInstrumentKey(row) === assessmentName)),
     ])
   )
 }
@@ -811,7 +785,7 @@ const buildStudent360Profile = ({
       schoolInfo,
       gradeScales,
     })
-  const pbd = buildPbdSummary(pbdCurrentRows.length ? pbdCurrentRows : pbdLegacyRows)
+  const pbd = buildPbdSummary(latestPbdBySubject(pbdCurrentRows, pbdLegacyRows))
   const pbdSubjectRadarData = buildPbdSubjectRadarData({
     pbdCurrentRows,
     pbdLegacyRows,
@@ -947,6 +921,7 @@ export default function PbsAnalysisPage() {
   const [gradeScales, setGradeScales] = useState([])
   const [screenReport, setScreenReport] = useState(null)
   const [selectedGrade, setSelectedGrade] = useState('')
+  const [selectedExamId, setSelectedExamId] = useState('')
   const [selectedClassId, setSelectedClassId] = useState('')
   const [selectedStudentEnrollmentId, setSelectedStudentEnrollmentId] = useState('')
   const [printMode, setPrintMode] = useState(null)
@@ -1127,6 +1102,12 @@ export default function PbsAnalysisPage() {
     [classes, levelMappings, selectedGrade]
   )
 
+  const availableExams = useMemo(() => examConfigs
+    .filter((exam) => selectedGrade && isSameGrade(exam.grade_label, selectedGrade))
+    .filter((exam) => !/^(ETR|OTR\d*)$/.test(normalizeKey(exam.exam_key)))
+    .sort((a, b) => Number(a.exam_order || 0) - Number(b.exam_order || 0)), [examConfigs, selectedGrade])
+  const selectedExam = availableExams.find((exam) => String(exam.id) === selectedExamId) || availableExams.at(-1) || null
+
   const availableStudents = useMemo(() => {
     if (!selectedClassId) return []
 
@@ -1158,15 +1139,14 @@ export default function PbsAnalysisPage() {
       const classIds = [
         ...new Set(studentsToReport.map((student) => student.class_id).filter(Boolean)),
       ]
-      let psychometricQuery = supabase
-        .from('psychometric_results')
-        .select(
-          'id, class_id, student_profile_id, student_enrollment_id, assessment_type, assessment_name, dominant_code, primary_dimension, secondary_dimension, tertiary_dimension, raw_data, match_status, updated_at'
-        )
-        .eq('school_id', profile.school_id)
-        .eq('academic_year', Number(academicYear))
-
-      if (classIds.length) psychometricQuery = psychometricQuery.in('class_id', classIds)
+      const buildPsychometricQuery = () => {
+        let query = supabase.from('psychometric_results')
+          .select('id, class_id, student_profile_id, student_enrollment_id, assessment_type, assessment_name, dominant_code, primary_dimension, secondary_dimension, tertiary_dimension, raw_data, match_status, updated_at')
+          .eq('school_id', profile.school_id)
+          .eq('academic_year', Number(academicYear))
+        if (classIds.length) query = query.in('class_id', classIds)
+        return query.order('id')
+      }
 
       const [
         scoreResult,
@@ -1178,14 +1158,14 @@ export default function PbsAnalysisPage() {
         pajskEkstraResult,
         psychometricResultRows,
       ] = await Promise.all([
-        supabase
+        fetchAllRows(() => supabase
           .from('student_scores')
           .select(
             'id, student_enrollment_id, subject_id, exam_config_id, exam_key, mark, grade_name, grade_point, is_absent'
           )
           .eq('school_id', profile.school_id)
           .eq('academic_year', Number(academicYear))
-          .in('student_enrollment_id', rankingEnrollmentIds),
+          .in('student_enrollment_id', rankingEnrollmentIds).order('id')) ,
         supabase
           .from('student_subject_enrollments')
           .select('id, student_enrollment_id, subject_id, academic_year, is_active')
@@ -1225,7 +1205,7 @@ export default function PbsAnalysisPage() {
           .eq('school_id', profile.school_id)
           .eq('academic_year', Number(academicYear))
           .in('student_enrollment_id', reportEnrollmentIds),
-        psychometricQuery.order('updated_at', { ascending: false }).limit(1000),
+        fetchAllRows(buildPsychometricQuery),
       ])
 
       const rowsFrom = (result, label, required = false) => {
@@ -1250,32 +1230,6 @@ export default function PbsAnalysisPage() {
       const segakByEnrollment = groupRowsByEnrollment(segakRows)
       const pajskKokurikulumByEnrollment = groupRowsByEnrollment(pajskKokurikulumRows)
       const pajskEkstraByEnrollment = groupRowsByEnrollment(pajskEkstraRows)
-      const classExamById = new Map()
-
-      rankingStudents.forEach((student) => {
-        const classId = String(student.class_id || '')
-        if (!classId || classExamById.has(classId)) return
-
-        const classRow = classById.get(classId) || null
-        const classEnrollmentIds = new Set(
-          rankingStudents
-            .filter((row) => String(row.class_id || '') === classId)
-            .map((row) => String(row.id))
-        )
-        const classScores = scoreRows.filter((row) =>
-          classEnrollmentIds.has(String(row.student_enrollment_id))
-        )
-
-        classExamById.set(
-          classId,
-          getLatestAcademicExam({
-            scores: classScores,
-            examConfigs,
-            gradeLabel: classRow?.tingkatan,
-          })
-        )
-      })
-
       const academicByEnrollment = new Map(
         rankingStudents.map((student) => {
           const classRow = classById.get(String(student.class_id)) || null
@@ -1285,7 +1239,7 @@ export default function PbsAnalysisPage() {
               scores: scoresByEnrollment.get(String(student.id)) || [],
               examConfigs,
               gradeLabel: classRow?.tingkatan,
-              selectedExam: classExamById.get(String(student.class_id)) || null,
+              selectedExam,
               subjects,
               schoolInfo,
               gradeScales,
@@ -1302,7 +1256,7 @@ export default function PbsAnalysisPage() {
           examConfigs,
           levelMappings,
           subjects,
-          selectedAcademicExam: classExamById.get(String(student.class_id)) || null,
+          selectedAcademicExam: selectedExam,
           academicSummary: academicByEnrollment.get(String(student.id)) || null,
           classRanking: rankingByEnrollment.get(String(student.id)) || null,
           schoolInfo,
@@ -1327,6 +1281,7 @@ export default function PbsAnalysisPage() {
       profile?.school_id,
       schoolInfo,
       subjects,
+      selectedExam,
     ]
   )
 
@@ -1518,18 +1473,19 @@ export default function PbsAnalysisPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Pilih Murid</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+          <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Tahun akademik
               <select
                 value={academicYear}
                 onChange={(event) => {
                   setAcademicYear(event.target.value)
                   setSelectedGrade('')
+                  setSelectedExamId('')
                   setSelectedClassId('')
                   resetStudentData()
                 }}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
               >
                 {buildYearOptions(academicYear).map((year) => (
                   <option key={year} value={year}>
@@ -1539,16 +1495,17 @@ export default function PbsAnalysisPage() {
               </select>
             </label>
 
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Tingkatan
               <select
                 value={selectedGrade}
                 onChange={(event) => {
                   setSelectedGrade(event.target.value)
+                  setSelectedExamId('')
                   setSelectedClassId('')
                   resetStudentData()
                 }}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
+                className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal"
               >
                 <option value="">Pilih Tingkatan</option>
                 {availableGrades.map((grade) => (
@@ -1559,7 +1516,7 @@ export default function PbsAnalysisPage() {
               </select>
             </label>
 
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Kelas
               <select
                 value={selectedClassId}
@@ -1568,7 +1525,7 @@ export default function PbsAnalysisPage() {
                   resetStudentData()
                 }}
                 disabled={!selectedGrade}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal disabled:bg-slate-100 disabled:text-slate-400"
+                className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="">{selectedGrade ? 'Pilih Kelas' : 'Pilih tingkatan dahulu'}</option>
                 {availableClasses.map((classRow) => (
@@ -1579,7 +1536,15 @@ export default function PbsAnalysisPage() {
               </select>
             </label>
 
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
+              Jenis peperiksaan
+              <select value={selectedExam?.id || ''} onChange={(event) => setSelectedExamId(event.target.value)} disabled={!selectedGrade || !availableExams.length} className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal disabled:bg-slate-100 disabled:text-slate-400">
+                {!selectedExam && <option value="">{selectedGrade ? 'Tiada peperiksaan' : 'Pilih tingkatan dahulu'}</option>}
+                {availableExams.map((exam) => <option key={exam.id} value={exam.id}>{formatExamDisplayName(exam.exam_name || exam.exam_key)}</option>)}
+              </select>
+            </label>
+
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Murid
               <select
                 value={selectedStudentEnrollmentId}
@@ -1589,7 +1554,7 @@ export default function PbsAnalysisPage() {
                   setScreenReportLoading(Boolean(event.target.value))
                 }}
                 disabled={!selectedClassId}
-                className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal disabled:bg-slate-100 disabled:text-slate-400"
+                className="w-full min-w-0 rounded-xl border border-slate-300 px-4 py-3 text-sm font-normal disabled:bg-slate-100 disabled:text-slate-400"
               >
                 <option value="">{selectedClassId ? 'Pilih Murid' : 'Pilih kelas dahulu'}</option>
                 {availableStudents.map((enrollment) => (
@@ -1600,6 +1565,7 @@ export default function PbsAnalysisPage() {
               </select>
             </label>
           </div>
+          <p className="mt-3 text-xs text-slate-500">Peperiksaan menentukan keputusan akademik. PBD, SEGAK, PAJSK dan psikometrik menggunakan rekod terkini dalam tahun akademik yang dipilih.</p>
         </section>
 
         {!selectedStudent ? (

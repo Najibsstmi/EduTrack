@@ -329,7 +329,7 @@ export default function Student360PrintReport({ report, schoolInfo, academicYear
           <AcademicMetric
             label="Gred Dominan"
             value={report.academic.dominantGrade || 'Tidak tersedia'}
-            note="Peperiksaan terkini"
+            note={report.academic.examName || 'Peperiksaan belum dipilih'}
           />
           <AcademicMetric
             label="Kedudukan Dalam Kelas"
