@@ -597,6 +597,8 @@ export default function PerformanceDialogPage() {
   const [saving, setSaving] = useState(false)
   const [aiLoadingArea, setAiLoadingArea] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [slideIndex, setSlideIndex] = useState(0)
+  const slideDeckRef = useRef(null)
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -2154,8 +2156,26 @@ export default function PerformanceDialogPage() {
           <MetricCard title="Purata Markah" value={formatDecimal(reportAnalytics.averageMark, 1)} detail={selectedExam?.name || '-'} />
         </section>
 
-        <section className="grid gap-4 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <section ref={slideDeckRef} className="dpp-slide-deck rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="dpp-slide-toolbar flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-bold text-slate-950">Pratonton slaid DPP</h2><p className="text-sm text-slate-500">Perubahan pada borang di bawah dipaparkan terus. Simpan laporan untuk merekodkannya.</p></div>
+            <button type="button" onClick={() => {
+              if (document.fullscreenElement) document.exitFullscreen?.()
+              else slideDeckRef.current?.requestFullscreen?.()
+            }} className="rounded-xl bg-indigo-950 px-4 py-2 text-sm font-semibold text-white">Skrin penuh</button>
+          </div>
+          <DppReportPreview schoolInfo={schoolInfo} academicYear={academicYear} selectedGrade={selectedGrade} selectedClassLabel={selectedClassLabelForPreview} subject={selectedSubject} exam={selectedExam} draft={{ ...draft, issue_statement: draft.issue_statement || generatedIssueStatement }} analytics={reportAnalytics} subjectSummary={subjectSummary} slideIndex={slideIndex} />
+          <div className="dpp-slide-toolbar mt-3 flex flex-wrap items-center justify-center gap-2" aria-label="Navigasi slaid">
+            <button type="button" disabled={slideIndex === 0} onClick={() => setSlideIndex((i) => Math.max(0, i - 1))} className="rounded-lg border px-3 py-2 disabled:opacity-40">← Sebelumnya</button>
+            {['Muka hadapan', 'Masalah dan punca', 'Traffic light', 'Scoreboard', 'Murid sasaran'].map((label, index) => <button type="button" key={label} aria-current={slideIndex === index ? 'step' : undefined} onClick={() => setSlideIndex(index)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${slideIndex === index ? 'bg-indigo-950 text-white' : 'bg-slate-100 text-slate-700'}`}>{index + 1}. {label}</button>)}
+            <button type="button" disabled={slideIndex === 4} onClick={() => setSlideIndex((i) => Math.min(4, i + 1))} className="rounded-lg border px-3 py-2 disabled:opacity-40">Seterusnya →</button>
+          </div>
+        </section>
+
+        <p className="text-sm font-semibold text-slate-600">Sunting kandungan slaid yang dipilih</p>
+        <section className="grid gap-4 2xl:grid-cols-2">
           <div className="min-w-0 space-y-4">
+            <div hidden={slideIndex > 1}>
             <DppContextEditor
               draft={draft}
               generatedIssueStatement={generatedIssueStatement}
@@ -2164,11 +2184,15 @@ export default function PerformanceDialogPage() {
               aiLoading={aiLoadingArea === 'issue'}
               aiDisabled={!canUseAi || aiBusy}
             />
+            </div>
+            <div hidden={slideIndex !== 2}>
             <TrafficBandEditor
               bands={draft.traffic_bands}
               analytics={reportAnalytics}
               updateTrafficBand={updateTrafficBand}
             />
+            </div>
+            <div hidden={slideIndex !== 1}>
             <CauseEditor
               draft={draft}
               updateDraft={updateDraft}
@@ -2176,9 +2200,10 @@ export default function PerformanceDialogPage() {
               aiLoading={aiLoadingArea === 'causes'}
               aiDisabled={!canUseAi || aiBusy}
             />
+            </div>
           </div>
 
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-4" hidden={slideIndex !== 2}>
             <StudentInterventionEditor
               bands={draft.traffic_bands}
               interventions={draft.student_interventions}
@@ -2209,7 +2234,7 @@ export default function PerformanceDialogPage() {
           </div>
         </section>
 
-        <ScoreboardEditor
+        <div hidden={slideIndex !== 3}><ScoreboardEditor
           rows={draft.scoreboard_rows}
           updateRow={updateScoreboardRow}
           addRow={() =>
@@ -2222,7 +2247,8 @@ export default function PerformanceDialogPage() {
               scoreboard_rows: draft.scoreboard_rows.filter((_, rowIndex) => rowIndex !== index),
             })
           }
-        />
+        /></div>
+        {slideIndex === 4 ? <p className="rounded-xl bg-slate-100 p-4 text-sm text-slate-600">Senarai murid dijana daripada data peperiksaan dan tetapan Traffic Light. Pilih slaid Traffic Light untuk mengubah kumpulan.</p> : null}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -3197,12 +3223,13 @@ function DppReportPreview({
   draft,
   analytics,
   subjectSummary,
+  slideIndex,
 }) {
   const issueStatement = draft.issue_statement || ''
   const title = draft.report_title || `DIALOG PRESTASI PANITIA ${subject?.subject_name || ''}`
 
   return (
-    <section className="dpp-report-document rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <section className={`dpp-report-document rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6 ${slideIndex !== undefined ? `dpp-slide-preview dpp-slide-${slideIndex}` : ''}`}>
       <div className="dpp-report-screen-header flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Preview Laporan DPP</h2>

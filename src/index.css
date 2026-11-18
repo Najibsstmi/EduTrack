@@ -764,3 +764,18 @@ body.has-install-prompt {
     font-size: 6.2pt;
   }
 }
+/* Live presentation uses the same report components as the printable report. */
+.dpp-slide-preview .dpp-report-screen-header { display: none; }
+.dpp-slide-preview .dpp-report-body { display: block; margin: 0; }
+.dpp-slide-preview .dpp-report-body > article { display: none; }
+.dpp-slide-0 .dpp-report-body > article:nth-child(1),
+.dpp-slide-1 .dpp-report-body > article:nth-child(2),
+.dpp-slide-2 .dpp-report-body > article:nth-child(3),
+.dpp-slide-3 .dpp-report-body > article:nth-child(4),
+.dpp-slide-4 .dpp-report-body > article:nth-child(5) { display: block; }
+.dpp-slide-preview { margin-top: 1rem; aspect-ratio: 16 / 9; overflow: auto; background: #f8fafc; }
+.dpp-slide-preview .dpp-report-hero { min-height: 100%; display: flex !important; flex-direction: column; justify-content: center; padding: 8%; }
+.dpp-slide-deck:fullscreen { overflow: auto; background: #eef2ff; padding: 1rem; }
+.dpp-slide-deck:fullscreen .dpp-slide-preview { max-height: calc(100vh - 150px); max-width: 160vh; margin: 1rem auto 0; }
+.dpp-slide-deck:fullscreen .dpp-slide-toolbar p { display: none; }
+
