@@ -1969,7 +1969,7 @@ export default function PerformanceDialogPage() {
                   ) : (
                     <Plus className="h-4 w-4" aria-hidden="true" />
                   )}
-                  {dialogFormOpen ? 'Tutup Borang DPP' : 'Tambah Dialog Prestasi'}
+                  {dialogFormOpen ? 'Kembali ke Senarai DPP' : 'Tambah DPP'}
                 </button>
                 {dialogFormOpen ? (
                   <>
@@ -2016,20 +2016,22 @@ export default function PerformanceDialogPage() {
           </div>
         ) : null}
 
-        <DppSubjectReportAnalysis
-          academicYear={academicYear}
-          contextLoading={contextLoading}
-          dashboard={reportDashboard}
-          onOpenReport={openReportForEditing}
-          onDuplicateReport={duplicateReport}
-        />
+        {!dialogFormOpen ? (
+          <DppSubjectReportAnalysis
+            academicYear={academicYear}
+            contextLoading={contextLoading}
+            dashboard={reportDashboard}
+            onOpenReport={openReportForEditing}
+            onDuplicateReport={duplicateReport}
+          />
+        ) : null}
 
         {dialogFormOpen ? (
           <div id="dpp-form-panel" className="space-y-4">
             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-950">Laporan Dialog Prestasi Panitia</h1>
+                  <h1 className="text-xl font-bold text-slate-950">{reportRecord ? 'Ubah Suai DPP' : 'Bina DPP'}</h1>
                   <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-500">
                     Jana DPP pasca peperiksaan mengikut subjek: punca masalah, kumpulan sasaran,
                     traffic light, intervensi murid/guru dan scoreboard semasa.
