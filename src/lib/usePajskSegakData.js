@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import { fetchSchoolLevelLabels } from './levelLabels.js'
+import { fetchPajskHistory } from './pajskAnalytics.js'
 
 const getCurrentYear = () => new Date().getFullYear()
 
@@ -141,38 +142,7 @@ export function usePajskSegakData({ checkingAuth }) {
           `)
           .eq('school_id', schoolId)
           .eq('academic_year', year),
-        supabase
-          .from('pajsk_student_activity_history')
-          .select(`
-            school_id,
-            academic_year,
-            activity_id,
-            activity_name,
-            activity_date,
-            organiser,
-            competition_category,
-            category,
-            component,
-            level,
-            teacher_in_charge,
-            student_profile_id,
-            student_enrollment_id,
-            student_name_snapshot,
-            form_snapshot,
-            class_name_snapshot,
-            art_field_snapshot,
-            participation_type,
-            participation_score,
-            contribution_type,
-            achievement_result,
-            achievement_score,
-            participant_remarks,
-            created_at,
-            updated_at
-          `)
-          .eq('school_id', schoolId)
-          .eq('academic_year', year)
-          .order('activity_date', { ascending: false }),
+        fetchPajskHistory(supabase, schoolId, year),
       ])
 
       if (classError) throw classError

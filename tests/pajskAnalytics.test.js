@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calculatePajskAnalytics, filterPajskRows } from '../src/lib/pajskAnalytics.js'
+import { calculatePajskAnalytics, filterPajskRows, fetchPajskHistory } from '../src/lib/pajskAnalytics.js'
 
 const rows = [
   {
@@ -35,4 +35,19 @@ test('PAJSK filters do not infer participation from achievement', () => {
   assert.equal(filtered.length, 1)
   assert.equal(filtered[0].participation_type, 'PENGLIBATAN_I')
   assert.equal(filtered[0].achievement_result, 'NAIB_JOHAN')
+})
+
+
+test('fetches all history when the server caps each page below the requested size', async () => {
+  const all = Array.from({ length: 5 }, (_, i) => ({ activity_id: String(i), student_profile_id: String(i) }))
+  const client = { from: () => {
+    const query = { select: () => query, eq: () => query, order: () => query, range: async (start) => ({ data: all.slice(start, start + 2), count: all.length, error: null }) }
+    return query
+  } }
+  assert.deepEqual((await fetchPajskHistory(client, 'school', 2026)).data, all)
+})
+
+test('counts Bahagian in state-or-higher totals', () => {
+  const summary = calculatePajskAnalytics([{ ...rows[0], level: 'BAHAGIAN' }], 1)
+  assert.equal(summary.studentRows[0].state_or_higher_count, 1)
 })

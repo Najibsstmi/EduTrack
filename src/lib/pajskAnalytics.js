@@ -102,7 +102,7 @@ export function calculatePajskAnalytics(rows = [], totalStudents = 0) {
     }
     current.activityIds.add(String(row.activity_id))
     if (hasAchievement) current.achievement_count += 1
-    if (['NEGERI', 'KEBANGSAAN', 'ANTARABANGSA'].includes(row.level)) {
+    if (['BAHAGIAN', 'NEGERI', 'KEBANGSAAN', 'ANTARABANGSA'].includes(row.level)) {
       current.state_or_higher_count += 1
     }
     if (!current.latest_activity_date || row.activity_date > current.latest_activity_date) {
@@ -142,4 +142,24 @@ export function toChartRows(record = {}) {
   return Object.entries(record)
     .map(([label, value]) => ({ label, value: Number(value || 0) }))
     .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'ms'))
+}
+
+// Page by the actual number returned, including when the server caps responses below our requested size.
+export async function fetchPajskHistory(client, schoolId, year) {
+  const rows = []
+  const pageSize = 500
+  let total = null
+  while (total === null || rows.length < total) {
+    const { data, error, count } = await client.from('pajsk_student_activity_history')
+      .select('school_id, academic_year, activity_id, activity_name, activity_date, organiser, competition_category, category, component, level, teacher_in_charge, student_profile_id, student_enrollment_id, student_name_snapshot, form_snapshot, class_name_snapshot, art_field_snapshot, participation_type, participation_score, contribution_type, achievement_result, achievement_score, participant_remarks, created_at, updated_at', { count: 'exact' })
+      .eq('school_id', schoolId).eq('academic_year', year)
+      .order('activity_id').order('student_profile_id')
+      .range(rows.length, rows.length + pageSize - 1)
+    if (error) return { data: null, error }
+    if (count === null || count === undefined) return { data: null, error: new Error('Jumlah rekod PAJSK tidak tersedia.') }
+    total = count
+    if (!data?.length && rows.length < total) return { data: null, error: new Error('Rekod PAJSK tidak lengkap. Sila muat semula.') }
+    rows.push(...(data || []))
+  }
+  return { data: rows, error: null }
 }

@@ -730,7 +730,9 @@ Deno.serve(async (request) => {
     if (action === 'search_students') {
       const academicYear = Number(body.academic_year)
       if (!Number.isInteger(academicYear)) throw new HttpError(400, 'Tahun akademik tidak sah.')
-      const { data, error } = await admin.rpc('pajsk_search_students', {
+      const offset = Number(body.offset || 0)
+      if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new HttpError(400, 'Halaman carian murid tidak sah.')
+      const { data, error } = await admin.rpc('pajsk_search_students_paged', {
         p_school_id: session.schoolId,
         p_academic_year: academicYear,
         p_query: cleanText(body.query, 120) || null,
@@ -738,6 +740,7 @@ Deno.serve(async (request) => {
         p_class_id: cleanText(body.class_id, 80) || null,
         p_art_field: cleanText(body.art_field, 80) || null,
         p_limit: 100,
+        p_offset: offset,
       })
       if (error) throw new HttpError(500, 'Carian murid tidak dapat dijalankan.')
       return jsonResponse(origin, { students: data || [] })

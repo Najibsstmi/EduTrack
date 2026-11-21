@@ -20,7 +20,7 @@ const save = (a: object, p: object[]) => db.query<{ id: string }>('select public
 describe('PAJSK migration and RPC in PostgreSQL', () => {
   beforeAll(async () => {
     await db.exec(`
-      create role anon; create role authenticated;
+      create role anon; create role authenticated; create role service_role;
       create table public.pajsk_teacher_access (id uuid primary key, school_id uuid, role text, display_name text, is_active boolean, expires_at timestamptz);
       create table public.pajsk_classification_options (id uuid primary key default gen_random_uuid(), school_id uuid, option_type text, value text, label text, description text, sort_order integer, score numeric, is_active boolean default true);
       create unique index options_unique on public.pajsk_classification_options (coalesce(school_id, '00000000-0000-0000-0000-000000000000'::uuid), option_type, value);
@@ -44,6 +44,13 @@ describe('PAJSK migration and RPC in PostgreSQL', () => {
       insert into public.pajsk_activity_participants (activity_id, school_id, student_profile_id, student_enrollment_id, student_name_snapshot, participation_type, participation_score, contribution_type, achievement_result, achievement_score, is_active) values ('${legacyId}', '${school}', '${student}', '${enrol}', 'Murid A', 'PENGLIBATAN_II', 0, 'PERSEMBAHAN', 'TIADA', 0, true);
     `)
     await db.exec(migration)
+    await db.exec(`create view public.pajsk_student_activity_history as
+      select a.school_id, a.academic_year, a.id as activity_id, a.activity_date, a.category, a.component, a.level,
+      p.student_profile_id, p.student_name_snapshot, p.form_snapshot, p.class_name_snapshot, p.art_field_snapshot,
+      p.participation_type, p.participation_score, p.contribution_type, p.achievement_result, p.achievement_score
+      from public.pajsk_activities a join public.pajsk_activity_participants p on p.activity_id = a.id and p.school_id = a.school_id
+      where a.status = 'submitted' and p.is_active;`)
+    await db.exec(readFileSync(resolve(process.cwd(), '../supabase/migrations/20261121000200_pajsk_analysis_bahagian.sql'), 'utf8'))
   }, 30000)
   afterAll(async () => db.close())
 
@@ -91,6 +98,34 @@ describe('PAJSK migration and RPC in PostgreSQL', () => {
     const r = await db.query<{ count: number }>("select count(*)::int as count from pajsk_activities where activity_name like 'invalid%'")
     expect(r.rows[0].count).toBe(0)
   })
+  it('pages student search without dropping or repeating pupils', async () => {
+    const first = await db.query<{ student_profile_id: string }>('select * from public.pajsk_search_students_paged($1, 2026, null, null, null, null, 1, 0)', [school])
+    const second = await db.query<{ student_profile_id: string }>('select * from public.pajsk_search_students_paged($1, 2026, null, null, null, null, 1, 1)', [school])
+    expect(first.rows[0].student_profile_id).toBe(student)
+    expect(second.rows[0].student_profile_id).toBe(secondStudent)
+  })
+
+  it('exposes newly saved Bahagian activity to the EduTrack analysis RPC', async () => {
+    const created = await save(activity({ activity_name: 'Bahagian analysis', level: 'BAHAGIAN' }), [person({ contribution_type: null, participation_type: 'PENGLIBATAN_II', achievement_result: 'JOHAN' })])
+    const history = await db.query<{ participation_score: string; achievement_score: string }>('select participation_score, achievement_score from public.pajsk_student_activity_history where activity_id=$1', [created.rows[0].id])
+    expect(Number(history.rows[0].participation_score)).toBe(9)
+    expect(Number(history.rows[0].achievement_score)).toBe(14)
+    const summary = await db.query<{ state_or_higher_count: number }>('select state_or_higher_count from public.pajsk_analysis_student_rows($1, $2, null, null, null, null, $3)', [school, 2026, 'BAHAGIAN'])
+    expect(Number(summary.rows[0].state_or_higher_count)).toBe(1)
+  })
+
+  it('calculates all five achievement places at every level', async () => {
+    const levels = ['ANTARABANGSA', 'KEBANGSAAN', 'NEGERI', 'BAHAGIAN', 'DAERAH_ZON', 'SEKOLAH']
+    const places = ['JOHAN', 'NAIB_JOHAN', 'KETIGA', 'KEEMPAT', 'KELIMA']
+    const scores = [[20,19,18,17,16],[17,16,15,14,13],[14,13,12,11,10],[14,13,12,11,10],[11,10,9,8,7],[8,7,6,5,4]]
+    for (const [i, level] of levels.entries()) for (const [j, place] of places.entries()) {
+      const result = await db.query<{ score: string }>('select public.pajsk_achievement_score($1, $2) as score', [level, place])
+      expect(Number(result.rows[0].score)).toBe(scores[i][j])
+    }
+    const medal = await db.query<{ score: number | null }>("select public.pajsk_achievement_score('NEGERI', 'EMAS') as score")
+    expect(medal.rows[0].score).toBeNull()
+  })
+
   it('matches every frontend participation mark including Bahagian', async () => {
     const levels = ['ANTARABANGSA','KEBANGSAAN','NEGERI','BAHAGIAN','DAERAH_ZON']
     const kinds = ['PENGLIBATAN_I','PENGLIBATAN_II','PENGLIBATAN_III']

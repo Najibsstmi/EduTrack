@@ -43,16 +43,18 @@ export function StudentSelector({
     let active = true
     const timer = window.setTimeout(async () => {
       setLoading(true)
+      setStudents([])
       setError('')
       try {
-        const result = await apiRequest<{ students: StudentOption[] }>('search_students', {
-          academic_year: academicYear,
-          query,
-          form,
-          class_id: classId,
-          art_field: artField,
-        })
-        if (active) setStudents(result.students)
+        const allStudents: StudentOption[] = []
+        while (active) {
+          const result = await apiRequest<{ students: StudentOption[] }>('search_students', {
+            academic_year: academicYear, query, form, class_id: classId, art_field: artField, offset: allStudents.length,
+          })
+          allStudents.push(...result.students)
+          if (result.students.length < 100) break
+        }
+        if (active) setStudents(allStudents)
       } catch (requestError) {
         if (active) {
           setError(requestError instanceof Error ? requestError.message : 'Carian murid gagal.')
@@ -145,8 +147,8 @@ export function StudentSelector({
           <UserRoundCheck className="h-5 w-5" />
           {Object.keys(selected).length} murid dipilih
         </div>
-        <button type="button" className="text-sm font-bold text-brand-800 hover:underline" onClick={toggleAllVisible} disabled={students.length === 0}>
-          {allVisibleSelected ? 'Nyahpilih paparan' : `Pilih semua paparan (${students.length})`}
+        <button type="button" className="text-sm font-bold text-brand-800 hover:underline" onClick={toggleAllVisible} disabled={loading || students.length === 0}>
+          {allVisibleSelected ? 'Nyahpilih semua' : `Pilih semua murid (${students.length})`}
         </button>
       </div>
 

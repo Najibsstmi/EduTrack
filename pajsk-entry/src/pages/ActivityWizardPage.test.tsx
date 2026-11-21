@@ -24,18 +24,19 @@ describe('activity entry form', () => {
 
   it('saves a new activity for two pupils with independent bulk choices', async () => {
     render(<ActivityWizardPage />)
-    fireEvent.change(screen.getByLabelText(/Nama aktiviti/), { target: { value: 'Karnival' } })
+    fireEvent.change(screen.getByLabelText(/Nama Aktiviti/), { target: { value: 'Karnival' } })
     fireEvent.change(screen.getByLabelText(/Aktiviti utama atau tambahan/), { target: { value: 'UTAMA' } })
     fireEvent.change(screen.getByLabelText(/Butiran bukti/), { target: { value: 'Sijil A dan B' } })
     next()
     fireEvent.click(screen.getByRole('button', { name: 'Pilih dua murid' }))
     next()
     fireEvent.change(screen.getByLabelText('Penglibatan pukal'), { target: { value: 'PENGLIBATAN_II' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tetapkan untuk semua murid' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gunakan kepada semua' })[0])
+    fireEvent.click(screen.getByLabelText('Rekodkan Khidmat Sumbangan'))
     fireEvent.change(screen.getByLabelText('Khidmat sumbangan pukal'), { target: { value: 'JAWATANKUASA' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tetapkan untuk semua murid' })[1])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gunakan kepada semua' })[1])
     fireEvent.change(screen.getByLabelText('Pencapaian pukal'), { target: { value: 'JOHAN' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tetapkan untuk semua murid' })[2])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gunakan kepada semua' })[2])
     next()
     fireEvent.click(screen.getByRole('button', { name: 'Hantar rekod' }))
     await waitFor(() => expect(state.api).toHaveBeenCalledWith('save_activity', expect.objectContaining({ participants: expect.arrayContaining([
@@ -44,18 +45,39 @@ describe('activity entry form', () => {
     ]) })))
   })
 
-  it('displays marks as level changes and rejects a school contribution without proof', () => {
+  it('shows only the simple registration fields and uses level-dependent scores', () => {
     render(<ActivityWizardPage />)
-    fireEvent.change(screen.getByLabelText(/Nama aktiviti/), { target: { value: 'Aktiviti' } })
+    expect(screen.queryByLabelText('Kategori *')).toBeNull()
+    expect(screen.queryByLabelText('Jenis program (panduan pelibatan)')).toBeNull()
+    fireEvent.change(screen.getByLabelText(/Nama Aktiviti/), { target: { value: 'Aktiviti' } })
     fireEvent.change(screen.getByLabelText(/Peringkat/), { target: { value: 'KEBANGSAAN' } })
     next(); fireEvent.click(screen.getByRole('button', { name: 'Pilih dua murid' })); next()
     expect(screen.getAllByRole('option', { name: /Pelibatan I \(17 markah\)/ }).length).toBeGreaterThan(0)
+    expect(screen.queryByLabelText('Rekodkan Khidmat Sumbangan')).toBeNull()
+  })
+
+  it('asks for confirmation before bulk changes overwrite existing choices', () => {
+    render(<ActivityWizardPage />)
+    fireEvent.change(screen.getByLabelText(/Nama Aktiviti/), { target: { value: 'Aktiviti' } })
+    next(); fireEvent.click(screen.getByRole('button', { name: 'Pilih dua murid' })); next()
     fireEvent.change(screen.getByLabelText('Penglibatan pukal'), { target: { value: 'PENGLIBATAN_I' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tetapkan untuk semua murid' })[0])
-    fireEvent.change(screen.getByLabelText('Khidmat sumbangan pukal'), { target: { value: 'ATLET_PESERTA' } })
-    fireEvent.click(screen.getAllByRole('button', { name: 'Tetapkan untuk semua murid' })[1])
-    next()
-    expect(screen.getByText(/memerlukan aktiviti utama peringkat sekolah dan bukti/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gunakan kepada semua' })[0])
+    fireEvent.change(screen.getByLabelText('Penglibatan pukal'), { target: { value: 'PENGLIBATAN_II' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Gunakan kepada semua' })[0])
+    expect(screen.getByRole('alert').textContent).toContain('menggantikan nilai individu')
+    fireEvent.click(screen.getByRole('button', { name: 'Ya, gantikan' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('requests main activity and evidence before school contribution can be selected', () => {
+    render(<ActivityWizardPage />)
+    fireEvent.change(screen.getByLabelText(/Nama Aktiviti/), { target: { value: 'Aktiviti sekolah' } })
+    next(); fireEvent.click(screen.getByRole('button', { name: 'Pilih dua murid' })); next()
+    fireEvent.click(screen.getByLabelText('Rekodkan Khidmat Sumbangan'))
+    expect(screen.queryByLabelText('Khidmat sumbangan pukal')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Jenis aktiviti'), { target: { value: 'UTAMA' } })
+    fireEvent.change(screen.getByLabelText('Butiran bukti'), { target: { value: 'Sijil' } })
+    expect(screen.getByLabelText('Khidmat sumbangan pukal')).toBeTruthy()
   })
 
   it('opens and saves a legacy activity without replacing its contribution', async () => {

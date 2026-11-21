@@ -103,3 +103,11 @@ describe('Tables 5, 6 and 8', () => {
     for (const [key, item] of Object.entries(CONTRIBUTIONS)) expect(sql).toContain(`when '${key}' then ${item.score}`)
   })
 })
+
+it('covers every achievement place including school and Bahagian', () => {
+  const levels = ['ANTARABANGSA', 'KEBANGSAAN', 'NEGERI', 'BAHAGIAN', 'DAERAH_ZON', 'SEKOLAH']
+  const places = ['JOHAN', 'NAIB_JOHAN', 'KETIGA', 'KEEMPAT', 'KELIMA']
+  const scores = [[20,19,18,17,16],[17,16,15,14,13],[14,13,12,11,10],[14,13,12,11,10],[11,10,9,8,7],[8,7,6,5,4]]
+  levels.forEach((level, i) => places.forEach((place, j) => expect(calculateAchievementScore(level, place)).toBe(scores[i][j])))
+  expect(calculateAchievementScore('NEGERI', 'EMAS')).toBeNull()
+})

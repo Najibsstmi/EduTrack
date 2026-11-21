@@ -13,7 +13,7 @@ import { supabase } from '../lib/supabaseClient'
 
 const PAGE_SIZE = 20
 const levelLabels = {
-  SEKOLAH: 'Sekolah', DAERAH: 'Daerah/Zon', NEGERI: 'Negeri', KEBANGSAAN: 'Kebangsaan', ANTARABANGSA: 'Antarabangsa',
+  SEKOLAH: 'Sekolah', DAERAH_ZON: 'Daerah/Zon', BAHAGIAN: 'Bahagian (Sabah/Sarawak)', NEGERI: 'Negeri', KEBANGSAAN: 'Kebangsaan', ANTARABANGSA: 'Antarabangsa',
 }
 const componentLabels = {
   KELAB_PERSATUAN: 'Kelab/Persatuan', PASUKAN_BADAN_BERUNIFORM: 'Pasukan Badan Beruniform',
