@@ -664,7 +664,7 @@ const activityDetail = async (session: ValidSession, body: JsonRecord) => {
     admin
       .from('pajsk_activity_participants')
       .select(
-        'student_profile_id, student_enrollment_id, student_name_snapshot, form_snapshot, class_name_snapshot, art_field_snapshot, participation_type, participation_score, contribution_type, achievement_result, achievement_score, remarks',
+        'student_profile_id, student_enrollment_id, student_name_snapshot, form_snapshot, class_name_snapshot, art_field_snapshot, participation_type, participation_score, participation_role, contribution_type, contribution_score, achievement_result, achievement_score, remarks',
       )
       .eq('activity_id', activityId)
       .eq('school_id', session.schoolId)

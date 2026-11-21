@@ -5,7 +5,11 @@ import { StudentSelector } from '../components/StudentSelector'
 import { ApiError, apiRequest } from '../lib/api'
 import { optionLabel, optionsByType } from '../lib/options'
 import {
+  applyBulkValue,
   calculateAchievementScore,
+  contributionScore,
+  CONTRIBUTIONS,
+  suggestParticipation,
   calculateParticipationScore,
   PARTICIPATION_DESCRIPTIONS,
   setParticipantAchievement,
@@ -31,7 +35,7 @@ export function ActivityWizardPage() {
   const componentOptions = optionsByType(classifications, 'component')
   const levelOptions = optionsByType(classifications, 'level')
   const participationOptions = optionsByType(classifications, 'participation_type')
-  const contributionOptions = optionsByType(classifications, 'contribution_type')
+  const contributionOptions = Object.entries(CONTRIBUTIONS)
   const achievementOptions = optionsByType(classifications, 'achievement_result')
 
   const [step, setStep] = useState(0)
@@ -41,6 +45,12 @@ export function ActivityWizardPage() {
     academic_year: data?.current_academic_year || new Date().getFullYear(),
     organiser: '',
     competition_category: '',
+    activity_kind: '',
+    program_type: '',
+    program_mode: '',
+    program_ranked: '',
+    program_live: '',
+    evidence_note: '',
     category: categoryOptions[0]?.value || 'KOKURIKULUM',
     component: componentOptions[0]?.value || 'KELAB_PERSATUAN',
     level: levelOptions[0]?.value || 'SEKOLAH',
@@ -49,6 +59,7 @@ export function ActivityWizardPage() {
     remarks: '',
   })
   const [selected, setSelected] = useState<Record<string, ParticipantDraft>>({})
+  const [legacy, setLegacy] = useState<{ category: string; level: string; contributions: Record<string, string> } | null>(null)
   const [bulkParticipation, setBulkParticipation] = useState('')
   const [bulkContribution, setBulkContribution] = useState('')
   const [bulkAchievement, setBulkAchievement] = useState('TIADA')
@@ -79,6 +90,12 @@ export function ActivityWizardPage() {
           academic_year: Number(row.academic_year),
           organiser: String(row.organiser || ''),
           competition_category: String(row.competition_category || ''),
+          activity_kind: String(row.activity_kind || ''),
+          program_type: String(row.program_type || ''),
+          program_mode: String(row.program_mode || ''),
+          program_ranked: String(row.program_ranked || ''),
+          program_live: String(row.program_live || ''),
+          evidence_note: String(row.evidence_note || ''),
           category: String(row.category || ''),
           component: String(row.component || ''),
           level: String(row.level || ''),
@@ -99,11 +116,13 @@ export function ActivityWizardPage() {
             class_name: String(participant.class_name_snapshot || ''),
             art_field: participant.art_field_snapshot ? String(participant.art_field_snapshot) : null,
             participation_type: String(participant.participation_type || ''),
+            participation_role: String(participant.participation_role || ''),
             contribution_type: String(participant.contribution_type || ''),
             achievement_result: String(participant.achievement_result || 'TIADA'),
             remarks: String(participant.remarks || ''),
           }
         })
+        if (!row.activity_kind) setLegacy({ category: String(row.category || ''), level: String(row.level || ''), contributions: Object.fromEntries(result.participants.map((p) => [String(p.student_profile_id), String(p.contribution_type || '')])) })
         setSelected(mapped)
       })
       .catch((requestError) => setError(requestError instanceof Error ? requestError.message : 'Aktiviti tidak dapat dimuatkan.'))
@@ -122,6 +141,9 @@ export function ActivityWizardPage() {
     setActivity((current) => ({ ...current, [key]: value }))
   }
 
+  const isLegacyContribution = (participant: ParticipantDraft) => Boolean(legacy && !activity.activity_kind && activity.category === legacy.category && activity.level === legacy.level && participant.contribution_type && legacy.contributions[participant.student_profile_id] === participant.contribution_type)
+  const isContributionValid = (participant: ParticipantDraft) => !participant.contribution_type || isLegacyContribution(participant) || contributionScore(activity.level, activity.category, activity.activity_kind, `${activity.evidence_url} ${activity.evidence_note}`, participant.contribution_type) !== null
+
   const canContinue = () => {
     if (step === 0) {
       if (!activity.activity_name.trim() || !activity.activity_date || !activity.category || !activity.component || !activity.level) {
@@ -131,6 +153,10 @@ export function ActivityWizardPage() {
     }
     if (step === 1 && participants.length === 0) {
       setError('Pilih sekurang-kurangnya seorang murid.')
+      return false
+    }
+    if ((step === 2 || step === 3) && participants.some((participant) => !isContributionValid(participant))) {
+      setError('Khidmat sumbangan memerlukan aktiviti utama peringkat sekolah dan bukti. Semak kategori setiap murid.')
       return false
     }
     if (step === 2 && participants.some((participant) => !participant.participation_type || !participant.achievement_result)) {
@@ -146,37 +172,15 @@ export function ActivityWizardPage() {
   }
 
   const applyBulkParticipation = () => {
-    if (!bulkParticipation) return
-    setSelected((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([key, participant]) => [
-          key,
-          setParticipantParticipation(participant, bulkParticipation),
-        ])
-      )
-    )
+    if (bulkParticipation) setSelected((current) => applyBulkValue(current, (participant) => setParticipantParticipation(participant, bulkParticipation)))
   }
 
   const applyBulkContribution = () => {
-    setSelected((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([key, participant]) => [
-          key,
-          { ...participant, contribution_type: bulkContribution },
-        ])
-      )
-    )
+    setSelected((current) => applyBulkValue(current, (participant) => ({ ...participant, contribution_type: bulkContribution })))
   }
 
   const applyBulkAchievement = () => {
-    setSelected((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([key, participant]) => [
-          key,
-          setParticipantAchievement(participant, bulkAchievement),
-        ])
-      )
-    )
+    setSelected((current) => applyBulkValue(current, (participant) => setParticipantAchievement(participant, bulkAchievement)))
   }
 
   const updateParticipant = (profileId: string, patch: Partial<ParticipantDraft>) => {
@@ -197,6 +201,7 @@ export function ActivityWizardPage() {
           student_profile_id: participant.student_profile_id,
           student_enrollment_id: participant.student_enrollment_id,
           participation_type: participant.participation_type,
+          participation_role: participant.participation_role || null,
           contribution_type: participant.contribution_type || null,
           achievement_result: participant.achievement_result,
           remarks: participant.remarks,
@@ -245,6 +250,12 @@ export function ActivityWizardPage() {
             <div className="sm:col-span-2"><label className="field-label" htmlFor="competition-category">Kategori pertandingan (jika berkenaan)</label><input id="competition-category" className="field" value={activity.competition_category} onChange={(event) => setField('competition_category', event.target.value)} placeholder="Contoh: Tarian berkumpulan sekolah menengah" /></div>
             <div><label className="field-label" htmlFor="category">Kategori *</label><select id="category" className="field" value={activity.category} onChange={(event) => { const category = event.target.value; setActivity((current) => ({ ...current, category, component: category === 'EKSTRA_KURIKULUM' ? 'EKSTRA_KURIKULUM' : current.component === 'EKSTRA_KURIKULUM' ? 'KELAB_PERSATUAN' : current.component })) }}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="component">Komponen PAJSK *</label><select id="component" className="field" value={activity.component} onChange={(event) => setField('component', event.target.value)}>{applicableComponentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+            <div><label className="field-label" htmlFor="activity-kind">Aktiviti utama atau tambahan</label><select id="activity-kind" className="field" value={activity.activity_kind} onChange={(event) => setField('activity_kind', event.target.value)}><option value="">Belum ditentukan</option><option value="UTAMA">Aktiviti utama</option><option value="TAMBAHAN">Aktiviti tambahan</option></select></div>
+            <div><label className="field-label" htmlFor="program-type">Jenis program (panduan pelibatan)</label><select id="program-type" className="field" value={activity.program_type} onChange={(event) => setField('program_type', event.target.value)}><option value="">Belum ditentukan</option><option value="PERTANDINGAN">Pertandingan</option><option value="KEJOHANAN">Kejohanan</option><option value="PERKHEMAHAN">Perkhemahan</option><option value="KURSUS">Kursus</option><option value="KARNIVAL">Karnival</option><option value="LAIN">Lain-lain</option></select></div>
+            <div><label className="field-label" htmlFor="program-mode">Kaedah program (panduan pelibatan)</label><select id="program-mode" className="field" value={activity.program_mode} onChange={(event) => setField('program_mode', event.target.value)}><option value="">Belum ditentukan</option><option value="BERSEMUKA">Bersemuka</option><option value="DALAM_TALIAN">Dalam talian</option></select></div>
+            <div><label className="field-label" htmlFor="program-ranked">Ada pemeringkatan?</label><select id="program-ranked" className="field" value={activity.program_ranked} onChange={(event) => setField('program_ranked', event.target.value)}><option value="">Belum ditentukan</option><option value="YA">Ya</option><option value="TIDAK">Tidak</option></select></div>
+            {activity.program_mode === 'DALAM_TALIAN' && <div><label className="field-label" htmlFor="program-live">Interaksi langsung?</label><select id="program-live" className="field" value={activity.program_live} onChange={(event) => setField('program_live', event.target.value)}><option value="">Belum ditentukan</option><option value="YA">Ya</option><option value="TIDAK">Tidak</option></select></div>}
+            <div><label className="field-label" htmlFor="evidence-note">Butiran bukti (jika tiada pautan)</label><input id="evidence-note" className="field" value={activity.evidence_note} onChange={(event) => setField('evidence_note', event.target.value)} placeholder="Contoh: sijil atau surat lantikan" /></div>
             <div><label className="field-label" htmlFor="level">Peringkat *</label><select id="level" className="field" value={activity.level} onChange={(event) => setField('level', event.target.value)}>{levelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
             <div><label className="field-label" htmlFor="evidence">Pautan bukti / sijil</label><input id="evidence" type="url" className="field" value={activity.evidence_url} onChange={(event) => setField('evidence_url', event.target.value)} placeholder="https://..." /></div>
             <div className="sm:col-span-2"><label className="field-label" htmlFor="remarks">Catatan tambahan</label><textarea id="remarks" className="field min-h-24 resize-y" value={activity.remarks} onChange={(event) => setField('remarks', event.target.value)} /></div>
@@ -264,12 +275,12 @@ export function ActivityWizardPage() {
             <h2 className="font-bold text-slate-950">Tetapkan pilihan untuk semua murid secara berasingan</h2>
             <p className="mt-1 text-sm text-slate-600">Jenis penglibatan menerangkan peranan murid. Pencapaian ialah keputusan pertandingan dan tidak akan mengubah jenis penglibatan.</p>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div><select className="field" value={bulkParticipation} onChange={(event) => setBulkParticipation(event.target.value)} aria-label="Penglibatan pukal"><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description || PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkParticipation} disabled={!bulkParticipation}>Tetapkan untuk semua murid</button></div>
-              <div><select className="field" value={bulkContribution} onChange={(event) => setBulkContribution(event.target.value)} aria-label="Khidmat sumbangan pukal"><option value="">Tiada khidmat khusus</option>{contributionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkContribution}>Tetapkan untuk semua murid</button></div>
+              <div><select className="field" value={bulkParticipation} onChange={(event) => setBulkParticipation(event.target.value)} aria-label="Penglibatan pukal"><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} ({calculateParticipationScore(activity.level, option.value) ?? '—'} markah) — {PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkParticipation} disabled={!bulkParticipation}>Tetapkan untuk semua murid</button></div>
+              <div><select className="field" value={bulkContribution} onChange={(event) => setBulkContribution(event.target.value)} aria-label="Khidmat sumbangan pukal"><option value="">Tiada Khidmat Sumbangan</option>{contributionOptions.map(([value, option]) => <option key={value} value={value}>{option.label} ({option.score} markah)</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkContribution}>Tetapkan untuk semua murid</button></div>
               <div><select className="field" value={bulkAchievement} onChange={(event) => setBulkAchievement(event.target.value)} aria-label="Pencapaian pukal">{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><button type="button" className="btn-secondary mt-2 w-full" onClick={applyBulkAchievement}>Tetapkan untuk semua murid</button></div>
             </div>
             <p className="mt-3 text-xs text-slate-500">Setiap tindakan di atas hanya mengubah medan yang dinamakan untuk {participants.length} murid.</p>
-            <p className="mt-1 text-xs text-slate-500">Pencapaian Keempat dan Kelima hanya digunakan untuk kategori individu sukan. Penyertaan antarabangsa tertakluk kepada pengiktirafan BSKK.</p>
+            <p className="mt-1 text-xs text-slate-500">Khidmat sumbangan hanya untuk aktiviti utama peringkat sekolah dan memerlukan bukti. Rekod lama yang belum disahkan dikekalkan untuk semakan.</p>
           </section>
 
           <section className="space-y-3">
@@ -277,8 +288,10 @@ export function ActivityWizardPage() {
               <article key={participant.student_profile_id} className="card p-5">
                 <div className="flex items-start gap-3"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-bold text-brand-800">{index + 1}</div><div><h3 className="font-semibold text-slate-950">{participant.full_name}</h3><p className="mt-1 text-xs text-slate-500">{participant.form} · {participant.class_name}{participant.art_field ? ` · ${participant.art_field}` : ''}</p></div></div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div><label className="field-label">Jenis penglibatan *</label><select className="field" value={participant.participation_type} onChange={(event) => setSelected((current) => ({ ...current, [participant.student_profile_id]: setParticipantParticipation(current[participant.student_profile_id], event.target.value) }))}><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.description || PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select>{participant.participation_type && <p className="mt-1 text-xs leading-5 text-slate-500">Skor penglibatan: {calculateParticipationScore(activity.level, participant.participation_type) ?? '—'} / 20</p>}</div>
-                  <div><label className="field-label">Khidmat sumbangan</label><select className="field" value={participant.contribution_type} onChange={(event) => updateParticipant(participant.student_profile_id, { contribution_type: event.target.value })}><option value="">Tiada / tidak berkenaan</option>{contributionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+                  <div><label className="field-label">Peranan murid (panduan)</label><select className="field" value={participant.participation_role} onChange={(event) => updateParticipant(participant.student_profile_id, { participation_role: event.target.value })}><option value="">Belum ditentukan</option><option value="PESERTA">Peserta</option><option value="PELAKSANA">AJK pelaksana / petugas teknikal / persembahan selingan</option><option value="LAWATAN">Peserta lawatan luar negara</option><option value="PENONTON">Penyokong / penonton</option></select></div>
+                  <div><label className="field-label">Jenis penglibatan *</label><select className="field" value={participant.participation_type} onChange={(event) => setSelected((current) => ({ ...current, [participant.student_profile_id]: setParticipantParticipation(current[participant.student_profile_id], event.target.value) }))}><option value="">Pilih jenis penglibatan</option>{participationOptions.map((option) => <option key={option.value} value={option.value}>{option.label} ({calculateParticipationScore(activity.level, option.value) ?? '—'} markah) — {PARTICIPATION_DESCRIPTIONS[option.value]}</option>)}</select>{participant.participation_type && <p className="mt-1 text-xs leading-5 text-slate-500">Skor penglibatan: {calculateParticipationScore(activity.level, participant.participation_type) ?? '—'} / 20{activity.level === 'SEKOLAH' ? ' — pelibatan sekolah ditaksir di bawah Khidmat Sumbangan.' : ''}</p>}</div>
+                  {participant.participation_type && suggestParticipation(activity.program_mode, activity.program_ranked, activity.program_live, participant.participation_role, activity.program_type) && suggestParticipation(activity.program_mode, activity.program_ranked, activity.program_live, participant.participation_role, activity.program_type) !== participant.participation_type && <p className="text-sm text-amber-700">Semak pilihan pelibatan berdasarkan kaedah, pemeringkatan, interaksi dan peranan. Guru boleh memilih secara manual.</p>}
+                  <div><label className="field-label">Khidmat sumbangan</label><select className="field" value={participant.contribution_type} onChange={(event) => updateParticipant(participant.student_profile_id, { contribution_type: event.target.value })}><option value="">Tiada Khidmat Sumbangan</option>{participant.contribution_type && !CONTRIBUTIONS[participant.contribution_type] && <option value={participant.contribution_type}>Rekod lama: {participant.contribution_type} — perlu semakan</option>}{contributionOptions.map(([value, option]) => <option key={value} value={value}>{option.label} ({option.score} markah)</option>)}</select>{participant.contribution_type && CONTRIBUTIONS[participant.contribution_type] && <p className="mt-1 text-xs text-slate-500">{CONTRIBUTIONS[participant.contribution_type].description}</p>}{isLegacyContribution(participant) && <p className="mt-1 text-xs text-amber-700">Rekod lama dikekalkan; kelayakan dan bukti belum disahkan.</p>}</div>
                   <div><label className="field-label">Pencapaian *</label><select className="field" value={participant.achievement_result} onChange={(event) => setSelected((current) => ({ ...current, [participant.student_profile_id]: setParticipantAchievement(current[participant.student_profile_id], event.target.value) }))}>{achievementOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><p className="mt-1 text-xs leading-5 text-slate-500">Skor pencapaian: {calculateAchievementScore(activity.level, participant.achievement_result) ?? '—'} / 20</p></div>
                   <div><label className="field-label">Catatan</label><input className="field" value={participant.remarks} onChange={(event) => updateParticipant(participant.student_profile_id, { remarks: event.target.value })} /></div>
                 </div>
@@ -291,7 +304,7 @@ export function ActivityWizardPage() {
       {step === 3 && (
         <div className="space-y-4">
           <section className="card p-5 sm:p-6"><h2 className="font-bold text-slate-950">Ringkasan aktiviti</h2><dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><dt className="text-slate-500">Aktiviti</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_name}</dd></div><div><dt className="text-slate-500">Tarikh</dt><dd className="mt-1 font-semibold text-slate-900">{activity.activity_date}</dd></div><div><dt className="text-slate-500">Peringkat</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'level', activity.level)}</dd></div><div><dt className="text-slate-500">Komponen</dt><dd className="mt-1 font-semibold text-slate-900">{optionLabel(classifications, 'component', activity.component)}</dd></div>{activity.competition_category && <div><dt className="text-slate-500">Kategori pertandingan</dt><dd className="mt-1 font-semibold text-slate-900">{activity.competition_category}</dd></div>}<div><dt className="text-slate-500">Guru</dt><dd className="mt-1 font-semibold text-slate-900">{activity.teacher_in_charge}</dd></div><div><dt className="text-slate-500">Jumlah murid</dt><dd className="mt-1 font-semibold text-slate-900">{participants.length}</dd></div></dl></section>
-          <section className="card overflow-hidden"><div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-950">Murid, penglibatan dan pencapaian</div><div className="divide-y divide-slate-100">{participants.map((participant) => <div key={participant.student_profile_id} className="px-5 py-4"><div className="font-semibold text-slate-900">{participant.full_name}</div><div className="mt-1 text-xs text-slate-500">{optionLabel(classifications, 'participation_type', participant.participation_type)} ({calculateParticipationScore(activity.level, participant.participation_type) ?? '—'}/20) · {optionLabel(classifications, 'achievement_result', participant.achievement_result)} ({calculateAchievementScore(activity.level, participant.achievement_result) ?? '—'}/20)</div></div>)}</div></section>
+          <section className="card overflow-hidden"><div className="border-b border-slate-200 px-5 py-4 font-bold text-slate-950">Murid, penglibatan dan pencapaian</div><div className="divide-y divide-slate-100">{participants.map((participant) => <div key={participant.student_profile_id} className="px-5 py-4"><div className="font-semibold text-slate-900">{participant.full_name}</div><div className="mt-1 text-xs text-slate-500">{optionLabel(classifications, 'participation_type', participant.participation_type)} ({calculateParticipationScore(activity.level, participant.participation_type) ?? '—'}/20) · {optionLabel(classifications, 'achievement_result', participant.achievement_result)} ({calculateAchievementScore(activity.level, participant.achievement_result) ?? '—'}/20) · Khidmat sumbangan: {participant.contribution_type ? (isLegacyContribution(participant) ? 'Rekod lama — belum disahkan' : `${CONTRIBUTIONS[participant.contribution_type]?.label || participant.contribution_type} (${contributionScore(activity.level, activity.category, activity.activity_kind, `${activity.evidence_url} ${activity.evidence_note}`, participant.contribution_type) ?? '—'} markah)`) : 'Tiada'}</div></div>)}</div></section>
           <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm leading-6 text-brand-950">Skor penglibatan dan skor pencapaian dikira secara berasingan mengikut peringkat. Menukar salah satu tidak mengubah yang lain.</div>
         </div>
       )}

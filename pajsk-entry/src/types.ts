@@ -46,6 +46,7 @@ export interface StudentOption {
 
 export interface ParticipantDraft extends StudentOption {
   participation_type: string
+  participation_role: string
   contribution_type: string
   achievement_result: string
   remarks: string
@@ -58,6 +59,12 @@ export interface ActivityDraft {
   academic_year: number
   organiser: string
   competition_category: string
+  activity_kind: string
+  program_type: string
+  program_mode: string
+  program_ranked: string
+  program_live: string
+  evidence_note: string
   category: string
   component: string
   level: string

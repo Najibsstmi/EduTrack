@@ -72,6 +72,7 @@ export function StudentSelector({
   const buildParticipant = (student: StudentOption): ParticipantDraft => ({
     ...student,
     participation_type: '',
+    participation_role: '',
     contribution_type: '',
     achievement_result: 'TIADA',
     remarks: '',
