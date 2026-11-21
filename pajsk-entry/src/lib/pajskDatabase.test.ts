@@ -80,6 +80,19 @@ describe('PAJSK migration and RPC in PostgreSQL', () => {
       expect(Number(result.rows[0].contribution_score)).toBe(expected)
     }
   })
+  it('saves and edits pupil roles without creating contributions', async () => {
+    const info = activity({ activity_name: 'Peranan pukal', level: 'SEKOLAH', activity_kind: '', evidence_note: '' })
+    const first = person({ contribution_type: null, participation_role: 'PESERTA', participation_type: 'PENGLIBATAN_I', achievement_result: 'JOHAN' })
+    const second = person({ student_profile_id: secondStudent, student_enrollment_id: secondEnrol, contribution_type: null, participation_role: 'PESERTA', participation_type: 'PENGLIBATAN_I', achievement_result: 'TIADA' })
+    const created = await save(info, [first, second])
+    await save({ ...info, id: created.rows[0].id }, [{ ...first, participation_role: 'PENONTON' }, second])
+    const result = await db.query<{ participation_role: string; participation_score: string; contribution_type: string | null; achievement_score: string }>('select participation_role, participation_score, contribution_type, achievement_score from pajsk_activity_participants where activity_id = $1 order by student_profile_id', [created.rows[0].id])
+    expect(result.rows.map(row => row.participation_role)).toEqual(['PENONTON', 'PESERTA'])
+    expect(result.rows.map(row => row.contribution_type)).toEqual([null, null])
+    expect(result.rows.map(row => Number(row.participation_score))).toEqual([0, 0])
+    expect(Number(result.rows[0].achievement_score)).toBe(8)
+  })
+
   it('edits participation without altering achievement', async () => {
     const info = activity({ activity_name: 'Edit independence', level: 'NEGERI' })
     const first = person({ contribution_type: null, participation_type: 'PENGLIBATAN_I', achievement_result: 'JOHAN' })
