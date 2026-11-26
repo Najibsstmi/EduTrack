@@ -60,7 +60,7 @@ export function ActivityWizardPage() {
     category: 'KOKURIKULUM',
     component: componentOptions[0]?.value || 'KELAB_PERSATUAN',
     level: levelOptions[0]?.value || 'SEKOLAH',
-    teacher_in_charge: data?.access.display_name || '',
+    teacher_in_charge: '',
     evidence_url: '',
     remarks: '',
   })
@@ -284,8 +284,8 @@ export function ActivityWizardPage() {
               <div><label className="field-label" htmlFor="evidence-note">Butiran bukti</label><input id="evidence-note" className="field" value={activity.evidence_note} onChange={(event) => setField('evidence_note', event.target.value)} placeholder="Contoh: sijil atau surat lantikan" /></div>
               <div><label className="field-label" htmlFor="activity-date">Tarikh</label><input id="activity-date" type="date" className="field" value={activity.activity_date} onChange={(event) => setField('activity_date', event.target.value)} /></div>
               <div><label className="field-label" htmlFor="academic-year">Tahun akademik</label><select id="academic-year" className="field" value={activity.academic_year} onChange={(event) => { setField('academic_year', Number(event.target.value)); setSelected({}) }} disabled={Boolean(activityId)}>{(data?.academic_years || [activity.academic_year]).map((year) => <option key={year} value={year}>{year}</option>)}</select></div>
-              <div><label className="field-label" htmlFor="organiser">Penganjur</label><input id="organiser" className="field" value={activity.organiser} onChange={(event) => setField('organiser', event.target.value)} /></div>
-              <div><label className="field-label" htmlFor="teacher">Guru bertanggungjawab</label><input id="teacher" className="field" value={activity.teacher_in_charge} onChange={(event) => setField('teacher_in_charge', event.target.value)} /></div>
+              <div><label className="field-label" htmlFor="organiser">Penganjur</label><input id="organiser" className="field" placeholder="BSKK" value={activity.organiser} onChange={(event) => setField('organiser', event.target.value)} /></div>
+              <div><label className="field-label" htmlFor="teacher">Guru bertanggungjawab</label><input id="teacher" className="field" placeholder="TEE TIAM CHAI" value={activity.teacher_in_charge} onChange={(event) => setField('teacher_in_charge', event.target.value)} /></div>
               <div className="sm:col-span-2"><label className="field-label" htmlFor="remarks">Catatan tambahan</label><textarea id="remarks" className="field min-h-24 resize-y" value={activity.remarks} onChange={(event) => setField('remarks', event.target.value)} /></div>
             </div>
           </details>
